@@ -204,16 +204,16 @@ def two_site_dmrg(MPS, MPO, m, sweeps):
             Energy,MPS[i],MPS[i+1],trunc,states = optimize_two_sites(MPS[i],MPS[i+1],
                                                                      MPO[i],MPO[i+1],
                                                                      E[-1], F[-1], m, 'right')
-            print("Sweep {:} Sites {:},{:}    Energy {:16.12f}    States {:4} Truncation {:16.12f}"
-                     .format(sweep*2,i,i+1, Energy, states, trunc))
+            print("Sweep {:} Sites {:},{:}    E1 {:16.12f} E2  {:16.12f}    States {:4} Truncation {:16.12f}"
+                     .format(sweep*2,i,i+1, Energy, Expectation(MPS, MPO, MPS), states, trunc))
             E.append(contract_from_left(MPO[i], MPS[i], E[-1], MPS[i]))
             F.pop()
         for i in range(len(MPS)-2, 0, -1):
             Energy,MPS[i],MPS[i+1],trunc,states = optimize_two_sites(MPS[i],MPS[i+1],
                                                                      MPO[i],MPO[i+1],
                                                                      E[-1], F[-1], m, 'left')
-            print("Sweep {} Sites {},{}    Energy {:16.12f}    States {:4} Truncation {:16.12f}"
-                     .format(sweep*2+1,i,i+1, Energy, states, trunc))
+            print("Sweep {} Sites {},{}    E1 {:16.12f} E2  {:16.12f}    States {:4} Truncation {:16.12f}"
+                     .format(sweep*2+1,i,i+1, Energy, Expectation(MPS, MPO, MPS), states, trunc))
             F.append(contract_from_right(MPO[i+1], MPS[i+1], F[-1], MPS[i+1]))
             E.pop();
     return MPS
@@ -231,7 +231,7 @@ def Expectation(AList, MPO, BList):
 ##
 if __name__ == '__main__':
     d=2   # local bond dimension, 0=up, 1=down
-    N=100 # number of sites
+    N=10 # number of sites
 
     ## initial state |+-+-+-+-+->
 
@@ -297,6 +297,6 @@ if __name__ == '__main__':
 
     # calculate the variance <(H-E)^2> = <H^2> - E^2
 
-    print("m=10 variance = {:16.12f}".format(Esq_10 - E_10*E_10))
+    print("m=10 variance = {:16.12f}".format(math.sqrt(Esq_10 - E_10*E_10)))
     #print("m=20 variance = {:16.12f}".format(Esq_20 - E_20*E_20))
     #print("m=30 variance = {:16.12f}".format(Esq_30 - E_30*E_30))
