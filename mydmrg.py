@@ -3,10 +3,6 @@
 
 r"""# A Simple MPS/MPO Program
 
-by Xinxian Chen
-(chen-xx15@mails.tsinghua.edu.cn)
-
-
 ## Definition
 
 - MPS matrix: a 3-index tensor A[s, i, j]
@@ -31,6 +27,7 @@ by Xinxian Chen
 
 1. arXiv:1008.3477v2
 2. arXiv:1603.03039v4
+3. https://people.smp.uq.edu.au/IanMcCulloch/mptoolkit/index.php?n=Tutorials.MPS-DMRG?action=sourceblock&num=1
 """
 
 import math
@@ -197,19 +194,27 @@ class EnvTensor(sparse.linalg.LinearOperator):
         temp = np.einsum('bjtk,bkl->tjl', temp, self.R)
         return np.reshape(temp, self.size)
 
-def opt_one_site(H, A):
+def opt_one_site(env_tensor, A):
     r"""
     Solve eigenvalue problem at one site A.
 
     ## Args
-    - H: a linear operator, which is the environment tensor of A.
-        A[t, j, l] --> (HA)[s, i, k]
+    - env_tensor: a linear operator, which is the environment tensor of A.
+        A[t, j, l] --> (env_tensor(A))[s, i, k]
     - A: a MPS matrix A[t, j, l]
     """
 
-    A = np.reshape(A, H.size)
-    E, V = scipy.sparse.linalg.eigsh(H, 1, v0=A, which='SA')
-    return (E[0], np.reshape(V[:, 0], H.io_shape))
+    A = np.reshape(A, env_tensor.size)
+    E, V = scipy.sparse.linalg.eigsh(env_tensor, 1, v0=A, which='SA')
+    return (E[0], np.reshape(V[:, 0], env_tensor.io_shape))
+
+def compress_svd(U, S, V, m):
+    m = min(len(S), m)
+    compress_error = np.sum(S[m:])
+    S = S[:m]
+    U = U[:, :m]
+    V = V[:m, :]
+    return U, S, V, compress_error
 
 
 def dmrg1(mpo, initial_mps, trunc=10, sweeps=8):
@@ -237,10 +242,8 @@ def dmrg1(mpo, initial_mps, trunc=10, sweeps=8):
         U, S, V = np.linalg.svd(mat, full_matrices=0)
 
         # truncated to compress.
-        _trunc = min(len(S), _trunc)
-        mat = np.reshape(U[:, :_trunc], (shape[0], shape[1], _trunc))    # U[si, m]
-        S = S[:_trunc]    # m dims
-        V = V[:_trunc, :]    # V[m, j]
+        U, S, V, compress_error = compress_svd(U, S, V, _trunc)
+        mat = np.reshape(U, (shape[0], shape[1], -1))    # U[si, m]
         SV = np.matmul(np.diag(S), V)
         mat_next = np.einsum('mj,tjk->tmk', SV, mat_next)
         
@@ -260,11 +263,9 @@ def dmrg1(mpo, initial_mps, trunc=10, sweeps=8):
         U, S, V = np.linalg.svd(mat, full_matrices=0)
 
         # truncated to compress.
-        _trunc = min(len(S), _trunc)
-        mat = np.reshape(V[:_trunc, :], (_trunc, shape[0], shape[2]))  # V[m, s, j]
-        mat = np.transpose(mat, (1, 0, 2))    # mat[s, m, j]  
-        S = S[:_trunc]    # m dims
-        U = U[:, :_trunc]    # U[i, m]
+        U, S, V, compress_error = compress_svd(U, S, V, _trunc)
+        mat = np.reshape(V, (-1, shape[0], shape[2]))    # V[m, sj]
+        mat = np.transpose(mat, (1, 0, 2))    # mat[s, m, j]
         US = np.matmul(U, np.diag(S))
         mat_prev = np.einsum('rhi,im->rhm', mat_prev, US)
 
@@ -304,14 +305,127 @@ def dmrg1(mpo, initial_mps, trunc=10, sweeps=8):
 
     return mps
 
+def coarse_grain_mps(A, B):
+    """Coarse-graining of two-site MPS into one site
 
-def dmrg2(*arg, **kwarg):
+            |st         |s    |t
+        -i- C -k- = -i- A -j- B -k-
+
+    ## Args
+    - A: a MPS matrix A[s, i, j]
+    - B: a MPS matrix B[t, j, k]
+
+    ## Return
+    - C: a MPS matrix C[st, i, k]
+    """
+    shape_C = [A.shape[0] * B.shape[0], A.shape[1], B.shape[2]]
+    C = np.einsum("sij,tjk->stik",A,B)
+    return np.reshape(C, shape_C)
+
+def coarse_grain_mpo(W, X):
+    """Coarse-graining of two site MPO into one site
+            |su         |s    |u
+        -a- R -c- = -a- W -b- X -c-
+            |tv         |t    |v
+     """
+
+    R = np.einsum("abst,bcuv->acsutv", W, X)
+    sh = [W.shape[0],    # a
+          X.shape[1],    # c
+          W.shape[2] * X.shape[2],    # su
+          W.shape[3] * X.shape[3]]    # tv
+    return np.reshape(R, sh)
+
+
+def fine_grain_mps(C, dims, direction, _trunc=False):
+    """Fine-graining of one-site MPS into three site by SVD
+
+            |st         |s    |t
+        -i- C -k- = -i- A -m- B -k-
+
+    ## Args
+    - C: a MPS matrix C[st, i, k]
+    - dims: [s, t]
+    - dir: char. '>': move to right; '<'  move to left
+    - _trunc: if _truc != None, m = _trunc
+
+    ## Return
+    - A: a MPS matrix A[s, i, m]
+    - B: a MPS matrix B[t, m, k]
+
+    If dir == '>', A is (left-)canonical;
+    if dir == '<', B is (right-)canonical
+    """
+
+    sh = dims + [C.shape[1], C.shape[2]]    #[s, t, i, k]
+    mat = np.reshape(C, sh)
+    mat = np.transpose(mat, (0, 2, 1, 3))
+    mat = np.reshape(mat, (sh[0] * sh[2], sh[1] * sh[3]))
+    U, S, V = np.linalg.svd(mat, full_matrices=0)
+    if _trunc:
+        U, S, V, compress_error = compress_svd(U, S, V, _trunc)
+    if direction == '>':
+        A = U
+        B = np.matmul(np.diag(S), V)
+    elif direction == '<':
+        A = np.matmul(U, np.diag(S))
+        B = V
+    A = np.reshape(A, (sh[0], sh[2], -1))
+    B = np.reshape(B, (sh[1], -1, sh[3]))
+
+    return A, B
+
+
+def dmrg2(mpo, initial_mps, trunc=10, sweeps=8):
     r"""Two-site DMRG method.
     """
     
-    # TODO
+    def _contract_Rs(mpo, mps):
+        R_list = [np.array([[[1.0]]])]
+        for i in range(len(mpo)-1, 1, -1):    # contract from end to site 2
+            R_list.append(contract_from_right(R_list[-1], mps[i], mpo[i], mps[i]))
+        return R_list
 
-    return
+    def _contract_cg_mpo_list(mpo):
+        cg_mpo_list = []
+        for i in range(len(mpo)-1):
+            cg_mpo_list.append(coarse_grain_mpo(mpo[i], mpo[i+1]))
+        return cg_mpo_list
+        
+    mps = initial_mps
+    L_list = [np.array([[[1.0]]])]
+    R_list = _contract_Rs(mpo, mps)
+    cg_mpo_list = _contract_cg_mpo_list(mpo)
+    
+    for sweep in range(sweeps/2):
+        for i in range(len(mpo)-2):    # right sweep
+            L = L_list[-1]
+            R = R_list.pop()
+            fg_dims = [mps[i].shape[0], mps[i+1].shape[0]]
+            cg_mps = coarse_grain_mps(mps[i], mps[i+1])
+            cg_mpo = cg_mpo_list[i]
+            H = EnvTensor(L, cg_mpo, R)
+            E, cg_mps = opt_one_site(H, cg_mps)   # diag
+            mps[i], mps[i+1] = fine_grain_mps(cg_mps, fg_dims, '>', trunc)   #SVD
+
+            L_list.append(contract_from_left(L_list[-1], mps[i], mpo[i], mps[i]))
+
+            print("Sweep {}, Sites {} Energy {:16.12f}".format(sweep*2, i , E))
+
+        for i in range(len(mps)-1, 1, -1):    # left sweep
+            R = R_list[-1]
+            L = L_list.pop()
+            fg_dims = [mps[i-1].shape[0], mps[i].shape[0]]
+            cg_mps = coarse_grain_mps(mps[i-1], mps[i])
+            cg_mpo = cg_mpo_list[i-1]
+            H = EnvTensor(L, cg_mpo, R)
+            E, cg_mps = opt_one_site(H, cg_mps)   # diag
+            mps[i-1], mps[i] = fine_grain_mps(cg_mps, fg_dims, '<', trunc)   #SVD
+            R_list.append(contract_from_right(R_list[-1], mps[i], mpo[i], mps[i]))
+
+            print("Sweep {}, Sites {} Energy {:16.12f}".format(sweep*2+1, i , E))
+
+    return mps
 
 
 def mat_element(mps1, mpo, mps2):
@@ -342,20 +456,18 @@ def main():
     initial_mps = fm_state(N, anti=1)
     mpo = heisenberg(N)
 
-    mps = dmrg.two_site_dmrg(initial_mps, mpo, 10, 4)
-    for i in range(len(mps)):
-        print("MPS[{}] shape: {}".format(i, np.shape(mps[i])))
+    # mps = dmrg.two_site_dmrg(initial_mps, mpo, 10, 4)
+    # for i in range(len(mps)):
+    #     print("MPS[{}] shape: {}".format(i, np.shape(mps[i])))
 
-    # 8 sweeps with m=10 states
-    mps = dmrg1(mpo, mps, 10, 6)
-    # energy and energy squared
+    mps = dmrg2(mpo, initial_mps, 10, 8)
     energy = mat_element(mps, mpo, mps)
 
-    mps = dmrg.two_site_dmrg(initial_mps, mpo, 10, 10)
-    energy_ref = dmrg.Expectation(mps, mpo, mps)
+    # mps = dmrg.two_site_dmrg(initial_mps, mpo, 10, 8)
+    # energy_ref = dmrg.Expectation(mps, mpo, mps)
 
     print('Final energy expectation value {}'.format(energy))
-    print("Reference: {}".format(energy_ref))
+    # print("Reference: {}".format(energy_ref))
 
 
 
