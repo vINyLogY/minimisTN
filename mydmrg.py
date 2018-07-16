@@ -36,8 +36,6 @@ import scipy
 import scipy.sparse as sparse
 import scipy.sparse.linalg
 
-import dmrg
-
 
 def fm_state(N, anti=0):
     r"""
@@ -521,12 +519,8 @@ def main():
     mps = dmrg2(mpo, fm_state(N, anti=1), 10, 10)
     energy2 = mat_element(mps, mpo, mps)
 
-    mps = dmrg.two_site_dmrg(fm_state(N, anti=1), mpo, 10, 10)
-    energy_ref = dmrg.Expectation(mps, mpo, mps)
-
     # print('DMRG1 energy: {}'.format(energy1))
     print('DMRG2 energy: {}'.format(energy2))
-    print('Reference: {}'.format(energy_ref))
 
     return
 
