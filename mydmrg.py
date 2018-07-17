@@ -512,14 +512,14 @@ def main():
     N = 20
     mpo = heisenberg(N)
 
-    # mps = dmrg2(mpo, fm_state(N, anti=1), 10, 2)
-    # mps = dmrg1(mpo, mps, 10, 8)
-    # energy1 = mat_element(mps, mpo, mps)
+    mps = dmrg2(mpo, fm_state(N, anti=1), 10, 2)
+    mps = dmrg1(mpo, mps, 10, 8)
+    energy1 = mat_element(mps, mpo, mps)
 
     mps = dmrg2(mpo, fm_state(N, anti=1), 10, 10)
     energy2 = mat_element(mps, mpo, mps)
 
-    # print('DMRG1 energy: {}'.format(energy1))
+    print('DMRG1 energy: {}'.format(energy1))
     print('DMRG2 energy: {}'.format(energy2))
 
     return

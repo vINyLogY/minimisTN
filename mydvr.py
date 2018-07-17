@@ -22,6 +22,10 @@ logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
 
 
 class DVR(object):
+    """Vector:
+        DVR <--> FBR <--> Cont.
+    """
+
     def set_v_func(self, v_func):
         self.v_func = v_func
         return
@@ -38,6 +42,12 @@ class DVR(object):
         """
         return self.t_mat() + self.v_mat()
 
+    def solve(self, n_state=15):
+        self.energy, v = scipy.linalg.eigh(
+            self.h_mat(), eigvals=(0, n_state - 1))
+        self.eigenstates = np.transpose(v)
+        return self.energy, self.eigenstates
+
     def dvr2fbr_mat(self, mat):
         """Transform a matrix from the discrete variable representation
         to the finite basis representation.
@@ -50,6 +60,20 @@ class DVR(object):
         """
         vec = np.reshape(vec, -1)
         return np.dot(self._u_mat, vec)
+
+    def dvr2cont(self, vec):
+        """Transform a vector from the discrete variable representation.
+        to the spatial function.
+        """
+        vec = self.dvr2fbr_vec(vec)
+        psi = self.fbr2cont(vec)
+        return psi
+
+    def dvr_func(self, alpha):
+        """Return alpha-th DVR basis function.
+        """
+        func = self.fbr2cont(self._u_mat[:, alpha])
+        return func
 
     def fbr2dvr_mat(self, mat):
         """Transform a matrix from the finite basis representation
@@ -64,11 +88,10 @@ class DVR(object):
         vec = np.reshape(vec, -1)
         return np.dot(np.transpose(self._u_mat), vec)
 
-    def solve(self, n_state=15):
-        e, phi = scipy.linalg.eigh(self.h_mat(), eigvals=(0, n_state - 1))
-        return e, phi
-
-    def fbr2cont(self, vec):
+    def fbr2cont(self, vec, x=None):
+        """Transform a vector from the finite basis representation
+        to the spatial function.
+        """
         def _psi(x):
             psi = 0.0
             for j in range(self.n):
@@ -77,8 +100,52 @@ class DVR(object):
             return psi
         return _psi
 
-    def dvr_func(self, alpha):
-        return fbr2cont(_u_mat[:, alpha])
+    def plot_eigen(self, x_min, x_max, npts=None, n_plot=None, scale=2.):
+        if npts is None:
+            npts = self.n
+        if n_plot is None:
+            n_plot = len(self.energy)
+        x = np.linspace(x_min, x_max, npts)
+        vx = [self.v_func(x_) for x_ in x]
+        plt.figure()
+        plt.subplots_adjust(left=0.1, right=0.9, bottom=0.1, top=0.9)
+        plt.plot(x, vx, 'k-', lw=2)
+        for i in range(n_plot):
+            e = self.energy[i]
+            plt.plot([x[0], x[-1]], [e, e], '--', color='gray')
+            phi = self.dvr2cont(self.eigenstates[i])
+            phi = np.array([phi(x_) for x_ in x])
+            plt.plot(x, scale * phi + e)
+        y_min = min(vx)
+        y_max = e + scale * max(phi)
+        plt.xlim(x_min, x_max)
+        plt.ylim(y_min - scale, 1.05 * y_max)
+        plt.show()
+        return
+
+    def plot_dvr(self, x_min, x_max, npts=None, indices=None):
+        if npts is None:
+            npts = self.n
+        if indices is None:
+            indices = np.arange(self.n)
+        x = np.linspace(x_min, x_max, npts)
+        y_min = 0.
+        y_max = 0.
+        plt.figure()
+        plt.subplots_adjust(left=0.1, right=0.9, bottom=0.1, top=0.9)
+        for i in indices:
+            x_i = self.grid_points[i]
+            plt.plot([x_i, x_i], [-10., 10.], '--', color='gray')
+            chi = self.dvr_func(i)
+            chi = np.array([chi(x_) for x_ in x])
+            y_max = max(y_max, max(chi))
+            y_min = min(y_min, min(chi))
+            plt.plot(x, chi)
+        plt.plot([x_min, x_max], [0., 0.], 'k-')
+        plt.xlim(x_min, x_max)
+        plt.ylim(y_min * 1.05, y_max * 1.05)
+        plt.show()
+        return
 
 
 class SineDVR(DVR):
@@ -118,10 +185,39 @@ class SineDVR(DVR):
         return t_matrix
 
     def fbr_func(self, i):
+        """Return i-th FBR basis function.
+        """
         bf = BasisFunction()
         args = (i+1, self.length, self.a)
         func = bf.particle_in_box(i+1, self.length, self.a)
         return func
+
+    def plot_eigen(self, x_min=None, x_max=None,
+                   npts=None, n_plot=None, scale=2.):
+        if x_min is None:
+            min_ = self.a
+        else:
+            min_ = x_min
+        if x_max is None:
+            max_ = self.b
+        else:
+            max_ = x_max
+        super(SineDVR, self).plot_eigen(
+            min_, max_, npts=npts, n_plot=n_plot, scale=scale)
+        return
+
+    def plot_dvr(self, x_min=None, x_max=None, npts=None, indices=None):
+        if x_min is None:
+            min_ = self.a
+        else:
+            min_ = x_min
+        if x_max is None:
+            max_ = self.b
+        else:
+            max_ = x_max
+        super(SineDVR, self).plot_dvr(
+            min_, max_, npts=npts, indices=indices)
+        return
 
 
 class BasisFunction(object):
@@ -159,6 +255,12 @@ class PotentialFunction(object):
         """
         return lambda x: (d0 / a**4) * (x**2 - a**2)**2
 
+    def sho(self, k=1., x0=0.):
+        """Return a one-dimensional harmonic oscillator potential V(x)
+        with wavenumber k.
+        """
+        return lambda x: 0.5 * k * (x - x0)**2
+
 
 def main():
     dvr = SineDVR(-2.0, 2.0, 20)
@@ -166,28 +268,10 @@ def main():
     v_func = vf.w_well(d0=20., a=1.)
     dvr.set_v_func(v_func)
     e, v = dvr.solve(n_state=10)
-    func_set = []
     for i, e_i in enumerate(e):
         print('e{}: {}'.format(i, e_i))
-        tmp = dvr.dvr2fbr_vec(v[:, i])
-        tmp = dvr.fbr2cont(tmp)
-        func_set.append(tmp)
-
-    x = np.linspace(-2.0, 2.0, 500)
-
-    n_plot = 8
-    plt.figure()
-    plt.subplots_adjust(left=0.05, right=0.95,
-                        bottom=0.05, top=0.95)
-    plt.plot(x, v_func(x), 'k-', lw=2)
-    for i in range(n_plot):
-        plt.plot([x[0], x[-1]], [e[i], e[i]], '--', color='gray')
-    for i in range(n_plot):
-        phi = np.array([func_set[i](x_) for x_ in x])
-        plt.plot(x, 2. * phi + e[i])
-    plt.xlim(-3., 3.)
-    plt.ylim(-e[0], e[-1])
-    plt.show()
+    dvr.plot_eigen(npts=100)
+    dvr.plot_dvr(indices=[9, 10], npts=1000)
 
 
 if __name__ == '__main__':
