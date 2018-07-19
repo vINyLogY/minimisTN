@@ -33,12 +33,15 @@ class DVR(object):
         s. t. Q = <i|f(x)|j> is a tri-diagonal matrix
     """
 
-    def __init__(self, fbr_basis, trans_func_pair=(None, None), cas=True,
-                 hbar=1., m_e=1.):
+    def __init__(self, fbr_basis, cut_off=None, trans_func_pair=(None, None),
+                 cas=True, num_prec=None, hbar=1., m_e=1.):
+        self.method = 'Diagonlisation_DVR'
         self.n = len(fbr_basis)
-        self.sym_basis = fbr_basis
+        self.basis = fbr_basis
+        self.cut_off = cut_off
         self.trans_func_pair = trans_func_pair
         self.cas = cas
+        self.num_prec = num_prec
         self.hbar = hbar
         self.m_e = m_e
         self._calculate_dvr()
@@ -54,8 +57,9 @@ class DVR(object):
             f = cas.id_op()
         x = cas.x
         op = cas.prod_op(f(x))
-        basis = self.sym_basis
-        Q = cas.matrix_repr(op, basis)
+        basis = self.basis
+        Q = cas.matrix_repr(
+            op, basis, cut_off=self.cut_off, num_prec=self.num_prec)
         return Q
 
     def _sym_calc_grid_points(self, x_i):
@@ -90,15 +94,19 @@ class DVR(object):
         factor = - self.hbar ** 2 / (2 * self.m_e)
         if self.cas:
             op = cas.diff(2)
-            t_matrix = cas.matrix_repr(op, self.sym_basis)
-        return factor * t_matrix
+            t_matrix = cas.matrix_repr(
+                op, self.basis, cut_off=self.cut_off, num_prec=self.num_prec)
+        t_matrix = factor * self.fbr2dvr_mat(t_matrix)
+        return t_matrix
 
     def h_mat(self):
         """Return the potential matrix with the given potential.
         """
         return self.t_mat() + self.v_mat()
 
-    def solve(self, n_state=15):
+    def solve(self, n_state=None):
+        if n_state is None:
+            n_state = self.n
         self.energy, v = scipy.linalg.eigh(
             self.h_mat(), eigvals=(0, n_state - 1))
         self.eigenstates = np.transpose(v)
@@ -144,7 +152,7 @@ class DVR(object):
         vec = np.reshape(vec, -1)
         return np.dot(np.transpose(self._u_mat), vec)
 
-    def fbr2cont(self, vec, x=None):
+    def fbr2cont(self, vec):
         """Transform a vector from the finite basis representation
         to the spatial function.
         """
@@ -160,8 +168,8 @@ class DVR(object):
         """Return i-th FBR basis function.
         """
         if self.cas:
-            func = self.sym_basis[i]
-            func = lambdify(func)
+            func = self.basis[i]
+            func = cas.lambdify(func)
         return func
 
     def plot_eigen(self, x_min, x_max, npts=None, n_plot=None, scale=2.):
@@ -174,16 +182,18 @@ class DVR(object):
         plt.figure()
         plt.subplots_adjust(left=0.1, right=0.9, bottom=0.1, top=0.9)
         plt.plot(x, vx, 'k-', lw=2)
+        y_min = min(vx)
+        y_max = self.v_func(0)
         for i in range(n_plot):
             e = self.energy[i]
             plt.plot([x[0], x[-1]], [e, e], '--', color='gray')
             phi = (self.dvr2cont(self.eigenstates[i]))(x)
             plt.plot(x, scale * phi + e)
-        y_min = min(vx)
-        y_max = e + scale * max(phi)
+            y_max = max(y_max, e + scale * max(phi))
         plt.xlim(x_min, x_max)
         plt.ylim(y_min - scale, 1.05 * y_max)
-        plt.show()
+        plt.savefig('eigenstates-{}.png'.format(
+            self.method))
         return
 
     def plot_dvr(self, x_min, x_max, npts=None, indices=None):
@@ -200,13 +210,16 @@ class DVR(object):
             x_i = self.grid_points[i]
             plt.plot([x_i, x_i], [-10., 10.], '--', color='gray')
             chi = (self.dvr_func(i))(x)
+            if (self.dvr_func(i))(x_i) < 0.:
+                chi = -1. * chi
             y_max = max(y_max, max(chi))
             y_min = min(y_min, min(chi))
             plt.plot(x, chi)
         plt.plot([x_min, x_max], [0., 0.], 'k-')
         plt.xlim(x_min, x_max)
         plt.ylim(y_min * 1.05, y_max * 1.05)
-        plt.show()
+        plt.savefig('dvr_functions-{}.png'.format(
+            self.method))
         return
 
 
@@ -215,6 +228,7 @@ class SineDVR(DVR):
         r"""From a to b.
         C. f. reference [1] 2.3.5, p30.
         """
+        self.method = 'Sine-DVR'
         self.a = lower_bound
         self.b = upper_bound
         self.n = n_dvr
@@ -322,30 +336,60 @@ class PotentialFunction(object):
         return lambda x: 0.5 * k * (x - x0) ** 2
 
 
-def test_sine_dvr():
-    dvr = SineDVR(-2.0, 2.0, 5)
-    vf = PotentialFunction()
-    v_func = vf.w_well(d0=20., a=1.)
-    dvr.set_v_func(v_func)
-    e, v = dvr.solve(n_state=2)
+def test_sine_dvr(x0, L, n, v_func):
+    sine_dvr = SineDVR(x0, x0 + L, n)
+    sine_dvr.set_v_func(v_func)
+    e, v = sine_dvr.solve()
     for i, e_i in enumerate(e):
         print('e{}: {}'.format(i, e_i))
-    # dvr.plot_eigen(npts=100)
-    # dvr.plot_dvr(indices=[9, 10], npts=1000)
+    sine_dvr.plot_eigen(npts=100)
+    sine_dvr.plot_dvr(npts=100)
     return
 
 
-def test_dvr():
-    basis = [cas.particle_in_box(i, 4., -2.)
-             for i in range(1, 6)]
-    dvr = DVR(basis)
+def test_dvr(x0, L, n, v_func):
+    def f(x): return sym.cos(sym.pi * (x - x0) / L)
+
+    def inv_f(y): return x0 + sym.acos(y) * L / sym.pi
+
+    basis = [cas.particle_in_box(i, L, x0)
+             for i in range(1, 1 + n)]
+    dvr = DVR(
+        basis, trans_func_pair=(f, inv_f),
+        cut_off=(x0, x0 + L), num_prec=100)
+    dvr.set_v_func(v_func)
+    e, v = dvr.solve()
+    for i, e_i in enumerate(e):
+        print('e{}: {}'.format(i, e_i))
+    dvr.plot_eigen(x0, x0 + L, npts=100)
+    dvr.plot_dvr(x0, x0 + L, npts=100)
+    return
+
+
+def test_improper_dvr(x0, L, n, v_func):
+    basis = [cas.particle_in_box(i, L, x0)
+             for i in range(1, 1 + n)]
+    dvr = DVR(basis, cut_off=(x0, x0 + L), num_prec=100)
+    dvr.set_v_func(v_func)
+    dvr.method = 'improper'
+    e, v = dvr.solve()
+    for i, e_i in enumerate(e):
+        print('e{}: {}'.format(i, e_i))
+    dvr.plot_eigen(-2, 2, npts=100)
+    dvr.plot_dvr(-2., 2., npts=100)
+    return
+
+
+def main():
+    x0, L, n = (-2., 4., 10)
     v_func = PotentialFunction().w_well(d0=20., a=1.)
-    dvr.set_v_func(v_func)
-    e, v = dvr.solve(n_state=2)
-    for i, e_i in enumerate(e):
-        print('e{}: {}'.format(i, e_i))
-    return
+    print('Sine-DVR:')
+    test_sine_dvr(x0, L, n, v_func)
+    print('Diagonalisation-DVR:')
+    test_dvr(x0, L, n, v_func)
+    print('(Improper) Diagonalisation-DVR:')
+    test_improper_dvr(x0, L, n, v_func)
+
 
 if __name__ == '__main__':
-    # test_sine_dvr()
-    test_dvr()
+    main()
