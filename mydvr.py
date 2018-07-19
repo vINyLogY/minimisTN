@@ -1,6 +1,5 @@
 #!/usr/bin/env python2
 # coding: utf-8
-
 r"""# A Simple DVR Program (1-D)
 
 ## Reference
@@ -10,13 +9,16 @@ r"""# A Simple DVR Program (1-D)
 
 from __future__ import division
 
-import sys
 import logging
+import sys
 
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.linalg
 import scipy.sparse.linalg
+import sympy as sym
+
+import mycas as cas
 
 logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
 
@@ -24,7 +26,52 @@ logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
 class DVR(object):
     """Vector:
         DVR <--> FBR <--> Cont.
+
+     ## Args:
+    - fbr_basis: a list of sympy basis (functions).
+    - trans_func_pair: (f, f^{-1}) where f(x) is monotic
+        s. t. Q = <i|f(x)|j> is a tri-diagonal matrix
     """
+
+    def __init__(self, fbr_basis, trans_func_pair=(None, None), cas=True,
+                 hbar=1., m_e=1.):
+        self.n = len(fbr_basis)
+        self.sym_basis = fbr_basis
+        self.trans_func_pair = trans_func_pair
+        self.cas = cas
+        self.hbar = hbar
+        self.m_e = m_e
+        self._calculate_dvr()
+
+    def _sym_calc_q_mat(self):
+        """Calculate grid points and U matrix
+        s. t. Q = U X U^{\dagger},
+        where X_{ij} = x_i \delta_{ij},
+        Q = <i|f(x)|j> is a tri-diagonal matrix
+        """
+        f = self.trans_func_pair[0]
+        if f is None:
+            f = cas.id_op()
+        x = cas.x
+        op = cas.prod_op(f(x))
+        basis = self.sym_basis
+        Q = cas.matrix_repr(op, basis)
+        return Q
+
+    def _sym_calc_grid_points(self, x_i):
+        inv = self.trans_func_pair[-1]
+        if inv is None:
+            inv = cas.id_op()
+        inv = cas.lambdify(inv)
+        return inv(x_i)
+
+    def _calculate_dvr(self):
+        if self.cas:
+            Q = self._sym_calc_q_mat()
+        x_i, self._u_mat = scipy.linalg.eigh(Q)
+        if self.cas:
+            self.grid_points = self._sym_calc_grid_points(x_i)
+        return self.grid_points, self._u_mat
 
     def set_v_func(self, v_func):
         self.v_func = v_func
@@ -36,6 +83,15 @@ class DVR(object):
         v = self.v_func(self.grid_points)
         v_matrix = np.diag(v)
         return v_matrix
+
+    def t_mat(self):
+        """Return the kinetic energy matrix.
+        """
+        factor = - self.hbar ** 2 / (2 * self.m_e)
+        if self.cas:
+            op = cas.diff(2)
+            t_matrix = cas.matrix_repr(op, self.sym_basis)
+        return factor * t_matrix
 
     def h_mat(self):
         """Return the potential matrix with the given potential.
@@ -100,6 +156,14 @@ class DVR(object):
             return psi
         return _psi
 
+    def fbr_func(self, i):
+        """Return i-th FBR basis function.
+        """
+        if self.cas:
+            func = self.sym_basis[i]
+            func = lambdify(func)
+        return func
+
     def plot_eigen(self, x_min, x_max, npts=None, n_plot=None, scale=2.):
         if npts is None:
             npts = self.n
@@ -113,8 +177,7 @@ class DVR(object):
         for i in range(n_plot):
             e = self.energy[i]
             plt.plot([x[0], x[-1]], [e, e], '--', color='gray')
-            phi = self.dvr2cont(self.eigenstates[i])
-            phi = np.array([phi(x_) for x_ in x])
+            phi = (self.dvr2cont(self.eigenstates[i]))(x)
             plt.plot(x, scale * phi + e)
         y_min = min(vx)
         y_max = e + scale * max(phi)
@@ -136,8 +199,7 @@ class DVR(object):
         for i in indices:
             x_i = self.grid_points[i]
             plt.plot([x_i, x_i], [-10., 10.], '--', color='gray')
-            chi = self.dvr_func(i)
-            chi = np.array([chi(x_) for x_ in x])
+            chi = (self.dvr_func(i))(x)
             y_max = max(y_max, max(chi))
             y_min = min(y_min, min(chi))
             plt.plot(x, chi)
@@ -159,28 +221,26 @@ class SineDVR(DVR):
         self.hbar = hbar
         self.m_e = m_e
         self.length = float(self.b - self.a)
-        self._calc_grid_points()
-        self._calc_u_mat()
+        self._calculate_dvr()
 
-    def _calc_grid_points(self):
+    def _calculate_dvr(self):
+        # calculate grid points
         step_length = self.length / (self.n + 1)
         self.grid_points = np.array(
             [self.a + step_length * i for i in range(1, self.n + 1)])
-        return self.grid_points
-
-    def _calc_u_mat(self):
+        # calculate U matrix
         j = np.arange(1, self.n + 1)[:, None]
         a = np.arange(1, self.n + 1)[None, :]
         self._u_mat = np.sqrt(2 / (self.n + 1)) \
             * np.sin(j * a * np.pi / (self.n + 1))
-        return self._u_mat
+        return self.grid_points, self._u_mat
 
     def t_mat(self):
         """Return the kinetic energy matrix.
         """
-        factor = self.hbar ** 2 / (2 * self.m_e)
+        factor = - self.hbar ** 2 / (2 * self.m_e)
         j = np.arange(1, self.n + 1)
-        t_matrix = np.diag((j * np.pi / self.length)**2)
+        t_matrix = np.diag(- (j * np.pi / self.length) ** 2)
         t_matrix = factor * self.fbr2dvr_mat(t_matrix)
         return t_matrix
 
@@ -188,7 +248,6 @@ class SineDVR(DVR):
         """Return i-th FBR basis function.
         """
         bf = BasisFunction()
-        args = (i+1, self.length, self.a)
         func = bf.particle_in_box(i+1, self.length, self.a)
         return func
 
@@ -223,10 +282,11 @@ class SineDVR(DVR):
 class BasisFunction(object):
     def particle_in_box(self, j, L, x0):
         def _phi(x):
-            if x0 < x and x < x0 + L:
-                return np.sqrt(2. / L) * np.sin(j * np.pi * (x - x0) / L)
-            else:
-                return 0.
+            phi = np.where(
+                np.logical_and(x0 < x, x < x0 + L),
+                np.sqrt(2. / L) * np.sin(j * np.pi * (x - x0) / L),
+                0)
+            return phi
         return _phi
 
 
@@ -253,26 +313,39 @@ class PotentialFunction(object):
                  \  /\  /
             (-a,0)\/  \/(a, 0)
         """
-        return lambda x: (d0 / a**4) * (x**2 - a**2)**2
+        return lambda x: (d0 / a ** 4) * (x ** 2 - a ** 2) ** 2
 
     def sho(self, k=1., x0=0.):
         """Return a one-dimensional harmonic oscillator potential V(x)
         with wavenumber k.
         """
-        return lambda x: 0.5 * k * (x - x0)**2
+        return lambda x: 0.5 * k * (x - x0) ** 2
 
 
-def main():
-    dvr = SineDVR(-2.0, 2.0, 20)
+def test_sine_dvr():
+    dvr = SineDVR(-2.0, 2.0, 5)
     vf = PotentialFunction()
     v_func = vf.w_well(d0=20., a=1.)
     dvr.set_v_func(v_func)
-    e, v = dvr.solve(n_state=10)
+    e, v = dvr.solve(n_state=2)
     for i, e_i in enumerate(e):
         print('e{}: {}'.format(i, e_i))
-    dvr.plot_eigen(npts=100)
-    dvr.plot_dvr(indices=[9, 10], npts=1000)
+    # dvr.plot_eigen(npts=100)
+    # dvr.plot_dvr(indices=[9, 10], npts=1000)
+    return
 
+
+def test_dvr():
+    basis = [cas.particle_in_box(i, 4., -2.)
+             for i in range(1, 6)]
+    dvr = DVR(basis)
+    v_func = PotentialFunction().w_well(d0=20., a=1.)
+    dvr.set_v_func(v_func)
+    e, v = dvr.solve(n_state=2)
+    for i, e_i in enumerate(e):
+        print('e{}: {}'.format(i, e_i))
+    return
 
 if __name__ == '__main__':
-    main()
+    # test_sine_dvr()
+    test_dvr()
