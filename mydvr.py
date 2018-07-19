@@ -261,7 +261,7 @@ class SineDVR(DVR):
     def fbr_func(self, i):
         """Return i-th FBR basis function.
         """
-        bf = BasisFunction()
+        bf = cas.BasisFunction()
         func = bf.particle_in_box(i+1, self.length, self.a)
         return func
 
@@ -293,57 +293,14 @@ class SineDVR(DVR):
         return
 
 
-class BasisFunction(object):
-    def particle_in_box(self, j, L, x0):
-        def _phi(x):
-            phi = np.where(
-                np.logical_and(x0 < x, x < x0 + L),
-                np.sqrt(2. / L) * np.sin(j * np.pi * (x - x0) / L),
-                0)
-            return phi
-        return _phi
-
-
-class PotentialFunction(object):
-    def square_well(self, depth=1., width=1., x0=0., v0=0.):
-        r"""Returns a function of a single variable V(x).
-
-            (x0, v0+depth)    (x0+width, v0+depth)
-                     ----+    +----
-                         |    |
-                (x0, v0) +----+ (x0+width, v0)
-        """
-        def _v(x):
-            if x0 < x and x < x0 + width:
-                return v0
-            else:
-                return v0 + depth
-
-        return _v
-
-    def w_well(self, d0=5., a=1.):
-        r"""
-                \ (0,d1) /
-                 \  /\  /
-            (-a,0)\/  \/(a, 0)
-        """
-        return lambda x: (d0 / a ** 4) * (x ** 2 - a ** 2) ** 2
-
-    def sho(self, k=1., x0=0.):
-        """Return a one-dimensional harmonic oscillator potential V(x)
-        with wavenumber k.
-        """
-        return lambda x: 0.5 * k * (x - x0) ** 2
-
-
 def test_sine_dvr(x0, L, n, v_func):
     sine_dvr = SineDVR(x0, x0 + L, n)
     sine_dvr.set_v_func(v_func)
-    e, v = sine_dvr.solve()
+    e, v = sine_dvr.solve(n_state=5)
     for i, e_i in enumerate(e):
         print('e{}: {}'.format(i, e_i))
     sine_dvr.plot_eigen(npts=100)
-    sine_dvr.plot_dvr(npts=100)
+    # sine_dvr.plot_dvr(npts=100)
     return
 
 
@@ -354,10 +311,23 @@ def test_dvr(x0, L, n, v_func):
 
     basis = [cas.particle_in_box(i, L, x0)
              for i in range(1, 1 + n)]
-    dvr = DVR(
-        basis, trans_func_pair=(f, inv_f),
-        cut_off=(x0, x0 + L), num_prec=100)
+    dvr = DVR(basis, trans_func_pair=(f, inv_f),
+              cut_off=(x0, x0 + L), num_prec=100)
     dvr.set_v_func(v_func)
+    e, v = dvr.solve(n_state=5)
+    for i, e_i in enumerate(e):
+        print('e{}: {}'.format(i, e_i))
+    dvr.plot_eigen(x0, x0 + L, npts=100)
+    # dvr.plot_dvr(x0, x0 + L, npts=100)
+    return
+
+
+def test_improper_dvr(x0, L, n, v_func):
+    basis = [cas.harmonic_oscillator(i)
+             for i in range(0, n)]
+    dvr = DVR(basis, cut_off=(x0, x0 + L), num_prec=100)
+    dvr.set_v_func(v_func)
+    dvr.method = 'improper'
     e, v = dvr.solve()
     for i, e_i in enumerate(e):
         print('e{}: {}'.format(i, e_i))
@@ -366,27 +336,13 @@ def test_dvr(x0, L, n, v_func):
     return
 
 
-def test_improper_dvr(x0, L, n, v_func):
-    basis = [cas.particle_in_box(i, L, x0)
-             for i in range(1, 1 + n)]
-    dvr = DVR(basis, cut_off=(x0, x0 + L), num_prec=100)
-    dvr.set_v_func(v_func)
-    dvr.method = 'improper'
-    e, v = dvr.solve()
-    for i, e_i in enumerate(e):
-        print('e{}: {}'.format(i, e_i))
-    dvr.plot_eigen(-2, 2, npts=100)
-    dvr.plot_dvr(-2., 2., npts=100)
-    return
-
-
 def main():
-    x0, L, n = (-2., 4., 10)
-    v_func = PotentialFunction().w_well(d0=20., a=1.)
-    print('Sine-DVR:')
-    test_sine_dvr(x0, L, n, v_func)
-    print('Diagonalisation-DVR:')
-    test_dvr(x0, L, n, v_func)
+    x0, L, n = (-5., 10., 10)
+    v_func = cas.PotentialFunction().sho()
+    # print('Sine-DVR:')
+    # test_sine_dvr(x0, L, n, v_func)
+    # print('Diagonalisation-DVR:')
+    # test_dvr(x0, L, n, v_func)
     print('(Improper) Diagonalisation-DVR:')
     test_improper_dvr(x0, L, n, v_func)
 
