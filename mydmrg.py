@@ -32,9 +32,7 @@ r"""# A Simple MPS/MPO Program
 import math
 
 import numpy as np
-import scipy
-import scipy.sparse as sparse
-import scipy.sparse.linalg
+from scipy.sparse.linalg import LinearOperator, eigsh
 
 
 def fm_state(N, anti=0):
@@ -169,7 +167,7 @@ def contract_from_right(R, A, W, B):
     return temp
 
 
-class EnvTensor(sparse.linalg.LinearOperator):
+class EnvTensor(LinearOperator):
     r"""An environment tensor to evaluate the Hamiltonian matrix-vector multiply
 
         i s k   + -i-   -k- +
@@ -224,7 +222,7 @@ def opt_one_site(env_tensor, A):
     """
 
     A = np.reshape(A, env_tensor.size)
-    E, V = scipy.sparse.linalg.eigsh(env_tensor, 1, v0=A, which='SA')
+    E, V = eigsh(env_tensor, 1, v0=A, which='SA')
     E, V = E[0], np.reshape(V[:, 0], env_tensor.io_shape)
     # A = np.reshape(V, env_tensor.size)
     # E_squared = np.dot(A, env_tensor.matvec(env_tensor.matvec(A)))

@@ -14,9 +14,9 @@ import sys
 
 import matplotlib.pyplot as plt
 import numpy as np
-import scipy.linalg
-import scipy.sparse.linalg
+import scipy
 import sympy as sym
+from scipy.sparse.linalg import LinearOperator, eigsh
 
 import mycas as cas
 
@@ -293,14 +293,105 @@ class SineDVR(DVR):
         return
 
 
-def test_sine_dvr(x0, L, n, v_func):
+class PO_DVR(object):
+    """N-dimensional DVR
+    """
+    def __init__(self, conf_list, hbar=1., m_e=1.):
+        self.n_dims = len(conf_list)
+        self.n_list = []
+        self.dvr_list = []
+        for i in range(self.n_dims):
+            lower_bound, upper_bound, n_dvr = conf_list[i]
+            self.n_list.append(n_dvr)
+            self.dvr_list.append(
+                SineDVR(lower_bound, upper_bound, n_dvr, hbar=hbar, m_e=m_e))
+        self.grid_points_list = [dvr_i.grid_points for dvr_i in self.dvr_list]
+
+    class _Hamiltonian(LinearOperator):
+        def __init__(self, h_list, v_rst):
+            """
+            ## Args
+            - h_list: a list of H_i matrixes
+            - v_rst: diagonal of V_rst matrix
+            All in DVR.
+            """
+            self.h_list = h_list
+            self.v_rst = v_rst
+            self.dtype = np.dtype('d')
+            self.io_sizes = [h_i.shape[0] for h_i in h_list]
+            self.size = np.prod(self.io_sizes)
+            self.shape = [self.size] * 2
+
+        def _matvec(self, vec):
+            v = np.reshape(vec, self.io_sizes)
+            ans = np.zeros(self.io_sizes)
+            for i, h_i in enumerate(self.h_list):
+                tmp = np.tensordot(h_i, v, axes=(1, i))
+                ans += np.swapaxes(tmp, 0, i)
+            ans = np.reshape(ans, -1) + self.v_rst * vec
+            return ans
+
+    def set_v_func(self, v_list, v_rst=None):
+        """
+        v_list: a list of 1-arg functions
+        v_rst: a 1-arg function, where the arg is a list
+            of which length is self.n_dims
+        """
+        for i, v_i in enumerate(v_list):
+            self.dvr_list[i].set_v_func(v_i)
+        self.v_rst = v_rst
+        self._calc_diag_v_rst()
+        return
+
+    def _calc_diag_v_rst(self):
+        indices = self.tenserize(self.n_list)
+        v = []
+        for i in indices:
+            x = []
+            for n in range(self.n_dims):
+                x.append((self.grid_points_list[n])[i[n]])
+            v.append(self.v_rst(x))
+        self._diag_v_rst = np.array(v)
+        return self._diag_v_rst
+
+    def h_mat(self, direct=True):
+        h_list = []
+        for i in range(self.n_dims):
+            h_list.append(self.dvr_list[i].h_mat())
+        if direct:
+            return self._Hamiltonian(h_list, self._diag_v_rst)
+
+    def solve(self, n_state=1):
+        v = 1.
+        for i in range(self.n_dims):
+            e_i, v_i = self.dvr_list[i].solve(n_state=1)
+            v = np.tensordot(v, v_i[0], axes=0)
+        v = np.reshape(v, -1)
+        h_op = self.h_mat()
+        self.energy, v = eigsh(h_op, k=n_state, which='SA', v0=v)
+        self.eigenstates = np.transpose(v)
+        return self.energy, self.eigenstates
+
+    def tenserize(self, shape):
+        shape = list(shape)
+        if shape == []:
+            return [[]]
+        else:
+            ans = []
+            for x in range(shape[0]):
+                sub = self.tenserize(shape[1:])
+                ans += [[x] + xs for xs in sub]
+            return ans
+
+
+def test_sine_dvr(x0, L, n, v_func, n_plot=None):
     sine_dvr = SineDVR(x0, x0 + L, n)
     sine_dvr.set_v_func(v_func)
-    e, v = sine_dvr.solve(n_state=5)
+    e, v = sine_dvr.solve()
     for i, e_i in enumerate(e):
         print('e{}: {}'.format(i, e_i))
-    sine_dvr.plot_eigen(npts=100)
-    # sine_dvr.plot_dvr(npts=100)
+    sine_dvr.plot_eigen(npts=100, n_plot=n_plot, scale=1.)
+    sine_dvr.plot_dvr(npts=100)
     return
 
 
@@ -336,15 +427,29 @@ def test_improper_dvr(x0, L, n, v_func):
     return
 
 
+def test_po_dvr(x0, L, n, v_func, c=0.0):
+    vf_list = [v_func] * 2
+    v_rst = cas.PotentialFunction().linear_corr(c)
+    conf_list = [[x0, x0 + L, n]] * 2
+    po_dvr = PO_DVR(conf_list)
+    po_dvr.set_v_func(vf_list, v_rst=v_rst)
+    e, v = po_dvr.solve(n_state=5)
+    print('c: {:.2f}; e: {}'.format(c, e))
+
+
 def main():
-    x0, L, n = (-5., 10., 10)
+    x0, L, n = (-5., 10., 20)
     v_func = cas.PotentialFunction().sho()
-    # print('Sine-DVR:')
-    # test_sine_dvr(x0, L, n, v_func)
+    print('Sine-DVR:')
+    test_sine_dvr(x0, L, n, v_func, n_plot=5)
+    print('-----------')
     # print('Diagonalisation-DVR:')
     # test_dvr(x0, L, n, v_func)
-    print('(Improper) Diagonalisation-DVR:')
-    test_improper_dvr(x0, L, n, v_func)
+    # print('(Improper) Diagonalisation-DVR:')
+    # test_improper_dvr(x0, L, n, v_func)
+    print('2-D PO-DVR:')
+    for c in range(100):
+        test_po_dvr(x0, L, n, v_func, c=c * 0.01)
 
 
 if __name__ == '__main__':

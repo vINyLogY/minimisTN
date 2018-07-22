@@ -35,6 +35,13 @@ class BasisFunction(object):
 
 
 class PotentialFunction(object):
+    def linear_corr(self, c=0.01):
+        def _v(x):
+            v = c * x[0] * x[1]
+            return v
+
+        return _v
+
     def square_well(self, depth=1., width=1., x0=0., v0=0.):
         r"""Returns a function of a single variable V(x).
 
@@ -44,11 +51,10 @@ class PotentialFunction(object):
                 (x0, v0) +----+ (x0+width, v0)
         """
         def _v(x):
-            if x0 < x and x < x0 + width:
-                return v0
-            else:
-                return v0 + depth
-
+            ans = np.where(
+                np.logical_and(x0 < x, x < x0 + width),
+                v0, v0 + depth)
+            return ans
         return _v
 
     def w_well(self, d0=5., a=1.):
