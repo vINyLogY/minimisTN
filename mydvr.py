@@ -10,6 +10,7 @@ r"""# A Simple DVR Program (1-D)
 from __future__ import division
 
 import logging
+import os
 import sys
 
 import matplotlib.pyplot as plt
@@ -183,13 +184,14 @@ class DVR(object):
         e = np.dot(vec_h, np.dot(self._h_mat, vec))
         return e[0, 0]
 
-    def propagator(self, tau=0.1, method='Trotter', hbar=1.0):
+    def propagator(self, tau=0.1, method='Trotter'):
         r"""## Return
         - e^{-iV\tau/2}
         - e^{-iV\tau}
         - e^{-iT\tau}
         TODO: use non-dense method.
         """
+        hbar = self.hbar
         if 'Trotter' in method:
             diag, v = scipy.linalg.eigh(self.t_mat())
             p3 = np.exp(-1.0j * hbar * tau * diag)
@@ -209,7 +211,7 @@ class DVR(object):
             n_plot = len(self.energy)
         x = np.linspace(x_min, x_max, npts)
         vx = [self.v_func(x_) for x_ in x]
-        plt.figure()
+        fig = plt.figure()
         plt.subplots_adjust(left=0.1, right=0.9, bottom=0.1, top=0.9)
         plt.plot(x, vx, 'k-', lw=2)
         y_min = min(vx)
@@ -225,15 +227,15 @@ class DVR(object):
         plt.ylim(y_min, 1.05 * y_max)
         plt.savefig('eigenstates-{}.png'.format(
             self.method))
+        plt.close(fig)
         return
 
-    def plot_func(self, func_list, x_min, x_max, npts=None):
+    def plot_func(self, func_list, x_min, x_max,
+                  y_min=0., y_max=0., npts=None):
         if npts is None:
             npts = self.n
         x = np.linspace(x_min, x_max, npts)
-        y_min = 0.
-        y_max = 0.
-        plt.figure()
+        fig = plt.figure()
         plt.subplots_adjust(left=0.1, right=0.9, bottom=0.1, top=0.9)
         for func in func_list:
             chi = func(x)
@@ -244,6 +246,7 @@ class DVR(object):
         plt.ylim(y_min * 1.05, y_max * 1.05)
         plt.savefig('functions-{}.png'.format(
             self.method))
+        plt.close(fig)
         return
 
     def plot_dvr(self, x_min, x_max, npts=None, indices=None):
@@ -254,7 +257,7 @@ class DVR(object):
         x = np.linspace(x_min, x_max, npts)
         y_min = 0.
         y_max = 0.
-        plt.figure()
+        fig = plt.figure()
         plt.subplots_adjust(left=0.1, right=0.9, bottom=0.1, top=0.9)
         for i in indices:
             x_i = self.grid_points[i]
@@ -270,6 +273,7 @@ class DVR(object):
         plt.ylim(y_min * 1.05, y_max * 1.05)
         plt.savefig('dvr_functions-{}.png'.format(
             self.method))
+        plt.close(fig)
         return
 
 
@@ -329,7 +333,8 @@ class SineDVR(DVR):
             min_, max_, npts=npts, n_plot=n_plot, scale=scale)
         return
 
-    def plot_func(self, func_list, x_min=None, x_max=None, npts=None):
+    def plot_func(self, func_list,
+                  x_min=None, x_max=None, y_min=0., y_max=0., npts=None):
         if x_min is None:
             min_ = self.a
         else:
@@ -338,7 +343,8 @@ class SineDVR(DVR):
             max_ = self.b
         else:
             max_ = x_max
-        super(SineDVR, self).plot_func(func_list, min_, max_, npts=npts)
+        super(SineDVR, self).plot_func(
+            func_list, min_, max_, y_min=y_min, y_max=y_max, npts=npts)
         return
 
     def plot_dvr(self, x_min=None, x_max=None, npts=None, indices=None):
@@ -421,7 +427,7 @@ class PO_DVR(object):
     def h_mat(self, direct=True):
         h_list = []
         for i in range(self.n_dims):
-            h_list.append(self.dvr_list[i].h_mat())
+            h_list.append(self.dvr_list[i]._h_mat)
         if direct:
             if self.v_rst is None:
                 return self._Hamiltonian(h_list, None)
@@ -434,7 +440,7 @@ class PO_DVR(object):
             e_i, v_i = self.dvr_list[i].solve(n_state=1)
             v = np.tensordot(v, v_i[0], axes=0)
         v = np.reshape(v, -1)
-        h_op = self._h_mat
+        h_op = self.h_mat()
         self.energy, v = eigsh(h_op, k=n_state, which='SA', v0=v)
         self.eigenstates = np.transpose(v)
         return self.energy, self.eigenstates
@@ -478,17 +484,16 @@ def test_propagation(x0, L, n):
     sine_dvr.solve(n_state=1)
     p1, p2, p3 = sine_dvr.propagator(tau=0.01)
     print(sine_dvr.energy_expection(v))
-    for i in range(1, 10 * 100 + 1):
+    os.chdir('./movie')
+    for i in range(1, 10 * 20 + 1):
         v = np.dot(p1, np.dot(p3, np.dot(p1, v)))
         if i % 1 == 0:
             func = sine_dvr.dvr2cont(np.real(v))
             ifunc = sine_dvr.dvr2cont(np.imag(v))
             func_list.append(func)
             ifunc_list.append(ifunc)
-            print(sine_dvr.energy_expection(v))
-    sine_dvr.plot_func(func_list, npts=200)
-    sine_dvr.method = 'imag-fig{}'.format(n)
-    sine_dvr.plot_func(ifunc_list, npts=200)
+            sine_dvr.method = 'fig-{:.2f}'.format(i * 0.01)
+            sine_dvr.plot_func([func, ifunc], y_min=-1.5, y_max=1.5, npts=200)
     return
 
 
@@ -528,18 +533,34 @@ def test_improper_dvr(x0, L, n, v_func):
 
 def test_po_dvr(x0, L, n, v_func, c=0.0):
     vf_list = [v_func] * 2
-    v_rst = cas.PotentialFunction().linear_corr(c)
     conf_list = [[x0, x0 + L, n]] * 2
     po_dvr = PO_DVR(conf_list)
-    po_dvr.set_v_func(vf_list, v_rst=None)
-    e, v = po_dvr.solve(n_state=10)
-    print('c: {:.2f}; e: {}'.format(c, e))
+    for i in range(10):
+        c = i * 0.01
+        v_rst = cas.PotentialFunction().linear_corr(i * 0.01)
+        po_dvr.set_v_func(vf_list, v_rst=v_rst)
+        e, v = po_dvr.solve(n_state=6)
+        e_1 = np.sqrt(1 - c)
+        e_2 = np.sqrt(1 + c)
+        l1 = [(n + 0.5) * e_1 for n in range(100)]
+        l2 = [(n + 0.5) * e_2 for n in range(100)]
+        l_ = []
+        for a in l1:
+            for b in l2:
+                l_.append(a + b)
+        ref = np.array(sorted(l_))[:6]
+        err = e - ref
+        print('c: {:.2f}; e: {}'.format(i * 0.01, e))
+        print('Ref: {}'.format(ref))
+        print('Err: {}'.format(err))
+        print
+    return
 
 
 def main():
     x0, L, n = (-5., 10., 100)
-    test_propagation(x0, L, n)
-    # v_func = cas.PotentialFunction().w_well()
+    v_func = cas.PotentialFunction().sho()
+    # test_propagation(x0, L, n)
     # print('Sine-DVR:')
     # test_sine_dvr(x0, L, n, v_func, n_plot=5, message='W-well')
     # v_func = cas.PotentialFunction().sho(k=3., x0=-1.)
@@ -550,8 +571,8 @@ def main():
     # print('-----------')
     # print('(Improper) Diagonalisation-DVR:')
     # test_improper_dvr(x0, L, n, v_func)
-    # print('2-D PO-DVR:')
-    # test_po_dvr(x0, L, n, v_func)
+    print('2-D PO-DVR:')
+    test_po_dvr(x0, L, n, v_func)
 
 
 if __name__ == '__main__':
