@@ -17,6 +17,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import scipy
 import sympy as sym
+from scipy.fftpack import dst, idst
 from scipy.sparse.linalg import LinearOperator, eigsh
 
 import mycas as cas
@@ -107,10 +108,11 @@ class DVR(object):
 
     def solve(self, n_state=None):
         if n_state is None:
-            n_state = self.n
+            n_state = self.n - 1
         self._h_mat = self.h_mat()
-        self.energy, v = scipy.linalg.eigh(
-            self._h_mat, eigvals=(0, n_state - 1))
+        self.energy, v = eigsh(self._h_mat, k=n_state, which='SA')
+        # self.energy, v = scipy.linalg.eigh(
+        #     self._h_mat, eigvals=(0, n_state - 1))
         self.eigenstates = np.transpose(v)
         return self.energy, self.eigenstates
 
@@ -201,8 +203,6 @@ class DVR(object):
             p1 = np.exp(-1.0j * hbar * tau * np.diag(0.5 * self.v_mat()))
             p1 = np.diag(p1)
             return p1, p2, p3
-        else:
-            return
 
     def plot_eigen(self, x_min, x_max, npts=None, n_plot=None, scale=2.):
         if npts is None:
@@ -361,82 +361,130 @@ class SineDVR(DVR):
         return
 
 
+class FastSineDVR(SineDVR):
+    def __init__(self, lower_bound, upper_bound, n_dvr, hbar=1., m_e=1.):
+        super(FastSineDVR, self).__init__(
+            lower_bound, upper_bound, n_dvr, hbar=hbar, m_e=m_e)
+
+    def h_mat(self):
+        class _Hamiltonian(LinearOperator):
+            def __init__(self, v_diag, t_diag):
+                """
+                - v_diag: in DVR
+                - t_diag: in FBR
+                """
+                n = len(v_diag)
+                self.v = v_diag
+                self.t = t_diag / (2. * (n + 1.))
+                self.dtype = np.dtype('d')
+                self.shape = [n] * 2
+
+            def _matvec(self, vec):
+                vec1 = self.v * vec
+                vec2 = dst(self.t * dst(vec, type=1), type=1)
+                return vec1 + vec2
+
+            def _matmat(self, mat):
+                mat = mat.transpose()
+                tmp = np.array([self._matvec(vec) for vec in mat])
+                tmp = mat.transpose()
+                return tmp
+
+            def _rmatvec(self, vec): return self._matvec(vec)
+
+        v = self.v_func(self.grid_points)
+        j = np.arange(1, self.n + 1)
+        t = self.hbar ** 2 / (2 * self.m_e) * (j * np.pi / self.length) ** 2
+        return _Hamiltonian(v, t)
+
+
 class PO_DVR(object):
     """N-dimensional DVR
     """
-    def __init__(self, conf_list, hbar=1., m_e=1.):
-        self.n_dims = len(conf_list)
+    def __init__(self, conf_list, hbar=1., m_e=1., fast=False):
+        self.rank = len(conf_list)
         self.n_list = []
         self.dvr_list = []
-        for i in range(self.n_dims):
+        for i in range(self.rank):
             lower_bound, upper_bound, n_dvr = conf_list[i]
             self.n_list.append(n_dvr)
-            self.dvr_list.append(
-                SineDVR(lower_bound, upper_bound, n_dvr, hbar=hbar, m_e=m_e))
-        self.grid_points_list = [dvr_i.grid_points for dvr_i in self.dvr_list]
-
-    class _Hamiltonian(LinearOperator):
-        def __init__(self, h_list, v_rst):
-            """
-            ## Args
-            - h_list: a list of H_i matrixes
-            - v_rst: diagonal of V_rst matrix
-            All in DVR.
-            """
-            self.h_list = h_list
-            self.v_rst = v_rst
-            self.dtype = np.dtype('d')
-            self.io_sizes = [h_i.shape[0] for h_i in h_list]
-            self.size = np.prod(self.io_sizes)
-            self.shape = [self.size] * 2
-
-        def _matvec(self, vec):
-            v = np.reshape(vec, self.io_sizes)
-            ans = np.zeros(self.io_sizes)
-            for i, h_i in enumerate(self.h_list):
-                tmp = np.tensordot(h_i, v, axes=(1, i))
-                ans += np.swapaxes(tmp, 0, i)
-            if self.v_rst is not None:
-                ans = np.reshape(ans, -1) + self.v_rst * vec
-            return ans
+            if fast:
+                sp_dvr = FastSineDVR(
+                    lower_bound, upper_bound, n_dvr, hbar=hbar, m_e=m_e)
+            else:
+                sp_dvr = SineDVR(
+                    lower_bound, upper_bound, n_dvr, hbar=hbar, m_e=m_e)
+            self.dvr_list.append(sp_dvr)
+        self.dim = np.prod(self.n_list)
+        self.grid_points_list = np.array(
+            [dvr_i.grid_points for dvr_i in self.dvr_list])
 
     def set_v_func(self, v_list, v_rst=None):
         """
         v_list: a list of 1-arg functions
         v_rst: a 1-arg function, where the arg is a list
-            of which length is self.n_dims
+            of which length is self.rank
         """
         for i, v_i in enumerate(v_list):
             self.dvr_list[i].set_v_func(v_i)
         self.v_rst = v_rst
         if self.v_rst is not None:
             self._calc_diag_v_rst()
+        else:
+            self._diag_v_rst = None
         return
 
     def _calc_diag_v_rst(self):
-        indices = self.tenserize(self.n_list)
         v = []
-        for i in indices:
+        for i in range(self.dim):
             x = []
-            for n in range(self.n_dims):
-                x.append((self.grid_points_list[n])[i[n]])
+            sub = self.subindex(i)
+            for j, n in enumerate(sub):
+                x.append(self.grid_points_list[j, n])
             v.append(self.v_rst(x))
         self._diag_v_rst = np.array(v)
         return self._diag_v_rst
 
     def h_mat(self, direct=True):
+        class _Hamiltonian(LinearOperator):
+            def __init__(self, h_list, v_rst):
+                """All in DVR.
+                - h_list: a list of H_i matrixes
+                - v_rst: diagonal of V_rst matrix
+                """
+                self.h_list = h_list
+                self.v_rst = v_rst
+                self.dtype = np.dtype('d')
+                self.io_sizes = [h_i.shape[0] for h_i in h_list]
+                self.shape = [np.prod(self.io_sizes)] * 2
+
+            def _matvec(self, vec):
+                v = np.reshape(vec, self.io_sizes)
+                ans = np.zeros(self.io_sizes)
+                for i, h_i in enumerate(self.h_list):
+                    v_i = np.swapaxes(v, -1, i)
+                    size_i = (self.io_sizes[:i] + self.io_sizes[i + 1:] +
+                              [self.io_sizes[i]])
+                    v_i = np.reshape(v_i, (-1, self.io_sizes[i]))
+                    tmp = np.array([h_i.dot(v_) for v_ in v_i])
+                    tmp = np.reshape(tmp, size_i)
+                    ans += np.swapaxes(tmp, -1, i)
+                ans = np.reshape(ans, -1)
+                if self.v_rst is not None:
+                    ans = ans + self.v_rst * vec
+                return ans
+
+            def _rmatvec(self, vec): return self._matvec(vec)
+
         h_list = []
-        for i in range(self.n_dims):
+        for i in range(self.rank):
             h_list.append(self.dvr_list[i]._h_mat)
         if direct:
-            if self.v_rst is None:
-                return self._Hamiltonian(h_list, None)
-            else:
-                return self._Hamiltonian(h_list, self._diag_v_rst)
+            return _Hamiltonian(h_list, self._diag_v_rst)
 
     def solve(self, n_state=1):
         v = 1.
-        for i in range(self.n_dims):
+        for i in range(self.rank):
             e_i, v_i = self.dvr_list[i].solve(n_state=1)
             v = np.tensordot(v, v_i[0], axes=0)
         v = np.reshape(v, -1)
@@ -445,20 +493,20 @@ class PO_DVR(object):
         self.eigenstates = np.transpose(v)
         return self.energy, self.eigenstates
 
-    def tenserize(self, shape):
-        shape = list(shape)
-        if shape == []:
-            return [[]]
-        else:
-            ans = []
-            for x in range(shape[0]):
-                sub = self.tenserize(shape[1:])
-                ans += [[x] + xs for xs in sub]
-            return ans
+    def subindex(self, N):
+        prods = [1]
+        for i in range(self.rank - 1, 0, -1):
+            prods.append(prods[-1] * self.n_list[i])
+        sub = []
+        for i in range(self.rank):
+            base = prods.pop()
+            sub.append(N // base)
+            N = N % base
+        return sub
 
 
 def test_sine_dvr(x0, L, n, v_func, n_plot=None, message=None):
-    sine_dvr = SineDVR(x0, x0 + L, n)
+    sine_dvr = FastSineDVR(x0, x0 + L, n)
     if message is not None:
         sine_dvr.method = message
     sine_dvr.set_v_func(v_func)
@@ -474,26 +522,28 @@ def test_propagation(x0, L, n):
     sine_dvr = SineDVR(x0, x0 + L, n)
     v_func = cas.PotentialFunction().sho(k=3., x0=-1.)
     sine_dvr.set_v_func(v_func)
-    e, v = sine_dvr.solve(n_state=1)
-    v = v[0]
+    e, v_list = sine_dvr.solve(n_state=1)
+    v = v_list[0]
     func = sine_dvr.dvr2cont(v)
     func_list = [func]
     ifunc_list = []
     v_func = cas.PotentialFunction().w_well()
     sine_dvr.set_v_func(v_func)
     sine_dvr.solve(n_state=1)
-    p1, p2, p3 = sine_dvr.propagator(tau=0.01)
+    p1, p2, p3 = sine_dvr.propagator(tau=0.01, method='Trotter')
     print(sine_dvr.energy_expection(v))
     os.chdir('./movie')
-    for i in range(1, 10 * 20 + 1):
+    for i in range(1, 10 + 1):
         v = np.dot(p1, np.dot(p3, np.dot(p1, v)))
-        if i % 1 == 0:
-            func = sine_dvr.dvr2cont(np.real(v))
-            ifunc = sine_dvr.dvr2cont(np.imag(v))
-            func_list.append(func)
-            ifunc_list.append(ifunc)
-            sine_dvr.method = 'fig-{:.2f}'.format(i * 0.01)
-            sine_dvr.plot_func([func, ifunc], y_min=-1.5, y_max=1.5, npts=200)
+        print(sine_dvr.energy_expection(v))
+        # if i % 1 == 0:
+        #     func = sine_dvr.dvr2cont(np.real(v))
+        #     ifunc = sine_dvr.dvr2cont(np.imag(v))
+        #     func_list.append(func)
+        #     ifunc_list.append(ifunc)
+        #     sine_dvr.method = 'fig-{:.2f}'.format(i * 0.01)
+        #     sine_dvr.plot_func(
+        #       [func, ifunc], y_min=-1.5, y_max=1.5, npts=200)
     return
 
 
@@ -531,10 +581,10 @@ def test_improper_dvr(x0, L, n, v_func):
     return
 
 
-def test_po_dvr(x0, L, n, v_func, c=0.0):
+def test_po_dvr(x0, L, n, v_func, c=0.0, fast=True):
     vf_list = [v_func] * 2
     conf_list = [[x0, x0 + L, n]] * 2
-    po_dvr = PO_DVR(conf_list)
+    po_dvr = PO_DVR(conf_list, fast=fast)
     for i in range(10):
         c = i * 0.01
         v_rst = cas.PotentialFunction().linear_corr(i * 0.01)
@@ -558,7 +608,8 @@ def test_po_dvr(x0, L, n, v_func, c=0.0):
 
 
 def main():
-    x0, L, n = (-5., 10., 100)
+    import time
+    x0, L, n = (-5., 10., 50)
     v_func = cas.PotentialFunction().sho()
     # test_propagation(x0, L, n)
     # print('Sine-DVR:')
@@ -572,7 +623,12 @@ def main():
     # print('(Improper) Diagonalisation-DVR:')
     # test_improper_dvr(x0, L, n, v_func)
     print('2-D PO-DVR:')
-    test_po_dvr(x0, L, n, v_func)
+    t0 = time.time()
+    # test_po_dvr(x0, L, n, v_func)
+    t1 = time.time()
+    test_po_dvr(x0, L, n, v_func, fast=False)
+    t2 = time.time()
+    print('fast: {}, dense: {}'.format(t1 - t0, t2 - t1))
 
 
 if __name__ == '__main__':
