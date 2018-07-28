@@ -505,16 +505,20 @@ class PO_DVR(object):
         return sub
 
 
-def test_sine_dvr(x0, L, n, v_func, n_plot=None, message=None):
-    sine_dvr = FastSineDVR(x0, x0 + L, n)
+# Some test functions
+def test_sine_dvr(x0, L, n, v_func, n_plot=None, message=None, fast=False):
+    if fast:
+        sine_dvr = FastSineDVR(x0, x0 + L, n)
+    else:
+        sine_dvr = SineDVR(x0, x0 + L, n)
     if message is not None:
         sine_dvr.method = message
     sine_dvr.set_v_func(v_func)
     e, v = sine_dvr.solve()
-    for i, e_i in enumerate(e):
+    for i, e_i in enumerate(e[:6]):
         print('e{}: {}'.format(i, e_i))
-    sine_dvr.plot_eigen(npts=100, n_plot=n_plot, scale=1.)
-    sine_dvr.plot_dvr(npts=100)
+    # sine_dvr.plot_eigen(npts=100, n_plot=n_plot, scale=1.)
+    # sine_dvr.plot_dvr(npts=100)
     return
 
 
@@ -609,25 +613,29 @@ def test_po_dvr(x0, L, n, v_func, c=0.0, fast=True):
 
 def main():
     import time
-    x0, L, n = (-5., 10., 50)
+    x0, L, n = (-5., 10., 1000)
     v_func = cas.PotentialFunction().sho()
     # test_propagation(x0, L, n)
-    # print('Sine-DVR:')
+    print('Sine-DVR:')
     # test_sine_dvr(x0, L, n, v_func, n_plot=5, message='W-well')
     # v_func = cas.PotentialFunction().sho(k=3., x0=-1.)
-    # test_sine_dvr(x0, L, n, v_func, n_plot=5, message='SHO')
+    t0 = time.time()
+    test_sine_dvr(x0, L, n, v_func, n_plot=5, message='SHO', fast=True)
+    t1 = time.time()
+    test_sine_dvr(x0, L, n, v_func, n_plot=5, message='SHO', fast=False)
+    t2 = time.time()
     # print('-----------')
     # print('Diagonalisation-DVR:')
     # test_dvr(x0, L, n, v_func)
     # print('-----------')
     # print('(Improper) Diagonalisation-DVR:')
     # test_improper_dvr(x0, L, n, v_func)
-    print('2-D PO-DVR:')
-    t0 = time.time()
+    # print('2-D PO-DVR:')
+    # t0 = time.time()
     # test_po_dvr(x0, L, n, v_func)
-    t1 = time.time()
-    test_po_dvr(x0, L, n, v_func, fast=False)
-    t2 = time.time()
+    # t1 = time.time()
+    # test_po_dvr(x0, L, n, v_func, fast=False)
+    # t2 = time.time()
     print('fast: {}, dense: {}'.format(t1 - t0, t2 - t1))
 
 
