@@ -28,7 +28,7 @@ def test_sine_dvr(x0, L, n, v_func, n_plot=None, message=None, fast=False):
 
 def main():
     import time
-    x0, L, n = -5., 10., 1000
+    x0, L, n = -5., 10., 20
     v_func = PotentialFunction().sho()
     t0 = time.time()
     test_sine_dvr(x0, L, n, v_func, n_plot=5, message='SHO', fast=True)

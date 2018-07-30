@@ -48,8 +48,13 @@ class DVR(object):
         self.m_e = m_e
         self._calculate_dvr()
 
+        self._h_mat = None
+        self.v_func = None
+        self.energy = None
+        self.eigenstates = None
+
     def _sym_calc_q_mat(self):
-        """Calculate grid points and U matrix
+        r"""Calculate grid points and U matrix
         s. t. Q = U X U^{\dagger},
         where X_{ij} = x_i \delta_{ij},
         Q = <i|f(x)|j> is a tri-diagonal matrix
@@ -81,6 +86,7 @@ class DVR(object):
 
     def set_v_func(self, v_func):
         self.v_func = v_func
+        self._h_mat = None
         return
 
     def v_mat(self):
@@ -104,6 +110,8 @@ class DVR(object):
     def h_mat(self):
         """Return the potential matrix with the given potential.
         """
+        if self._h_mat is not None:
+            return self._h_mat
         return self.t_mat() + self.v_mat()
 
     def solve(self, n_state=None):
@@ -290,6 +298,7 @@ class SineDVR(DVR):
         self.m_e = m_e
         self.length = float(self.b - self.a)
         self._calculate_dvr()
+        self._h_mat = None
 
     def _calculate_dvr(self):
         # calculate grid points
@@ -392,6 +401,8 @@ class FastSineDVR(SineDVR):
 
             def _rmatvec(self, vec): return self._matvec(vec)
 
+        if self._h_mat is not None:
+            return self._h_mat
         v = self.v_func(self.grid_points)
         j = np.arange(1, self.n + 1)
         t = self.hbar ** 2 / (2 * self.m_e) * (j * np.pi / self.length) ** 2
@@ -419,6 +430,11 @@ class PO_DVR(object):
         self.grid_points_list = np.array(
             [dvr_i.grid_points for dvr_i in self.dvr_list])
 
+        self.v_rst = None
+        self._diag_v_rst = None
+        self.energy = None
+        self.eigenstates = None
+
     def set_v_func(self, v_list, v_rst=None):
         """
         v_list: a list of 1-arg functions
@@ -430,8 +446,6 @@ class PO_DVR(object):
         self.v_rst = v_rst
         if self.v_rst is not None:
             self._calc_diag_v_rst()
-        else:
-            self._diag_v_rst = None
         return
 
     def _calc_diag_v_rst(self):
@@ -463,8 +477,11 @@ class PO_DVR(object):
                 ans = np.zeros(self.io_sizes)
                 for i, h_i in enumerate(self.h_list):
                     v_i = np.swapaxes(v, -1, i)
-                    size_i = (self.io_sizes[:i] + self.io_sizes[i + 1:] +
-                              [self.io_sizes[i]])
+                    size_i = (
+                        self.io_sizes[:i] +
+                        self.io_sizes[i + 1:] +
+                        [self.io_sizes[i]]
+                    )
                     v_i = np.reshape(v_i, (-1, self.io_sizes[i]))
                     tmp = np.array([h_i.dot(v_) for v_ in v_i])
                     tmp = np.reshape(tmp, size_i)
@@ -478,14 +495,14 @@ class PO_DVR(object):
 
         h_list = []
         for i in range(self.rank):
-            h_list.append(self.dvr_list[i]._h_mat)
+            h_list.append(self.dvr_list[i].h_mat())
         if direct:
             return _Hamiltonian(h_list, self._diag_v_rst)
 
     def solve(self, n_state=1):
         v = 1.
         for i in range(self.rank):
-            e_i, v_i = self.dvr_list[i].solve(n_state=1)
+            _, v_i = self.dvr_list[i].solve(n_state=1)
             v = np.tensordot(v, v_i[0], axes=0)
         v = np.reshape(v, -1)
         h_op = self.h_mat()
@@ -506,38 +523,22 @@ class PO_DVR(object):
 
 
 # Some test functions
-def test_sine_dvr(x0, L, n, v_func, n_plot=None, message=None, fast=False):
-    if fast:
-        sine_dvr = FastSineDVR(x0, x0 + L, n)
-    else:
-        sine_dvr = SineDVR(x0, x0 + L, n)
-    if message is not None:
-        sine_dvr.method = message
-    sine_dvr.set_v_func(v_func)
-    e, v = sine_dvr.solve()
-    for i, e_i in enumerate(e[:6]):
-        print('e{}: {}'.format(i, e_i))
-    # sine_dvr.plot_eigen(npts=100, n_plot=n_plot, scale=1.)
-    # sine_dvr.plot_dvr(npts=100)
-    return
-
-
 def test_propagation(x0, L, n):
     sine_dvr = SineDVR(x0, x0 + L, n)
     v_func = cas.PotentialFunction().sho(k=3., x0=-1.)
     sine_dvr.set_v_func(v_func)
-    e, v_list = sine_dvr.solve(n_state=1)
+    _, v_list = sine_dvr.solve(n_state=1)
     v = v_list[0]
-    func = sine_dvr.dvr2cont(v)
-    func_list = [func]
-    ifunc_list = []
+    # func = sine_dvr.dvr2cont(v)
+    # func_list = [func]
+    # ifunc_list = []
     v_func = cas.PotentialFunction().w_well()
     sine_dvr.set_v_func(v_func)
     sine_dvr.solve(n_state=1)
-    p1, p2, p3 = sine_dvr.propagator(tau=0.01, method='Trotter')
+    p1, _, p3 = sine_dvr.propagator(tau=0.01, method='Trotter')
     print(sine_dvr.energy_expection(v))
     os.chdir('./movie')
-    for i in range(1, 10 + 1):
+    for _ in range(1, 10 + 1):
         v = np.dot(p1, np.dot(p3, np.dot(p1, v)))
         print(sine_dvr.energy_expection(v))
         # if i % 1 == 0:
@@ -551,92 +552,11 @@ def test_propagation(x0, L, n):
     return
 
 
-def test_dvr(x0, L, n, v_func):
-    def f(x): return sym.cos(sym.pi * (x - x0) / L)
-
-    def inv_f(y): return x0 + sym.acos(y) * L / sym.pi
-
-    basis = [cas.particle_in_box(i, L, x0)
-             for i in range(1, 1 + n)]
-    dvr = DVR(basis, trans_func_pair=(f, inv_f),
-              cut_off=(x0, x0 + L), num_prec=100)
-    dvr.set_v_func(v_func)
-    e, v = dvr.solve(n_state=5)
-    for i, e_i in enumerate(e):
-        print('e{}: {}'.format(i, e_i))
-    dvr.plot_eigen(x0, x0 + L, npts=100)
-    # dvr.plot_dvr(x0, x0 + L, npts=100)
-    return
-
-
-def test_improper_dvr(x0, L, n, v_func):
-    # basis = [cas.harmonic_oscillator(i)
-    #          for i in range(0, n)]
-    basis = [cas.particle_in_box(i, L, x0)
-             for i in range(1, 1 + n)]
-    dvr = DVR(basis, cut_off=(x0, x0 + L), num_prec=100)
-    dvr.set_v_func(v_func)
-    dvr.method = 'improper'
-    e, v = dvr.solve()
-    for i, e_i in enumerate(e):
-        print('e{}: {}'.format(i, e_i))
-    dvr.plot_eigen(x0, x0 + L, npts=100)
-    dvr.plot_dvr(x0, x0 + L, npts=100)
-    return
-
-
-def test_po_dvr(x0, L, n, v_func, c=0.0, fast=True):
-    vf_list = [v_func] * 2
-    conf_list = [[x0, x0 + L, n]] * 2
-    po_dvr = PO_DVR(conf_list, fast=fast)
-    for i in range(10):
-        c = i * 0.01
-        v_rst = cas.PotentialFunction().linear_corr(i * 0.01)
-        po_dvr.set_v_func(vf_list, v_rst=v_rst)
-        e, v = po_dvr.solve(n_state=6)
-        e_1 = np.sqrt(1 - c)
-        e_2 = np.sqrt(1 + c)
-        l1 = [(n + 0.5) * e_1 for n in range(100)]
-        l2 = [(n + 0.5) * e_2 for n in range(100)]
-        l_ = []
-        for a in l1:
-            for b in l2:
-                l_.append(a + b)
-        ref = np.array(sorted(l_))[:6]
-        err = e - ref
-        print('c: {:.2f}; e: {}'.format(i * 0.01, e))
-        print('Ref: {}'.format(ref))
-        print('Err: {}'.format(err))
-        print
-    return
-
-
 def main():
     import time
-    x0, L, n = (-5., 10., 1000)
+    x0, L, n = -5., 10., 1000
     v_func = cas.PotentialFunction().sho()
     # test_propagation(x0, L, n)
-    print('Sine-DVR:')
-    # test_sine_dvr(x0, L, n, v_func, n_plot=5, message='W-well')
-    # v_func = cas.PotentialFunction().sho(k=3., x0=-1.)
-    t0 = time.time()
-    test_sine_dvr(x0, L, n, v_func, n_plot=5, message='SHO', fast=True)
-    t1 = time.time()
-    test_sine_dvr(x0, L, n, v_func, n_plot=5, message='SHO', fast=False)
-    t2 = time.time()
-    # print('-----------')
-    # print('Diagonalisation-DVR:')
-    # test_dvr(x0, L, n, v_func)
-    # print('-----------')
-    # print('(Improper) Diagonalisation-DVR:')
-    # test_improper_dvr(x0, L, n, v_func)
-    # print('2-D PO-DVR:')
-    # t0 = time.time()
-    # test_po_dvr(x0, L, n, v_func)
-    # t1 = time.time()
-    # test_po_dvr(x0, L, n, v_func, fast=False)
-    # t2 = time.time()
-    print('fast: {}, dense: {}'.format(t1 - t0, t2 - t1))
 
 
 if __name__ == '__main__':

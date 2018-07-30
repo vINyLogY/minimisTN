@@ -20,15 +20,15 @@ x, y, z = sym.symbols('x y z')
 
 class BasisFunction(object):
     def particle_in_box(self, j, L, x0):
-        def _phi(x):
+        def _phi(_x):
             phi = np.where(
-                np.logical_and(x0 < x, x < x0 + L),
-                np.sqrt(2. / L) * np.sin(j * np.pi * (x - x0) / L),
+                np.logical_and(x0 < _x, _x < x0 + L),
+                np.sqrt(2. / L) * np.sin(j * np.pi * (_x - x0) / L),
                 0)
             return phi
         return _phi
 
-    def harmonic_oscillator(n, k=1., m=1., hbar=1.):
+    def harmonic_oscillator(self, n, k=1., m=1., hbar=1.):
         psi = harmonic_oscillator(n, k=k, m=m, hbar=hbar)
         psi = lambdify(psi)
         return psi
