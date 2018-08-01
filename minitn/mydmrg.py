@@ -28,7 +28,7 @@ r"""# A Simple MPS/MPO Program
 2. arXiv:1603.03039v4
 3. https://people.smp.uq.edu.au/IanMcCulloch/mptoolkit/index.php
 """
-
+import logging
 import math
 
 import numpy as np
@@ -227,7 +227,7 @@ def opt_one_site(env_tensor, A):
     # A = np.reshape(V, env_tensor.size)
     # E_squared = np.dot(A, env_tensor.matvec(env_tensor.matvec(A)))
     # E_rms = math.sqrt(E_squared)
-    # print("INFO: sqrt(<E^2>): {}".format(E_rms))
+    # logging.debug("INFO: sqrt(<E^2>): {}".format(E_rms))
 
     return E, V
 
@@ -318,8 +318,9 @@ def dmrg1(mpo, initial_mps, trunc=10, sweeps=8):
             L_list.append(contract_from_left(
                 L_list[-1], mps[i], mpo[i], mps[i]))
 
-            print("Sweep {}, Sites {}, E1 {:16.12f}, E2 {:16.12f}".format(
-                sweep*2, i, E, mat_element(mps, mpo, mps)))
+            logging.debug(
+                "Sweep {}, Sites {}, E1 {:16.12f}, E2 {:16.12f}".format(
+                    sweep*2, i, E, mat_element(mps, mpo, mps)))
 
         for i in range(len(mps)-1, 0, -1):    # left sweep
             R = R_list[-1]
@@ -330,8 +331,9 @@ def dmrg1(mpo, initial_mps, trunc=10, sweeps=8):
             R_list.append(contract_from_right(
                 R_list[-1], mps[i], mpo[i], mps[i]))
 
-            print("Sweep {}, Sites {}, E1 {:16.12f}, E2 {:16.12f}".format(
-                sweep*2 + 1, i, E, mat_element(mps, mpo, mps)))
+            logging.debug(
+                "Sweep {}, Sites {}, E1 {:16.12f}, E2 {:16.12f}".format(
+                    sweep*2 + 1, i, E, mat_element(mps, mpo, mps)))
 
     return mps
 
@@ -453,8 +455,9 @@ def dmrg2(mpo, initial_mps, trunc=10, sweeps=8):
             L_list.append(contract_from_left(
                 L_list[-1], mps[i], mpo[i], mps[i]))
 
-            print("Sweep {}, Sites {}, {}, E1 {:16.12f}, E2 {:16.12f}".format(
-                sweep*2, i, i+1, E, mat_element(mps, mpo, mps)))
+            logging.debug(
+                "Sweep {}, Sites {}, {}, E1 {:16.12f}, E2 {:16.12f}".format(
+                    sweep*2, i, i+1, E, mat_element(mps, mpo, mps)))
 
         for i in range(len(mps)-1, 1, -1):    # left sweep
             R = R_list[-1]
@@ -469,8 +472,9 @@ def dmrg2(mpo, initial_mps, trunc=10, sweeps=8):
             R_list.append(contract_from_right(
                 R_list[-1], mps[i], mpo[i], mps[i]))
 
-            print("Sweep {}, Sites {}, {}, E1 {:16.12f}, E2 {:16.12f}".format(
-                sweep*2+1, i-1, i, E, mat_element(mps, mpo, mps)))
+            logging.debug(
+                "Sweep {}, Sites {}, {}, E1 {:16.12f}, E2 {:16.12f}".format(
+                    sweep*2+1, i-1, i, E, mat_element(mps, mpo, mps)))
 
     return mps
 
@@ -500,28 +504,3 @@ def mat_element(mps1, mpo, mps2):
         for i in range(0, len(mps1)):
             L = contract_from_left(L, mps1[i], None, mps2[i])
         return L[0, 0]
-
-
-def main():
-    r"""
-    Test program for Heisenberg Model.
-    """
-
-    N = 20
-    mpo = heisenberg(N)
-
-    mps = dmrg2(mpo, fm_state(N, anti=1), 10, 2)
-    mps = dmrg1(mpo, mps, 10, 8)
-    energy1 = mat_element(mps, mpo, mps)
-
-    mps = dmrg2(mpo, fm_state(N, anti=1), 10, 10)
-    energy2 = mat_element(mps, mpo, mps)
-
-    print('DMRG1 energy: {}'.format(energy1))
-    print('DMRG2 energy: {}'.format(energy2))
-
-    return
-
-
-if __name__ == '__main__':
-    main()

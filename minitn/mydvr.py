@@ -1,10 +1,10 @@
 #!/usr/bin/env python2
 # coding: utf-8
-r"""# A Simple DVR Program (1-D)
+r"""A Simple DVR Program (n-D)
 
-## Reference
-
-1. http://www.pci.uni-heidelberg.de/tc/usr/mctdh/lit/NumericalMethods.pdf
+References
+----------
+.. [1] http://www.pci.uni-heidelberg.de/tc/usr/mctdh/lit/NumericalMethods.pdf
 """
 
 from __future__ import division
@@ -16,105 +16,148 @@ import sys
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy
-import sympy as sym
-from scipy.fftpack import dst, idst
+from scipy.fftpack import dst
 from scipy.sparse.linalg import LinearOperator, eigsh
 
-import mycas as cas
-
-logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
+import minitn.mycas as cas
 
 
 class DVR(object):
-    """Vector:
-        DVR <--> FBR <--> Cont.
+    r"""1-d discrete variable representation
 
-     ## Args:
-    - fbr_basis: a list of sympy basis (functions).
-    - trans_func_pair: (f, f^{-1}) where f(x) is monotic
-        s. t. Q = <i|f(x)|j> is a tri-diagonal matrix
+    Parameters
+    ----------
+    basis : [a -> a]
+        A list of basis (FBR).
+    grid_points : [float]
+        a list of grid points.
+    t_mat : array_like
+        The matrix representation of kinetic energy in FBR.
+    u_mat : array_like
+        The matrix transform a vector from DVR to FBR.
+    hbar : float, optional
+        Value of :math:`\hbar`; default is ``1.0``.
+    m_e : float, optional
+        Value of :math:`\m_e`; default is ``1.0``.
+
+    Attributes
+    ----------
+    basis
+    grid_points
+    hbar
+    m_e
+    n : int
+        Number of basis/grid points.
+    v_func : float -> float
+        1-ary function of potential energy.
+    energy : [float]
+        List with ``m`` elements.
+    eigenstates : (m, n) ndarray
+        2-d array, ``eigenstates[i]`` corresponds to ``energy[i]``.
+    comment : string
+        Additional string in the file name if plot. Default is the name of
+        class
     """
 
-    def __init__(self, fbr_basis, cut_off=None, trans_func_pair=(None, None),
-                 cas=True, num_prec=None, hbar=1., m_e=1.):
-        self.method = 'Diagonlisation_DVR'
-        self.n = len(fbr_basis)
-        self.basis = fbr_basis
-        self.cut_off = cut_off
-        self.trans_func_pair = trans_func_pair
-        self.cas = cas
-        self.num_prec = num_prec
+    def __init__(self, basis=None, grid_points=None,
+                 t_mat=None, u_mat=None, hbar=1., m_e=1.):
+        """Some args could be ``None`` when initialized, but need to be
+        specified later.
+
+        Parameters
+        ----------
+        basis : [a -> a]
+            A list of basis (FBR).
+        grid_points : [float]
+            a list of grid points.
+        t_mat : (n, n) ndarray
+            The matrix representation of kinetic energy in FBR.
+        u_mat : (n, n) ndarray
+            The matrix transform a vector from DVR to FBR.
+        hbar : float, optional
+            Value of :math:`\hbar`; default is ``1.0``.
+        m_e : float, optional
+            Value of :math:`m_\mathrm{e}`; default is ``1.0``.
+        """
+        self.basis = basis
+        self.grid_points = grid_points
+        self._u_mat = u_mat
+        self._t_mat = t_mat
         self.hbar = hbar
         self.m_e = m_e
-        self._calculate_dvr()
 
-        self._h_mat = None
+        self.n = None if basis is None else len(basis)
         self.v_func = None
         self.energy = None
         self.eigenstates = None
-
-    def _sym_calc_q_mat(self):
-        r"""Calculate grid points and U matrix
-        s. t. Q = U X U^{\dagger},
-        where X_{ij} = x_i \delta_{ij},
-        Q = <i|f(x)|j> is a tri-diagonal matrix
-        """
-        f = self.trans_func_pair[0]
-        if f is None:
-            f = cas.id_op()
-        x = cas.x
-        op = cas.prod_op(f(x))
-        basis = self.basis
-        Q = cas.matrix_repr(
-            op, basis, cut_off=self.cut_off, num_prec=self.num_prec)
-        return Q
-
-    def _sym_calc_grid_points(self, x_i):
-        inv = self.trans_func_pair[-1]
-        if inv is None:
-            inv = cas.id_op()
-        inv = cas.lambdify(inv)
-        return inv(x_i)
-
-    def _calculate_dvr(self):
-        if self.cas:
-            Q = self._sym_calc_q_mat()
-        x_i, self._u_mat = scipy.linalg.eigh(Q)
-        if self.cas:
-            self.grid_points = self._sym_calc_grid_points(x_i)
-        return self.grid_points, self._u_mat
+        self._h_mat = None
+        self.comment = type(self).__name__
+        return
 
     def set_v_func(self, v_func):
+        """Set the potential energy function.
+
+        Parameters
+        ----------
+        v_func : float -> float
+        """
         self.v_func = v_func
         self._h_mat = None
         return
 
     def v_mat(self):
-        """Return the potential matrix with the given potential.
+        """Return the potential energy matrix with the given potential
+        in DVR.
+
+        Returns
+        -------
+        (n, n) np.ndarray
+            A 2-d diagonal matrix.
         """
         v = self.v_func(self.grid_points)
         v_matrix = np.diag(v)
         return v_matrix
 
     def t_mat(self):
-        """Return the kinetic energy matrix.
+        """Return the kinetic energy matrix in DVR.
+
+        Returns
+        -------
+        (n, n) np.ndarray
+            A 2-d matrix.
         """
-        factor = - self.hbar ** 2 / (2 * self.m_e)
-        if self.cas:
-            op = cas.diff(2)
-            t_matrix = cas.matrix_repr(
-                op, self.basis, cut_off=self.cut_off, num_prec=self.num_prec)
-        t_matrix = factor * self.fbr2dvr_mat(t_matrix)
-        return t_matrix
+        return self._t_mat
 
     def h_mat(self):
-        """Return the potential matrix with the given potential.
+        """Return the Hamiltonian energy matrix in DVR.
+
+        Returns
+        -------
+        (n, n) np.ndarray
+            A 2-d matrix.
         """
         if self._h_mat is not None:
             return self._h_mat
         return self.t_mat() + self.v_mat()
 
     def solve(self, n_state=None):
+        r"""Solve the TISE with the potential energy given.
+
+        Parameters
+        ----------
+        n_state : int, optional
+            Number of states to be calculated, sorted by energy from low to
+            high.
+
+        Returns
+        -------
+        energy : [float]
+        eigenstates : np.ndarray
+
+        See Also
+        ________
+        DVR : Definition of all attributes.
+        """
         if n_state is None:
             n_state = self.n - 1
         self._h_mat = self.h_mat()
@@ -125,47 +168,97 @@ class DVR(object):
         return self.energy, self.eigenstates
 
     def dvr2fbr_mat(self, mat):
-        """Transform a matrix from the discrete variable representation
-        to the finite basis representation.
+        """Transform a matrix from DVR to FBR.
+
+        Parameters
+        ----------
+        mat : (n, n) ndarray
+
+        Returns
+        -------
+        (n, n) ndarray
         """
         return np.dot(self._u_mat, np.dot(mat, np.transpose(self._u_mat)))
 
     def dvr2fbr_vec(self, vec):
-        """Transform a vector from the discrete variable representation
-        to the finite basis representation.
+        """Transform a vector from DVR to FBR.
+
+        Parameters
+        ----------
+        mat : (n,) ndarray
+
+        Returns
+        -------
+        (n,) ndarray
         """
         return np.dot(self._u_mat, vec)
 
     def dvr2cont(self, vec):
-        """Transform a vector from the discrete variable representation.
-        to the spatial function.
+        """Transform a vector from DVR to the spatial function.
+
+        Parameters
+        ----------
+        mat : (n,) ndarray
+
+        Returns
+        -------
+        float -> float
         """
         vec = self.dvr2fbr_vec(vec)
         psi = self.fbr2cont(vec)
         return psi
 
     def dvr_func(self, alpha):
-        """Return alpha-th DVR basis function.
+        """Return ``alpha``-th DVR basis function.
+
+        Parameters
+        ----------
+        alpha : int
+
+        Returns
+        -------
+            ``alpha``-th FBR basis function.
         """
         func = self.fbr2cont(self._u_mat[:, alpha])
         return func
 
     def fbr2dvr_mat(self, mat):
-        """Transform a matrix from the finite basis representation
-        to the discrete variable representation.
+        """Transform a matrix from FBR to DVR.
+
+        Parameters
+        ----------
+        mat : (n, n) ndarray
+
+        Returns
+        -------
+        (n, n) ndarray
         """
         return np.dot(np.transpose(self._u_mat), np.dot(mat, self._u_mat))
 
     def fbr2dvr_vec(self, vec):
-        """Transform a vector from the finite basis representation
-        to the discrete variable representation.
+        """Transform a vector from FBR to DVR.
+
+        Parameters
+        ----------
+        mat : (n,) ndarray
+
+        Returns
+        -------
+        (n,) ndarray
         """
         vec = np.reshape(vec, -1)
         return np.dot(np.transpose(self._u_mat), vec)
 
     def fbr2cont(self, vec):
-        """Transform a vector from the finite basis representation
-        to the spatial function.
+        """Transform a vector from FBR to the spatial function.
+
+        Parameters
+        ----------
+        mat : (n,) ndarray
+
+        Returns
+        -------
+        float -> float
         """
         def _psi(x):
             psi = 0.0
@@ -176,17 +269,29 @@ class DVR(object):
         return _psi
 
     def fbr_func(self, i):
-        """Return i-th FBR basis function.
+        """Return ``i``-th FBR basis function.
+
+        Parameters
+        ----------
+        i : int
+
+        Returns
+        -------
+            ``i``-th FBR basis function.
         """
-        if self.cas:
-            func = self.basis[i]
-            func = cas.lambdify(func)
-        return func
+        return self.basis[i]
 
     def energy_expection(self, vec):
-        """
-        ## Args:
-        vec: in DVR
+        """Calculate the energy expection.
+
+        Parameters
+        ----------
+        vec : (n,) ndarray
+            In DVR.
+
+        Returns
+        -------
+        energy : float
         """
         dim = len(vec)
         vec = np.reshape(vec, (dim, 1))
@@ -195,12 +300,23 @@ class DVR(object):
         return e[0, 0]
 
     def propagator(self, tau=0.1, method='Trotter'):
-        r"""## Return
-        - e^{-iV\tau/2}
-        - e^{-iV\tau}
-        - e^{-iT\tau}
-        TODO: use non-dense method.
+        r"""Construct the propagator
+
+        Parameters
+        ----------
+        tau : float
+            Time interval at each step.
+
+        Returns
+        -------
+        p1 : (n, n) ndarray
+            :math:`e^{-iV\tau/2}`
+        p2 : (n, n) ndarray
+            :math:`e^{-iV\tau}`
+        p3 : (n, n) ndarray
+            :math:`e^{-iT\tau}`
         """
+        # TODO: use non-dense method.
         hbar = self.hbar
         if 'Trotter' in method:
             diag, v = scipy.linalg.eigh(self.t_mat())
@@ -233,8 +349,7 @@ class DVR(object):
             y_max = max(y_max, e + scale * max(phi))
         plt.xlim(x_min, x_max)
         plt.ylim(y_min, 1.05 * y_max)
-        plt.savefig('eigenstates-{}.png'.format(
-            self.method))
+        plt.savefig('eigenstates-{}.png'.format(self.comment))
         plt.close(fig)
         return
 
@@ -252,8 +367,7 @@ class DVR(object):
             plt.plot(x, chi)
         plt.xlim(x_min, x_max)
         plt.ylim(y_min * 1.05, y_max * 1.05)
-        plt.savefig('functions-{}.png'.format(
-            self.method))
+        plt.savefig('functions-{}.png'.format(self.comment))
         plt.close(fig)
         return
 
@@ -279,10 +393,69 @@ class DVR(object):
         plt.plot([x_min, x_max], [0., 0.], 'k-')
         plt.xlim(x_min, x_max)
         plt.ylim(y_min * 1.05, y_max * 1.05)
-        plt.savefig('dvr_functions-{}.png'.format(
-            self.method))
+        plt.savefig('dvr_functions-{}.png'.format(self.comment))
         plt.close(fig)
         return
+
+
+class CasDVR(DVR):
+    r"""
+    trans_func_pair: (f, f^{-1}) where f(x) is monotic
+        s. t. Q = <i|f(x)|j> is a tri-diagonal matrix
+    """
+    def __init__(self, basis, cut_off=None, trans_func_pair=(None, None),
+                 num_prec=None, hbar=1., m_e=1.):
+        super(CasDVR, self).__init__(basis=basis, hbar=hbar, m_e=m_e)
+        self.cut_off = cut_off
+        self.trans_func_pair = trans_func_pair
+        self.num_prec = num_prec
+        self._calculate_dvr()
+
+    def _sym_calc_q_mat(self):
+        r"""Calculate grid points and U matrix
+        s. t. Q = U X U^{\dagger},
+        where X_{ij} = x_i \delta_{ij},
+        Q = <i|f(x)|j> is a tri-diagonal matrix
+        """
+        f = self.trans_func_pair[0]
+        if f is None:
+            f = cas.id_op()
+        x = cas.x
+        op = cas.prod_op(f(x))
+        basis = self.basis
+        Q = cas.matrix_repr(
+            op, basis, cut_off=self.cut_off, num_prec=self.num_prec)
+        return Q
+
+    def _sym_calc_grid_points(self, x_i):
+        inv = self.trans_func_pair[-1]
+        if inv is None:
+            inv = cas.id_op()
+        inv = cas.lambdify(inv)
+        return inv(x_i)
+
+    def _calculate_dvr(self):
+        Q = self._sym_calc_q_mat()
+        x_i, self._u_mat = scipy.linalg.eigh(Q)
+        self.grid_points = self._sym_calc_grid_points(x_i)
+        return self.grid_points, self._u_mat
+
+    def t_mat(self):
+        """Return the kinetic energy matrix.
+        """
+        factor = - self.hbar ** 2 / (2 * self.m_e)
+        op = cas.diff(2)
+        t_matrix = cas.matrix_repr(
+            op, self.basis, cut_off=self.cut_off, num_prec=self.num_prec)
+        t_matrix = factor * self.fbr2dvr_mat(t_matrix)
+        return t_matrix
+
+    def fbr_func(self, i):
+        """Return i-th FBR basis function.
+        """
+        func = self.basis[i]
+        func = cas.lambdify(func)
+        return func
 
 
 class SineDVR(DVR):
@@ -290,15 +463,12 @@ class SineDVR(DVR):
         r"""From a to b.
         C. f. reference [1] 2.3.5, p30.
         """
-        self.method = 'Sine-DVR'
+        super(SineDVR, self).__init__(hbar=hbar, m_e=m_e)
         self.a = lower_bound
         self.b = upper_bound
         self.n = n_dvr
-        self.hbar = hbar
-        self.m_e = m_e
         self.length = float(self.b - self.a)
         self._calculate_dvr()
-        self._h_mat = None
 
     def _calculate_dvr(self):
         # calculate grid points
@@ -308,8 +478,9 @@ class SineDVR(DVR):
         # calculate U matrix
         j = np.arange(1, self.n + 1)[:, None]
         a = np.arange(1, self.n + 1)[None, :]
-        self._u_mat = np.sqrt(2 / (self.n + 1)) \
-            * np.sin(j * a * np.pi / (self.n + 1))
+        self._u_mat = (
+            np.sqrt(2 / (self.n + 1)) * np.sin(j * a * np.pi / (self.n + 1))
+        )
         return self.grid_points, self._u_mat
 
     def t_mat(self):
@@ -330,41 +501,23 @@ class SineDVR(DVR):
 
     def plot_eigen(self, x_min=None, x_max=None,
                    npts=None, n_plot=None, scale=2.):
-        if x_min is None:
-            min_ = self.a
-        else:
-            min_ = x_min
-        if x_max is None:
-            max_ = self.b
-        else:
-            max_ = x_max
+        min_ = self.a if x_min is None else x_min
+        max_ = self.b if x_max is None else x_max
         super(SineDVR, self).plot_eigen(
             min_, max_, npts=npts, n_plot=n_plot, scale=scale)
         return
 
     def plot_func(self, func_list,
                   x_min=None, x_max=None, y_min=0., y_max=0., npts=None):
-        if x_min is None:
-            min_ = self.a
-        else:
-            min_ = x_min
-        if x_max is None:
-            max_ = self.b
-        else:
-            max_ = x_max
+        min_ = self.a if x_min is None else x_min
+        max_ = self.b if x_max is None else x_max
         super(SineDVR, self).plot_func(
             func_list, min_, max_, y_min=y_min, y_max=y_max, npts=npts)
         return
 
     def plot_dvr(self, x_min=None, x_max=None, npts=None, indices=None):
-        if x_min is None:
-            min_ = self.a
-        else:
-            min_ = x_min
-        if x_max is None:
-            max_ = self.b
-        else:
-            max_ = x_max
+        min_ = self.a if x_min is None else x_min
+        max_ = self.b if x_max is None else x_max
         super(SineDVR, self).plot_dvr(
             min_, max_, npts=npts, indices=indices)
         return
@@ -372,6 +525,7 @@ class SineDVR(DVR):
 
 class FastSineDVR(SineDVR):
     def __init__(self, lower_bound, upper_bound, n_dvr, hbar=1., m_e=1.):
+        """Same as SineDVR"""
         super(FastSineDVR, self).__init__(
             lower_bound, upper_bound, n_dvr, hbar=hbar, m_e=m_e)
 
@@ -385,19 +539,12 @@ class FastSineDVR(SineDVR):
                 n = len(v_diag)
                 self.v = v_diag
                 self.t = t_diag / (2. * (n + 1.))
-                self.dtype = np.dtype('d')
-                self.shape = [n] * 2
+                super(_Hamiltonian, self).__init__('d', (n, n))
 
             def _matvec(self, vec):
                 vec1 = self.v * vec
                 vec2 = dst(self.t * dst(vec, type=1), type=1)
                 return vec1 + vec2
-
-            def _matmat(self, mat):
-                mat = mat.transpose()
-                tmp = np.array([self._matvec(vec) for vec in mat])
-                tmp = mat.transpose()
-                return tmp
 
             def _rmatvec(self, vec): return self._matvec(vec)
 
@@ -416,19 +563,18 @@ class PO_DVR(object):
         self.rank = len(conf_list)
         self.n_list = []
         self.dvr_list = []
+        DVR_1d = FastSineDVR if fast else SineDVR
         for i in range(self.rank):
             lower_bound, upper_bound, n_dvr = conf_list[i]
             self.n_list.append(n_dvr)
-            if fast:
-                sp_dvr = FastSineDVR(
-                    lower_bound, upper_bound, n_dvr, hbar=hbar, m_e=m_e)
-            else:
-                sp_dvr = SineDVR(
-                    lower_bound, upper_bound, n_dvr, hbar=hbar, m_e=m_e)
+            sp_dvr = DVR_1d(
+                    lower_bound, upper_bound, n_dvr, hbar=hbar, m_e=m_e
+            )
             self.dvr_list.append(sp_dvr)
         self.dim = np.prod(self.n_list)
         self.grid_points_list = np.array(
-            [dvr_i.grid_points for dvr_i in self.dvr_list])
+            [dvr_i.grid_points for dvr_i in self.dvr_list]
+        )
 
         self.v_rst = None
         self._diag_v_rst = None
@@ -468,9 +614,9 @@ class PO_DVR(object):
                 """
                 self.h_list = h_list
                 self.v_rst = v_rst
-                self.dtype = np.dtype('d')
                 self.io_sizes = [h_i.shape[0] for h_i in h_list]
-                self.shape = [np.prod(self.io_sizes)] * 2
+                shape = [np.prod(self.io_sizes)] * 2
+                super(_Hamiltonian, self).__init__('d', shape)
 
             def _matvec(self, vec):
                 v = np.reshape(vec, self.io_sizes)
@@ -520,44 +666,3 @@ class PO_DVR(object):
             sub.append(N // base)
             N = N % base
         return sub
-
-
-# Some test functions
-def test_propagation(x0, L, n):
-    sine_dvr = SineDVR(x0, x0 + L, n)
-    v_func = cas.PotentialFunction().sho(k=3., x0=-1.)
-    sine_dvr.set_v_func(v_func)
-    _, v_list = sine_dvr.solve(n_state=1)
-    v = v_list[0]
-    # func = sine_dvr.dvr2cont(v)
-    # func_list = [func]
-    # ifunc_list = []
-    v_func = cas.PotentialFunction().w_well()
-    sine_dvr.set_v_func(v_func)
-    sine_dvr.solve(n_state=1)
-    p1, _, p3 = sine_dvr.propagator(tau=0.01, method='Trotter')
-    print(sine_dvr.energy_expection(v))
-    os.chdir('./movie')
-    for _ in range(1, 10 + 1):
-        v = np.dot(p1, np.dot(p3, np.dot(p1, v)))
-        print(sine_dvr.energy_expection(v))
-        # if i % 1 == 0:
-        #     func = sine_dvr.dvr2cont(np.real(v))
-        #     ifunc = sine_dvr.dvr2cont(np.imag(v))
-        #     func_list.append(func)
-        #     ifunc_list.append(ifunc)
-        #     sine_dvr.method = 'fig-{:.2f}'.format(i * 0.01)
-        #     sine_dvr.plot_func(
-        #       [func, ifunc], y_min=-1.5, y_max=1.5, npts=200)
-    return
-
-
-def main():
-    import time
-    x0, L, n = -5., 10., 1000
-    v_func = cas.PotentialFunction().sho()
-    # test_propagation(x0, L, n)
-
-
-if __name__ == '__main__':
-    main()

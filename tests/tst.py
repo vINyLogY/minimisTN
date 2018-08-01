@@ -12,7 +12,6 @@ import scipy as sp
 import sympy as sym
 from scipy.sparse.linalg import LinearOperator
 
-import _context
 import minitn
 
 

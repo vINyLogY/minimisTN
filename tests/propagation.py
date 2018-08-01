@@ -8,7 +8,6 @@ import sys
 
 import numpy as np
 
-import _context
 from minitn.mydvr import SineDVR
 from minitn.mycas import PotentialFunction
 
@@ -26,10 +25,10 @@ def test_propagation(x0, L, n):
     sine_dvr.set_v_func(v_func)
     sine_dvr.solve(n_state=1)
     p1, _, p3 = sine_dvr.propagator(tau=0.01, method='Trotter')
-    print(sine_dvr.energy_expection(v))
+    logging.info(sine_dvr.energy_expection(v))
     for _ in range(1, 10 + 1):
         v = np.dot(p1, np.dot(p3, np.dot(p1, v)))
-        print(sine_dvr.energy_expection(v))
+        logging.info(sine_dvr.energy_expection(v))
         # if i % 1 == 0:
         #     func = sine_dvr.dvr2cont(np.real(v))
         #     ifunc = sine_dvr.dvr2cont(np.imag(v))

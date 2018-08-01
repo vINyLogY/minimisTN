@@ -3,14 +3,12 @@
 from __future__ import division
 
 import logging
-import sys
 
 import numpy as np
 import sympy as sym
 
-import _context
-from minitn.mydvr import DVR
 from minitn.mycas import PotentialFunction, particle_in_box
+from minitn.mydvr import CasDVR
 
 
 def test_dvr(x0, L, n, v_func):
@@ -20,12 +18,14 @@ def test_dvr(x0, L, n, v_func):
 
     basis = [particle_in_box(i, L, x0)
              for i in range(1, 1 + n)]
-    dvr = DVR(basis, trans_func_pair=(f, inv_f),
-              cut_off=(x0, x0 + L), num_prec=100)
+    dvr = CasDVR(
+        basis, trans_func_pair=(f, inv_f), cut_off=(x0, x0 + L),
+        num_prec=100
+    )
     dvr.set_v_func(v_func)
     e, _ = dvr.solve(n_state=5)
     for i, e_i in enumerate(e):
-        print('e{}: {}'.format(i, e_i))
+        logging.info('e{}: {}'.format(i, e_i))
     dvr.plot_eigen(x0, x0 + L, npts=100)
     # dvr.plot_dvr(x0, x0 + L, npts=100)
     return
@@ -36,12 +36,12 @@ def test_improper_dvr(x0, L, n, v_func):
     #          for i in range(0, n)]
     basis = [particle_in_box(i, L, x0)
              for i in range(1, 1 + n)]
-    dvr = DVR(basis, cut_off=(x0, x0 + L), num_prec=100)
+    dvr = CasDVR(basis, cut_off=(x0, x0 + L), num_prec=100)
+    dvr.comment += '-improper'
     dvr.set_v_func(v_func)
-    dvr.method = 'improper'
     e, _ = dvr.solve()
     for i, e_i in enumerate(e):
-        print('e{}: {}'.format(i, e_i))
+        logging.info('e{}: {}'.format(i, e_i))
     dvr.plot_eigen(x0, x0 + L, npts=100)
     dvr.plot_dvr(x0, x0 + L, npts=100)
     return
@@ -56,7 +56,7 @@ def main():
     t1 = time.time()
     test_improper_dvr(x0, L, n, v_func)
     t2 = time.time()
-    print('Proper: {}; Improper: {}'.format(t1 - t0, t2 - t1))
+    logging.info('Proper: {}; Improper: {}'.format(t1 - t0, t2 - t1))
 
 
 if __name__ == '__main__':
