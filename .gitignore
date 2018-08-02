@@ -2,6 +2,8 @@
 .*
 !/.gitignore
 tst.*
+.txt
+!/requirements.txt
 
 # Optimized
 *.py[cod]

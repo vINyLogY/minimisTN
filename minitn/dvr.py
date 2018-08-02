@@ -18,6 +18,7 @@ from scipy import fftpack
 from scipy.sparse.linalg import LinearOperator, eigsh
 
 from minitn.lib import numerical, symbolic
+from minitn.lib.numerical import DavidsonAlgorithm
 
 
 class DVR(object):
@@ -643,15 +644,19 @@ class PO_DVR(object):
         if direct:
             return _Hamiltonian(h_list, self._diag_v_rst)
 
-    def solve(self, n_state=1):
+    def solve(self, n_state=1, davidson=True):
         v = 1.
         for i in range(self.rank):
             _, v_i = self.dvr_list[i].solve(n_state=1)
             v = np.tensordot(v, v_i[0], axes=0)
         v = np.reshape(v, -1)
         h_op = self.h_mat()
-        self.energy, v = eigsh(h_op, k=n_state, which='SA', v0=v)
-        self.eigenstates = np.transpose(v)
+        if davidson:
+            solver = DavidsonAlgorithm(h_op.dot, [v], n_vals=n_state)
+            self.energy, self.eigenstates = solver.kernel()
+        else:
+            self.energy, v = eigsh(h_op, k=n_state, which='SA', v0=v)
+            self.eigenstates = np.transpose(v)
         return self.energy, self.eigenstates
 
     def subindex(self, N):
