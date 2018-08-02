@@ -2,7 +2,7 @@
 .*
 !/.gitignore
 tst.*
-.txt
+*.txt
 !/requirements.txt
 
 # Optimized
@@ -18,7 +18,6 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
 lib64/
 parts/
 sdist/
