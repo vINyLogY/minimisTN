@@ -5,8 +5,8 @@ from __future__ import division
 import logging
 import sys
 
-from minitn.mydvr import FastSineDVR, SineDVR
-from minitn.mycas import PotentialFunction
+from minitn.dvr import FastSineDVR, SineDVR
+from minitn.lib.numerical import PotentialFunction
 
 
 def test_sine_dvr(x0, L, n, v_func, n_plot=None, message=None, fast=False):
@@ -28,7 +28,7 @@ def test_sine_dvr(x0, L, n, v_func, n_plot=None, message=None, fast=False):
 def main():
     import time
     x0, L, n = -5., 10., 400
-    v_func = PotentialFunction().sho()
+    v_func = PotentialFunction.sho()
     t0 = time.time()
     test_sine_dvr(x0, L, n, v_func, n_plot=5, fast=True)
     t1 = time.time()

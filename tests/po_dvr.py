@@ -7,8 +7,8 @@ import sys
 
 import numpy as np
 
-from minitn.mydvr import PO_DVR
-from minitn.mycas import PotentialFunction
+from minitn.dvr import PO_DVR
+from minitn.lib.numerical import PotentialFunction
 
 
 def test_po_dvr(x0, L, n, v_func, fast=True):
@@ -18,7 +18,7 @@ def test_po_dvr(x0, L, n, v_func, fast=True):
     po_dvr = PO_DVR(conf_list, fast=fast)
     for i in range(10):
         c = i * 0.01
-        v_rst = PotentialFunction().linear_corr(i * 0.01)
+        v_rst = PotentialFunction.linear_corr(i * 0.01)
         po_dvr.set_v_func(vf_list, v_rst=v_rst)
         e, _ = po_dvr.solve(n_state=6)
         logging.info('c: {:.2f}; e: {}'.format(i * 0.01, e))
@@ -45,7 +45,7 @@ def ref(n_state):
 def main():
     import time
     x0, L, n = -5., 10., 40
-    v_func = PotentialFunction().sho()
+    v_func = PotentialFunction.sho()
     t0 = time.time()
     test_po_dvr(x0, L, n, v_func, fast=True)
     t1 = time.time()

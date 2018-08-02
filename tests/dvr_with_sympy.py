@@ -7,8 +7,9 @@ import logging
 import numpy as np
 import sympy as sym
 
-from minitn.mycas import PotentialFunction, particle_in_box
-from minitn.mydvr import CasDVR
+from minitn.lib.numerical import PotentialFunction
+from minitn.lib.symbolic import BasisFunction
+from minitn.dvr import CasDVR
 
 
 def test_dvr(x0, L, n, v_func):
@@ -16,7 +17,7 @@ def test_dvr(x0, L, n, v_func):
 
     def inv_f(y): return x0 + sym.acos(y) * L / sym.pi
 
-    basis = [particle_in_box(i, L, x0)
+    basis = [BasisFunction.particle_in_box(i, L, x0)
              for i in range(1, 1 + n)]
     dvr = CasDVR(
         basis, trans_func_pair=(f, inv_f), cut_off=(x0, x0 + L),
@@ -34,7 +35,7 @@ def test_dvr(x0, L, n, v_func):
 def test_improper_dvr(x0, L, n, v_func):
     # basis = [cas.harmonic_oscillator(i)
     #          for i in range(0, n)]
-    basis = [particle_in_box(i, L, x0)
+    basis = [BasisFunction.particle_in_box(i, L, x0)
              for i in range(1, 1 + n)]
     dvr = CasDVR(basis, cut_off=(x0, x0 + L), num_prec=100)
     dvr.comment += '-improper'

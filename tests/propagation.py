@@ -8,8 +8,8 @@ import sys
 
 import numpy as np
 
-from minitn.mydvr import SineDVR
-from minitn.mycas import PotentialFunction
+from minitn.dvr import SineDVR
+from minitn.lib.numerical import PotentialFunction
 
 
 def test_propagation(x0, L, n):

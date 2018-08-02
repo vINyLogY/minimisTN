@@ -2,7 +2,7 @@
 # coding: utf-8
 import logging
 
-from minitn.mydmrg import dmrg1, dmrg2, heisenberg, mat_element, fm_state
+from minitn.dmrg import dmrg1, dmrg2, heisenberg, mat_element, fm_state
 
 
 def main():

@@ -10,16 +10,14 @@ References
 from __future__ import division
 
 import logging
-import os
-import sys
 
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy
-from scipy.fftpack import dst
+from scipy import fftpack
 from scipy.sparse.linalg import LinearOperator, eigsh
 
-import minitn.mycas as cas
+from minitn.lib import numerical, symbolic
 
 
 class DVR(object):
@@ -419,19 +417,18 @@ class CasDVR(DVR):
         """
         f = self.trans_func_pair[0]
         if f is None:
-            f = cas.id_op()
-        x = cas.x
-        op = cas.prod_op(f(x))
-        basis = self.basis
-        Q = cas.matrix_repr(
-            op, basis, cut_off=self.cut_off, num_prec=self.num_prec)
+            f = symbolic.id_op()
+        x = symbolic.x
+        op = symbolic.prod_op(f(x))
+        Q = symbolic.matrix_repr(
+            op, self.basis, cut_off=self.cut_off, num_prec=self.num_prec)
         return Q
 
     def _sym_calc_grid_points(self, x_i):
         inv = self.trans_func_pair[-1]
         if inv is None:
-            inv = cas.id_op()
-        inv = cas.lambdify(inv)
+            inv = symbolic.id_op()
+        inv = symbolic.lambdify(inv)
         return inv(x_i)
 
     def _calculate_dvr(self):
@@ -444,8 +441,8 @@ class CasDVR(DVR):
         """Return the kinetic energy matrix.
         """
         factor = - self.hbar ** 2 / (2 * self.m_e)
-        op = cas.diff(2)
-        t_matrix = cas.matrix_repr(
+        op = symbolic.diff(2)
+        t_matrix = symbolic.matrix_repr(
             op, self.basis, cut_off=self.cut_off, num_prec=self.num_prec)
         t_matrix = factor * self.fbr2dvr_mat(t_matrix)
         return t_matrix
@@ -454,7 +451,7 @@ class CasDVR(DVR):
         """Return i-th FBR basis function.
         """
         func = self.basis[i]
-        func = cas.lambdify(func)
+        func = symbolic.lambdify(func)
         return func
 
 
@@ -495,8 +492,9 @@ class SineDVR(DVR):
     def fbr_func(self, i):
         """Return i-th FBR basis function.
         """
-        bf = cas.BasisFunction()
-        func = bf.particle_in_box(i+1, self.length, self.a)
+        func = numerical.BasisFunction.particle_in_box(
+            i + 1, self.length, self.a
+        )
         return func
 
     def plot_eigen(self, x_min=None, x_max=None,
@@ -543,7 +541,7 @@ class FastSineDVR(SineDVR):
 
             def _matvec(self, vec):
                 vec1 = self.v * vec
-                vec2 = dst(self.t * dst(vec, type=1), type=1)
+                vec2 = fftpack.dst(self.t * fftpack.dst(vec, type=1), type=1)
                 return vec1 + vec2
 
             def _rmatvec(self, vec): return self._matvec(vec)
@@ -629,7 +627,7 @@ class PO_DVR(object):
                         [self.io_sizes[i]]
                     )
                     v_i = np.reshape(v_i, (-1, self.io_sizes[i]))
-                    tmp = np.array([h_i.dot(v_) for v_ in v_i])
+                    tmp = np.array(map(h_i.dot, v_i))
                     tmp = np.reshape(tmp, size_i)
                     ans += np.swapaxes(tmp, -1, i)
                 ans = np.reshape(ans, -1)
