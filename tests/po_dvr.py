@@ -18,18 +18,18 @@ def test_po_dvr(x0, L, n, v_func, fast=True, davidson=False):
     vf_list = [v_func] * 2
     conf_list = [[x0, x0 + L, n]] * 2
     po_dvr = PO_DVR(conf_list, fast=fast)
-    for i in range(10):
+    for i in range(3):
         c = i * 0.01
         v_rst = PotentialFunction.linear_corr(i * 0.01)
         po_dvr.set_v_func(vf_list, v_rst=v_rst)
-        e, _ = po_dvr.solve(n_state=3, davidson=davidson)
+        e, _ = po_dvr.solve(n_state=6, davidson=davidson)
         logging.info('c: {:.2f}; e: {}'.format(i * 0.01, e))
     return
 
 
-def ref(n_state):
+def ref(c, n_state):
     logging.info('Reference')
-    for i in range(10):
+    for i in range(c):
         c = i * 0.01
         e_1 = np.sqrt(1 - c)
         e_2 = np.sqrt(1 + c)
@@ -52,11 +52,11 @@ def main():
     t0 = time.time()
     test_po_dvr(x0, L, n, v_func, fast=False, davidson=True)
     t1 = time.time()
-    test_po_dvr(x0, L, n, v_func, fast=False)
+    test_po_dvr(x0, L, n, v_func, fast=False, davidson=False)
     t2 = time.time()
     logging.info('fast: {}, dense: {}'.format(t1 - t0, t2 - t1))
     if __debug__:
-        ref(6)
+        ref(3, 6)
 
 
 if __name__ == '__main__':

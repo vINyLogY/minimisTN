@@ -95,12 +95,11 @@ class DavidsonAlgorithm(object):
     init_vecs : [(N,) ndarray]
         list containing k initial vectors
     n_vals : int
-        Number of eigenvalues to be calculate (sorted from small to large,
-        n_vals <= k).
+        Number of eigenvalues to be calculate (sorted from small to large).
     """
-    tol = 1.e-8
-    max_cycle = 50
-    max_space = 12
+    tol = 1.e-12
+    max_cycle = 99
+    max_space = 10
     lin_dep_lim = 1.e-14
 
     @classmethod
@@ -129,7 +128,9 @@ class DavidsonAlgorithm(object):
         self._trial_vecs = list(init_vecs)
         self._search_space = []
         self._column_space = []
-        self._submatrix = np.zeros([self.max_space] * 2)
+        self._max_space = max(len(self._trial_vecs),
+                              self.max_space + 3 * n_vals)
+        self._submatrix = np.zeros([self._max_space] * 2, dtype='d')
 
         self._last_ritz_vals = None
         self._ritz_vals = None
@@ -156,30 +157,45 @@ class DavidsonAlgorithm(object):
             self._calc_ritz_pairs()
             norms = self._calc_residual_norms()
 
-            if self._last_ritz_vals is not None:
-                n = min(len(self._last_ritz_vals), len(self._ritz_vals))
-                diff_ritz_vals = np.abs(
-                    self._last_ritz_vals[:n] - self._ritz_vals[:n]
-                )
-                if (max(norms) ** 2 < self.tol and
-                        max(diff_ritz_vals) < self.tol):
-                    break
+            if self._convergence():
+                break
 
-            self._last_ritz_vals = self._ritz_vals
-            self._calc_trial_vecs()
-            next_space = len(self._trial_vecs) + len(self._search_space)
-            if next_space > self.max_space:
+            next_space = len(self._ritz_vals) + len(self._search_space)
+            ritz_vals = self._ritz_vals
+            if next_space > self._max_space:
                 logging.debug('Search space too large, restart.')
+                logging.debug('ritz vals: {}'.format(self._ritz_vals))
                 self.__init__(
-                    matvec=self._matvec, init_vecs=self._trial_vecs,
+                    matvec=self._matvec, init_vecs=self._ritz_vecs,
                     n_vals=self._n_vals
                 )
+                self._ritz_vals = ritz_vals
+            else:
+                self._calc_trial_vecs()
 
-        if cycle + 1 >= self.max_cycle:
-            logging.warning('Not converged!')
+            self._last_ritz_vals = ritz_vals
+
         self.eigvals = self._ritz_vals
         self.eigvecs = self._ritz_vecs
         return self.eigvals, self.eigvecs
+
+    def _convergence(self):
+        if (
+            self._last_ritz_vals is None or
+            len(self._last_ritz_vals) != len(self._ritz_vals)
+        ):
+            return False
+
+        diff_ritz_vals = np.abs(self._last_ritz_vals - self._ritz_vals)
+        count = 0
+        for i, norm in enumerate(self._residual_norms):
+            if norm ** 2 < self.tol and diff_ritz_vals[i] < self.tol:
+                self._residuals[i] = None
+                count += 1
+        if count == len(self._residuals):
+            return True
+        else:
+            return False
 
     def _orthonormalize(self, use_svd=True):
         if use_svd and self._trial_vecs:
@@ -243,23 +259,15 @@ class DavidsonAlgorithm(object):
 
     def _calc_trial_vecs(self):
         if self._precondition is None:
-            dim = len(self._search_space[0])
-            self.diag = np.zeros(dim)
-            for i in range(dim):
-                _v = np.zeros(dim)
-                _v[i] = 1.
-                self.diag[i] = self._matvec(_v)[i]
-
-            def _precondition(residual, ritz_val, ritz_vec, noise=1.e-4):
-                return residual / (ritz_val - self.diag + noise)
-
-            self._precondition = _precondition
+            self._precondition = self.davidson_precondition(
+                len(self._search_space[0]), self._matvec
+            )
 
         self._trial_vecs = []
         precondition = self._precondition
         for i, norm in enumerate(self._residual_norms):
             # remove linear dependency in self._residuals
-            if norm ** 2 > self.lin_dep_lim:
+            if norm ** 2 > self.lin_dep_lim and self._residuals[i] is not None:
                 vec = precondition(
                     self._residuals[i], self._ritz_vals[0], self._ritz_vecs[i]
                 )
@@ -270,6 +278,28 @@ class DavidsonAlgorithm(object):
                 # remove linear dependency between trial_vecs and
                 # self._search_space
                 if norm_ ** 2 > self.lin_dep_lim:
-                    vec *= 1. / norm
+                    vec *= 1. / norm_
                     self._trial_vecs.append(vec)
         return self._trial_vecs
+
+    @classmethod
+    def davidson_precondition(cls, dim, matvec, noise=None):
+        """Stadard precondition in Davidson algorithm
+
+        Parameters
+        ----------
+        dim : int
+        matvec : (dim,) ndarray -> (dim,) ndarray
+        noise: float, optional
+        """
+        if noise is None:
+            noise = math.sqrt(cls.tol)
+        diag = np.zeros(dim)
+        for i in range(dim):
+            _v = np.zeros(dim)
+            _v[i] = 1.
+            diag[i] = matvec(_v)[i]
+
+        def _precondition(residual, ritz_val, ritz_vec, _diag=diag):
+            return residual / (ritz_val - _diag + noise)
+        return _precondition
