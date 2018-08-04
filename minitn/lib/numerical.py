@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python
 # coding: utf-8
 """Numerical objects and methods.
 """
@@ -6,9 +6,12 @@ from __future__ import division
 
 import logging
 import math
+from builtins import range, map, zip
 
 import numpy as np
 import scipy.linalg
+
+from minitn.lib.tools import unzip
 
 
 class BasisFunction(object):
@@ -101,6 +104,7 @@ class DavidsonAlgorithm(object):
     max_cycle = 99
     max_space = 10
     lin_dep_lim = 1.e-14
+    _debug = logging.root.isEnabledFor(logging.DEBUG)
 
     @classmethod
     def config(cls, **kwargs):
@@ -125,23 +129,35 @@ class DavidsonAlgorithm(object):
         self._matvec = matvec
         self._n_vals = n_vals
         self._precondition = precondition
+        self._diag = None
         self._trial_vecs = list(init_vecs)
         self._search_space = []
         self._column_space = []
-        self._max_space = max(len(self._trial_vecs),
-                              self.max_space + 3 * n_vals)
+        self._max_space = self.max_space + 3 * n_vals
         self._submatrix = np.zeros([self._max_space] * 2, dtype='d')
 
         self._last_ritz_vals = None
         self._ritz_vals = None
-        self._ritz_vecs = None
-        self._col_ritz_vecs = None
+        self._get_ritz_vecs = None
+        self._get_col_ritz_vecs = None
         self._residuals = None
         self._residual_norms = None
-        self._diag = None
+        self._convergence = None
 
         self.eigvals = None
         self.eigvecs = None
+
+    def _restart(self):
+        if self._debug:
+            logging.debug('Search space too large, restart.')
+            logging.debug('ritz vals: {}'.format(self._ritz_vals))
+        ritz_vals = self._ritz_vals
+        self.__init__(
+            matvec=self._matvec, init_vecs=self._get_ritz_vecs(),
+            n_vals=self._n_vals
+        )
+        self._ritz_vals = ritz_vals
+        return
 
     def kernel(self):
         """Run Davidson algorithm.
@@ -151,48 +167,38 @@ class DavidsonAlgorithm(object):
         eigvals : (self.n_vals,) ndarray
         eigvecs : [(n,) ndarray]
         """
+        print('map: {}'.format(map))
         for cycle in range(self.max_cycle):
             self._orthonormalize(use_svd=True)
             self._extend_space()
             self._calc_ritz_pairs()
-            norms = self._calc_residual_norms()
-
-            if self._convergence():
+            self._calc_residual_norms()
+            if self._is_converged():
                 break
-
-            next_space = len(self._ritz_vals) + len(self._search_space)
-            ritz_vals = self._ritz_vals
-            if next_space > self._max_space:
-                logging.debug('Search space too large, restart.')
-                logging.debug('ritz vals: {}'.format(self._ritz_vals))
-                self.__init__(
-                    matvec=self._matvec, init_vecs=self._ritz_vecs,
-                    n_vals=self._n_vals
-                )
-                self._ritz_vals = ritz_vals
+            next_ = len(self._ritz_vals) + len(self._search_space)
+            if next_ > self._max_space:
+                self._restart()
             else:
                 self._calc_trial_vecs()
 
-            self._last_ritz_vals = ritz_vals
-
         self.eigvals = self._ritz_vals
-        self.eigvecs = self._ritz_vecs
+        self.eigvecs = self._get_ritz_vecs()
         return self.eigvals, self.eigvecs
 
-    def _convergence(self):
+    def _is_converged(self):
         if (
             self._last_ritz_vals is None or
             len(self._last_ritz_vals) != len(self._ritz_vals)
         ):
+            self._convergence = [False] * len(self._ritz_vals)
             return False
 
         diff_ritz_vals = np.abs(self._last_ritz_vals - self._ritz_vals)
-        count = 0
-        for i, norm in enumerate(self._residual_norms):
-            if norm ** 2 < self.tol and diff_ritz_vals[i] < self.tol:
-                self._residuals[i] = None
-                count += 1
-        if count == len(self._residuals):
+        self._convergence = [
+            norm ** 2 < self.tol and diff_ritz_vals[i] < self.tol
+            for i, norm in enumerate(self._residual_norms)
+        ]
+        if all(self._convergence):
             return True
         else:
             return False
@@ -202,21 +208,21 @@ class DavidsonAlgorithm(object):
             trial_mat = np.transpose(np.array(self._trial_vecs))
             trial_mat = scipy.linalg.orth(trial_mat)
             self._trial_vecs = list(np.transpose(trial_mat))
-        else:
-            vecs = []
-            for i, vec_i in enumerate(self._trial_vecs):
-                for j, vec_j in enumerate(vecs):
-                    vec_i -= vec_j * np.dot(vec_j.conj(), vec_i)
-                norm = scipy.linalg.norm(vec_i)
-                if norm > 1.e-7:
-                    vecs.append(vec_i / norm)
-            self._trial_vecs = vecs
+        elif self._trial_vecs:
+            def vecs():
+                for vec_i in self._trial_vecs:
+                    for j, vec_j in enumerate(vecs):
+                        vec_i -= vec_j * np.dot(vec_j.conj(), vec_i)
+                    norm = scipy.linalg.norm(vec_i)
+                    if norm > 1.e-7:
+                        yield vec_i / norm
+            self._trial_vecs = vecs()
         return self._trial_vecs
 
     def _extend_space(self):
         head = len(self._search_space)
         self._search_space += self._trial_vecs
-        self._column_space += map(self._matvec, self._trial_vecs)
+        self._column_space += list(map(self._matvec, self._trial_vecs))
         tail = len(self._search_space)
         v, a_v = self._search_space, self._column_space
         for i in range(head):
@@ -241,35 +247,48 @@ class DavidsonAlgorithm(object):
             self._submatrix[:n_space, :n_space], eigvals=(0, n_state - 1)
         )
         v = np.transpose(v)
-        self._ritz_vecs = [_trans_vec(v_i, self._search_space) for v_i in v]
-        self._col_ritz_vecs = [_trans_vec(v_i, self._column_space)
-                               for v_i in v]
-        return self._ritz_vals, self._ritz_vecs
+        self._get_ritz_vecs = (
+            lambda: (_trans_vec(v_i, self._search_space) for v_i in v)
+        )
+        self._get_col_ritz_vecs = (
+            lambda: (_trans_vec(v_i, self._column_space) for v_i in v)
+        )
+        return self._ritz_vals, self._get_ritz_vecs
 
     def _calc_residual_norms(self):
-        def _calc_residual(theta, u, a_u):
-            return a_u - theta * u
+        def _calc_residual_norm(theta, u, a_u):
+            residual = a_u - theta * u
+            norm = scipy.linalg.norm(residual)
+            return residual, norm
 
-        self._residuals = map(
-            _calc_residual,
-            self._ritz_vals, self._ritz_vecs, self._col_ritz_vecs
-        )
-        self._residual_norms = map(scipy.linalg.norm, self._residuals)
-        return self._residual_norms
+        self._residuals, norms = unzip(map(
+            _calc_residual_norm,
+            self._ritz_vals, self._get_ritz_vecs(), self._get_col_ritz_vecs()
+        ))
+        self._residual_norms = list(norms)
+        return self._residuals, self._residual_norms
 
     def _calc_trial_vecs(self):
         if self._precondition is None:
+            dim = len(self._search_space[0])
             self._precondition = self.davidson_precondition(
-                len(self._search_space[0]), self._matvec
+                dim, self._matvec
             )
+            ritz_vecs = [None] * dim
+        else:
+            ritz_vecs = list(self._get_ritz_vecs())
 
         self._trial_vecs = []
         precondition = self._precondition
-        for i, norm in enumerate(self._residual_norms):
+        zipped = zip(
+            self._residuals, self._residual_norms,
+            self._get_ritz_vecs(), self._convergence
+        )
+        for residual, norm, ritz_vec, conv in zipped:
             # remove linear dependency in self._residuals
-            if norm ** 2 > self.lin_dep_lim and self._residuals[i] is not None:
+            if norm ** 2 > self.lin_dep_lim and not conv:
                 vec = precondition(
-                    self._residuals[i], self._ritz_vals[0], self._ritz_vecs[i]
+                    residual, self._ritz_vals[0], ritz_vec
                 )
                 vec *= 1. / scipy.linalg.norm(vec)
                 for base in self._search_space:

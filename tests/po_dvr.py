@@ -1,6 +1,6 @@
 #!/usr/bin/env python2
 # coding: utf-8
-from __future__ import division
+from __future__ import division, absolute_import
 
 import logging
 import sys
@@ -22,7 +22,7 @@ def test_po_dvr(x0, L, n, v_func, fast=True, davidson=False):
         c = i * 0.01
         v_rst = PotentialFunction.linear_corr(i * 0.01)
         po_dvr.set_v_func(vf_list, v_rst=v_rst)
-        e, _ = po_dvr.solve(n_state=6, davidson=davidson)
+        e, _ = po_dvr.solve(n_state=3, davidson=davidson)
         logging.info('c: {:.2f}; e: {}'.format(i * 0.01, e))
     return
 

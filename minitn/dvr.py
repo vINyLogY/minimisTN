@@ -10,6 +10,7 @@ References
 from __future__ import division
 
 import logging
+from builtins import range
 
 import matplotlib.pyplot as plt
 import numpy as np
