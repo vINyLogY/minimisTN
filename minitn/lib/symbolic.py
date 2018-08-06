@@ -2,7 +2,7 @@
 # coding: utf-8
 """Symbolic objects and methods.
 """
-from __future__ import division
+from __future__ import absolute_import, division
 
 import logging
 import math

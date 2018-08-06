@@ -2,7 +2,7 @@
 # coding: utf-8
 """Numerical objects and methods.
 """
-from __future__ import division
+from __future__ import absolute_import, division
 
 import logging
 import math
@@ -15,6 +15,8 @@ from minitn.lib.tools import unzip
 
 
 class BasisFunction(object):
+    """Some Basis Functions.
+    """
     @staticmethod
     def particle_in_box(j, L=1., x0=0.):
         def _phi(_x):
@@ -37,6 +39,8 @@ class BasisFunction(object):
 
 
 class PotentialFunction(object):
+    """Some Potential Functions.
+    """
     @staticmethod
     def linear_corr(c=0.01):
         def _v(x):
@@ -81,6 +85,15 @@ class PotentialFunction(object):
 
 
 def quadrature(func, start, stop, num_prec):
+    """Numerical quadrature.
+
+    Parameters
+    ----------
+    func : float -> float
+    start : float
+    stop : float
+    num_prec : int
+    """
     x = np.linspace(start, stop, num=num_prec + 1)
     fx = func(x)
     delta = (stop - start) / num_prec
@@ -137,10 +150,12 @@ class DavidsonAlgorithm(object):
         self._submatrix = np.zeros([self._max_space] * 2, dtype='d')
 
         self._last_ritz_vals = None
+        self._last_convergence = None
+
         self._ritz_vals = None
-        self._get_ritz_vecs = None
-        self._get_col_ritz_vecs = None
-        self._residuals = None
+        self._get_ritz_vecs = None    # function returns an iterator
+        self._get_col_ritz_vecs = None    # function returns an iterator
+        self._residuals = None    # iterator
         self._residual_norms = None
         self._convergence = None
 
@@ -167,7 +182,6 @@ class DavidsonAlgorithm(object):
         eigvals : (self.n_vals,) ndarray
         eigvecs : [(n,) ndarray]
         """
-        print('map: {}'.format(map))
         for cycle in range(self.max_cycle):
             self._orthonormalize(use_svd=True)
             self._extend_space()
@@ -193,11 +207,18 @@ class DavidsonAlgorithm(object):
             self._convergence = [False] * len(self._ritz_vals)
             return False
 
+        self._last_convergence = self._convergence
         diff_ritz_vals = np.abs(self._last_ritz_vals - self._ritz_vals)
         self._convergence = [
             norm ** 2 < self.tol and diff_ritz_vals[i] < self.tol
             for i, norm in enumerate(self._residual_norms)
         ]
+        if self._debug:
+            for _i, _norm in enumerate(self._residual_norms):
+                if self._convergence[i] and not self._last_convergence[i]:
+                    logging.debug('Root {} converged, norm = {:.8f}'.format(
+                        _i, _norm
+                    ))
         if all(self._convergence):
             return True
         else:
@@ -209,14 +230,14 @@ class DavidsonAlgorithm(object):
             trial_mat = scipy.linalg.orth(trial_mat)
             self._trial_vecs = list(np.transpose(trial_mat))
         elif self._trial_vecs:
-            def vecs():
-                for vec_i in self._trial_vecs:
-                    for j, vec_j in enumerate(vecs):
-                        vec_i -= vec_j * np.dot(vec_j.conj(), vec_i)
-                    norm = scipy.linalg.norm(vec_i)
-                    if norm > 1.e-7:
-                        yield vec_i / norm
-            self._trial_vecs = vecs()
+            vecs = []
+            for vec_i in self._trial_vecs:
+                for vec_j in vecs:
+                    vec_i -= vec_j * np.dot(vec_j.conj(), vec_i)
+                norm = scipy.linalg.norm(vec_i)
+                if norm > 1.e-7:
+                    vecs.append(vec_i / norm)
+            self._trial_vecs = vecs
         return self._trial_vecs
 
     def _extend_space(self):

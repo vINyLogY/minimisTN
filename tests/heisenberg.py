@@ -2,6 +2,9 @@
 # coding: utf-8
 import logging
 
+if __name__ == '__main__':
+    import _context
+
 from minitn.dmrg import dmrg1, dmrg2, heisenberg, mat_element, fm_state
 
 
