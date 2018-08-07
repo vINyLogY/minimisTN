@@ -8,7 +8,6 @@ References
 """
 from __future__ import absolute_import, division
 
-import logging
 from builtins import range, map
 
 import matplotlib.pyplot as plt
@@ -19,6 +18,7 @@ from scipy.sparse.linalg import LinearOperator, eigsh
 
 from minitn.lib import numerical, symbolic
 from minitn.lib.numerical import DavidsonAlgorithm
+from minitn.lib.tools import logger
 
 
 class DVR(object):
@@ -315,7 +315,6 @@ class DVR(object):
         p3 : (n, n) ndarray
             :math:`e^{-iT\tau}`
         """
-        # TODO: use non-dense method.
         hbar = self.hbar
         if 'Trotter' in method:
             diag, v = scipy.linalg.eigh(self.t_mat())
@@ -733,7 +732,7 @@ class FastSineDVR(SineDVR):
 
         Returns
         -------
-        (n, n) np.ndarray
+        Hamitonian : LinearOperator
             A 2-d matrix.
         """
         class _Hamiltonian(LinearOperator):
@@ -763,8 +762,19 @@ class FastSineDVR(SineDVR):
             return self._h_mat
         v = self.v_func(self.grid_points)
         j = np.arange(1, self.n + 1)
-        t = self.hbar ** 2 / (2 * self.m_e) * (j * np.pi / self.length) ** 2
+        t = (self.hbar * j * np.pi / self.length) ** 2 / (2 * self.m_e)
         return _Hamiltonian(v, t)
+
+    def propagator(self, tau=0.1, method='Trotter'):
+        r"""Construct the propagator
+
+        Parameters
+        ----------
+        tau : float
+            Time interval at each step.
+        """
+        if 'Trotter' in method:
+            pass
 
 
 class PO_DVR(object):

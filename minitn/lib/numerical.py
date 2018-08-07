@@ -4,14 +4,13 @@
 """
 from __future__ import absolute_import, division
 
-import logging
 import math
 from builtins import range, map, zip
 
 import numpy as np
 import scipy.linalg
 
-from minitn.lib.tools import unzip
+from minitn.lib.tools import unzip, LogLevel, logger
 
 
 class BasisFunction(object):
@@ -117,7 +116,7 @@ class DavidsonAlgorithm(object):
     max_cycle = 99
     max_space = 10
     lin_dep_lim = 1.e-14
-    _debug = logging.root.isEnabledFor(logging.DEBUG)
+    _debug = logger.isEnabledFor(LogLevel.DEBUG)
 
     @classmethod
     def config(cls, **kwargs):
@@ -135,7 +134,7 @@ class DavidsonAlgorithm(object):
             try:
                 setattr(cls, key, value)
             except AttributeError:
-                logging.warning('No configuration "{}"!'.format(key))
+                logger.warning('No configuration "{}"!', key)
         return
 
     def __init__(self, matvec, init_vecs, n_vals=1, precondition=None):
@@ -163,9 +162,8 @@ class DavidsonAlgorithm(object):
         self.eigvecs = None
 
     def _restart(self):
-        if self._debug:
-            logging.debug('Search space too large, restart.')
-            logging.debug('ritz vals: {}'.format(self._ritz_vals))
+        logger.debug('Search space too large, restart.')
+        logger.debug('ritz vals: {}', self._ritz_vals)
         ritz_vals = self._ritz_vals
         self.__init__(
             matvec=self._matvec, init_vecs=self._get_ritz_vecs(),
@@ -216,9 +214,8 @@ class DavidsonAlgorithm(object):
         if self._debug:
             for _i, _norm in enumerate(self._residual_norms):
                 if self._convergence[i] and not self._last_convergence[i]:
-                    logging.debug('Root {} converged, norm = {:.8f}'.format(
-                        _i, _norm
-                    ))
+                    logger.debug(
+                        'Root {} converged, norm = {:.8f}', _i, _norm)
         if all(self._convergence):
             return True
         else:
