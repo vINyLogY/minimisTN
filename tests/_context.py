@@ -11,6 +11,10 @@ import os
 sys.path.insert(
     0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 )
+
+# Root logger settings
+level = logging.DEBUG if __debug__ else logging.INFO
 logging.basicConfig(
     format='(In %(funcName)s, %(module)s)  %(message)s',
-    stream=sys.stdout, level=logging.DEBUG)
+    stream=sys.stdout, level=level
+)

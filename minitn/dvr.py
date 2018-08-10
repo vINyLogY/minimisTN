@@ -9,6 +9,7 @@ References
 from __future__ import absolute_import, division
 
 import logging
+import time
 from builtins import filter, map, range, zip
 
 import matplotlib.pyplot as plt
@@ -833,7 +834,7 @@ class PO_DVR(object):
         v_list : [float -> float]
             A list of 1-arg functions
         v_rst : [float] -> float
-            A 1-arg function, where the arg is a list of which length is
+            A 1-ary function, where the arg is a list of which length is
             ``rank``.
         """
         for i, v_i in enumerate(v_list):
@@ -898,7 +899,8 @@ class PO_DVR(object):
                     ans = ans + self.v_rst * vec
                 return ans
 
-            def _rmatvec(self, vec): return self._matvec(vec)
+            def _rmatvec(self, vec):
+                return self._matvec(vec)
 
         h_list = []
         for i in range(self.rank):
@@ -940,13 +942,52 @@ class PO_DVR(object):
         v = np.reshape(v, -1)
         return v
 
-    def propagation(self, init=None, start=0., stop=5., max_inter=0.01):
+    def mu_mat(self):
+        """Return the dipole moment matrix in DVR.
+
+        Returns
+        -------
+        (N, N) LinearOperator
+        """
+        class _Mu(LinearOperator):
+            def __init__(self):
+                pass
+
+            def _matvec(self, vec):
+                pass
+
+        return NotImplemented
+
+    def propagation(self, init=None, start=0., stop=5., max_inter=0.01,
+                    const_energy=True):
+        """A generator doing the propagation.
+
+        Parameters
+        ----------
+        init : (N,) ndarray, optional
+            Real initial vector at t = t_0.
+        start : float, optional
+            Time starting point t_0.
+        stop : float, optional
+            End point t_1.
+        max_inter : float, optional
+            Maximum of time gap.
+        const_enengy : bool
+            Whether to keep energy as a constant
+
+        Yields
+        ------
+        tuple : (float, ((N,) ndarray, (N,) ndarray))
+            (time, (real_vector, imaginary_vector))
+        """
         if init is None:
             init = self._init_state()
+        h_op = self.h_mat()
+        if const_energy:
+            e0 = expection(h_op, init)
         length = len(init)
         init = np.pad(init, (0, length), 'constant')
         factor = 1.0 / self.hbar
-        h_op = self.h_mat()
 
         def propagator(t, y):
             real, imag = y[:length], y[length:]
@@ -959,41 +1000,117 @@ class PO_DVR(object):
             start, init, stop, max_step=max_inter
         )
         while True:
+            t = solver.t
+            y = solver.y
+            real, imag = y[:length], y[length:]
+            logging.debug(__(
+                "t: {:.3f}, E: {:.8f}, |v|: {:.8f}",
+                t, expection(h_op, real) + expection(h_op, imag),
+                scipy.linalg.norm(solver.y)
+            ))
+            yield t, (real, imag)
             try:
                 solver.step()
-                y = solver.y
-                real, imag = y[:length], y[length:]
-                e = expection(h_op, real) + expection(h_op, imag)
-                t = solver.t
-                logging.info(__("t: {:.3f}, E: {:.8f}", t, e))
-                logging.debug(__("V: {}", solver.y[:3]))
-                yield t, (y[:length], y[length:])
             except RuntimeError:
-                break
+                raise StopIteration
+            else:
+                if const_energy:
+                    e = expection(h_op, real) + expection(h_op, imag)
+                    if abs(e - e0) > 1.e-8:
+                        raise StopIteration
 
     def plot_propagation(self, init=None, start=0., stop=1.,
                          max_inter=0.01, filt=1.e-6, sample=20):
+        """Plot propagation.
+        """
+        def string(t):
+            return '{:08d}'.format(int(t))
         if init is None:
             init = self._init_state()
         it = self.propagation(
             init=init, start=start, stop=stop, max_inter=max_inter)
-        x_lim, y_lim = self.bound_list[:2]
-        x, y = self.grid_points_list[:2]
-        x, y = np.meshgrid(x, y)
-        z_lim = np.max(np.abs(init)) * 1.5
-        shape = self.n_list[:2]
-        bound = np.linspace(-z_lim, z_lim, 100)
+        plotter = self.plot_wf(init, string(0))
+        plotter.next()
         for i, (t, vec) in enumerate(it):
             if i % sample:
                 continue
             real, _ = vec
-            real = np.reshape(real, shape)
-            with figure() as fig:
-                plt.contourf(x, y, real, bound, cmap='seismic')
-                plt.colorbar(boundaries=bound)
-                t = int(1000 * t)
-                plt.savefig('functions-{:08d}mu.png'.format(t))
+            msg = string(1000 * t)
+            plotter.send((real, msg))
+        plotter.close()
         return
+
+    def plot_wf(self, vec, msg=None):
+        """Plot 2D wavefunction.
+
+        Parameters
+        ----------
+        vec : (N,) ndarray
+        msg : string
+
+        Notes
+        -----
+        This is a generator. Use .next() to plot, and .send(vec, msg) to
+        plot next wavefunction with the same figure parameters.
+        """
+        x_lim, y_lim = self.bound_list[:2]
+        x, y = self.grid_points_list[:2]
+        shape = self.n_list[:2]
+        x, y = np.meshgrid(x, y)
+        z_lim = int(np.max(np.abs(vec)) * 15) / 10
+        bound = np.linspace(-z_lim, z_lim, 100)
+        while vec is not None:
+            vec = np.reshape(vec, shape)
+            if msg is None:
+                msg = int(time.time())
+            with figure() as fig:
+                plt.contourf(x, y, vec, bound, cmap='seismic')
+                plt.colorbar(boundaries=bound)
+                plt.savefig('functions-{}.png'.format(msg))
+            received = (yield vec)
+            if received is None:
+                raise StopIteration
+            else:
+                vec, msg = received
+
+    def autocorrelation(self, init=None, stop=5., max_inter=0.01):
+        """Time autocorrelation function generator.
+
+        Yields
+        ------
+        tuple : float, complex
+            (t, auto)
+        """
+        t_2 = stop / 2
+        it = self.propagation(
+            init=init, start=0., stop=stop / 2, max_inter=max_inter
+        )
+        dot = np.dot
+        for i, (tau, (real, imag)) in enumerate(it):
+            if tau == t_2:
+                raise StopIteration
+            t = tau * 2
+            auto = dot(real, real) - dot(imag, imag) + 2.0j * dot(real, imag)
+            yield t, auto
+
+    def spectrum(self, init=None, cut=5., max_inter=0.01):
+        """Power spectrum.
+
+        Returns
+        -------
+        freq : [float]
+        sigma : [complex]
+        """
+        t, auto = zip(*self.autocorrelation(
+            init=init, stop=cut, max_inter=max_inter
+        ))
+        n = len(t)
+        tau = (t[-1] - t[0]) / (n - 1)
+        omega = 2 * np.pi / n / tau
+        freq = np.arange(n) * omega
+        sigma = fftpack.ifft(auto)
+        print(type(sigma[1]))
+        return freq, sigma
 
     def subindex(self, N):
         """
