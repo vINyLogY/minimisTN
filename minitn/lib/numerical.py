@@ -4,13 +4,16 @@
 """
 from __future__ import absolute_import, division
 
+import logging
 import math
-from builtins import range, map, zip
+from builtins import map, range, zip
 
 import numpy as np
-import scipy.linalg
+from scipy.integrate import quad
+from scipy.linalg import eigh, norm, orth
 
-from minitn.lib.tools import unzip, LogLevel, logger
+from minitn.lib.tools import BraceMessage as __
+from minitn.lib.tools import timethis, unzip
 
 
 class BasisFunction(object):
@@ -29,11 +32,11 @@ class BasisFunction(object):
 
     @staticmethod
     def harmonic_oscillator(n, k=1., m=1., hbar=1.):
-        from minitn.lib import symbolic
-        psi = symbolic.BasisFunction.harmonic_oscillator(
+        from minitn.lib.symbolic import BasisFunction, lambdify
+        psi = BasisFunction.harmonic_oscillator(
             n, k=k, m=m, hbar=hbar
         )
-        psi = symbolic.lambdify(psi)
+        psi = lambdify(psi)
         return psi
 
 
@@ -93,12 +96,12 @@ def quadrature(func, start, stop, num_prec):
     stop : float
     num_prec : int
     """
-    x = np.linspace(start, stop, num=num_prec + 1)
-    fx = func(x)
-    delta = (stop - start) / num_prec
-    area = (fx[:-1] + fx[1:]) * delta / 2.
-    quad = np.sum(area)
-    return quad
+    # x = np.linspace(start, stop, num=num_prec + 1)
+    # fx = func(x)
+    # delta = (stop - start) / num_prec
+    # area = (fx[:-1] + fx[1:]) * delta / 2.
+    # quad = np.sum(area)
+    return quad(func, start, stop, limit=num_prec)[0]
 
 
 class DavidsonAlgorithm(object):
@@ -116,7 +119,7 @@ class DavidsonAlgorithm(object):
     max_cycle = 99
     max_space = 10
     lin_dep_lim = 1.e-14
-    _debug = logger.isEnabledFor(LogLevel.DEBUG)
+    _debug = logging.root.isEnabledFor(logging.DEBUG)
 
     @classmethod
     def config(cls, **kwargs):
@@ -134,7 +137,7 @@ class DavidsonAlgorithm(object):
             try:
                 setattr(cls, key, value)
             except AttributeError:
-                logger.warning('No configuration "{}"!', key)
+                logging.warning(__('No configuration "{}"!', key))
         return
 
     def __init__(self, matvec, init_vecs, n_vals=1, precondition=None):
@@ -162,8 +165,8 @@ class DavidsonAlgorithm(object):
         self.eigvecs = None
 
     def _restart(self):
-        logger.debug('Search space too large, restart.')
-        logger.debug('ritz vals: {}', self._ritz_vals)
+        logging.debug('Search space too large, restart.')
+        logging.debug(__('ritz vals: {}', self._ritz_vals))
         ritz_vals = self._ritz_vals
         self.__init__(
             matvec=self._matvec, init_vecs=self._get_ritz_vecs(),
@@ -172,6 +175,7 @@ class DavidsonAlgorithm(object):
         self._ritz_vals = ritz_vals
         return
 
+    @timethis
     def kernel(self):
         """Run Davidson algorithm.
 
@@ -194,7 +198,7 @@ class DavidsonAlgorithm(object):
                 self._calc_trial_vecs()
 
         self.eigvals = self._ritz_vals
-        self.eigvecs = self._get_ritz_vecs()
+        self.eigvecs = list(self._get_ritz_vecs())
         return self.eigvals, self.eigvecs
 
     def _is_converged(self):
@@ -208,14 +212,15 @@ class DavidsonAlgorithm(object):
         self._last_convergence = self._convergence
         diff_ritz_vals = np.abs(self._last_ritz_vals - self._ritz_vals)
         self._convergence = [
-            norm ** 2 < self.tol and diff_ritz_vals[i] < self.tol
-            for i, norm in enumerate(self._residual_norms)
+            norm_ ** 2 < self.tol and diff_ritz_vals[i] < self.tol
+            for i, norm_ in enumerate(self._residual_norms)
         ]
         if self._debug:
             for _i, _norm in enumerate(self._residual_norms):
                 if self._convergence[i] and not self._last_convergence[i]:
-                    logger.debug(
-                        'Root {} converged, norm = {:.8f}', _i, _norm)
+                    logging.debug(
+                        __('Root {} converged, norm = {:.8f}', _i, _norm)
+                    )
         if all(self._convergence):
             return True
         else:
@@ -224,16 +229,16 @@ class DavidsonAlgorithm(object):
     def _orthonormalize(self, use_svd=True):
         if use_svd and self._trial_vecs:
             trial_mat = np.transpose(np.array(self._trial_vecs))
-            trial_mat = scipy.linalg.orth(trial_mat)
+            trial_mat = orth(trial_mat)
             self._trial_vecs = list(np.transpose(trial_mat))
         elif self._trial_vecs:
             vecs = []
             for vec_i in self._trial_vecs:
                 for vec_j in vecs:
                     vec_i -= vec_j * np.dot(vec_j.conj(), vec_i)
-                norm = scipy.linalg.norm(vec_i)
-                if norm > 1.e-7:
-                    vecs.append(vec_i / norm)
+                norm_ = norm(vec_i)
+                if norm_ > 1.e-7:
+                    vecs.append(vec_i / norm_)
             self._trial_vecs = vecs
         return self._trial_vecs
 
@@ -261,7 +266,7 @@ class DavidsonAlgorithm(object):
 
         n_space = len(self._search_space)
         n_state = min(n_space, self._n_vals)
-        self._ritz_vals, v = scipy.linalg.eigh(
+        self._ritz_vals, v = eigh(
             self._submatrix[:n_space, :n_space], eigvals=(0, n_state - 1)
         )
         v = np.transpose(v)
@@ -276,8 +281,8 @@ class DavidsonAlgorithm(object):
     def _calc_residual_norms(self):
         def _calc_residual_norm(theta, u, a_u):
             residual = a_u - theta * u
-            norm = scipy.linalg.norm(residual)
-            return residual, norm
+            norm_ = norm(residual)
+            return residual, norm_
 
         self._residuals, norms = unzip(map(
             _calc_residual_norm,
@@ -302,16 +307,16 @@ class DavidsonAlgorithm(object):
             self._residuals, self._residual_norms,
             self._get_ritz_vecs(), self._convergence
         )
-        for residual, norm, ritz_vec, conv in zipped:
+        for residual, norm_, ritz_vec, conv in zipped:
             # remove linear dependency in self._residuals
-            if norm ** 2 > self.lin_dep_lim and not conv:
+            if norm_ ** 2 > self.lin_dep_lim and not conv:
                 vec = precondition(
                     residual, self._ritz_vals[0], ritz_vec
                 )
-                vec *= 1. / scipy.linalg.norm(vec)
+                vec *= 1. / norm(vec)
                 for base in self._search_space:
                     vec -= np.dot(np.conj(base), vec) * base
-                norm_ = scipy.linalg.norm(vec)
+                norm_ = norm(vec)
                 # remove linear dependency between trial_vecs and
                 # self._search_space
                 if norm_ ** 2 > self.lin_dep_lim:
@@ -340,3 +345,20 @@ class DavidsonAlgorithm(object):
         def _precondition(residual, ritz_val, ritz_vec, _diag=diag):
             return residual / (ritz_val - _diag + noise)
         return _precondition
+
+
+def expection(op, vec):
+    r"""Calculate the energy expection.
+    Parameters
+    ----------
+    op : (n, n) ndarray or LinearOpearator
+    vec : (n,) ndarray
+
+    Returns
+    -------
+    expection : float
+    """
+    dim = len(vec)
+    vec_h = np.conjugate(vec)
+    e = np.dot(vec_h, op.dot(vec))
+    return e

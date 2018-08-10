@@ -8,17 +8,20 @@ References
 """
 from __future__ import absolute_import, division
 
-from builtins import range, map
+import logging
+from builtins import filter, map, range, zip
 
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy
 from scipy import fftpack
+from scipy.integrate import RK45
 from scipy.sparse.linalg import LinearOperator, eigsh
 
 from minitn.lib import numerical, symbolic
-from minitn.lib.numerical import DavidsonAlgorithm
-from minitn.lib.tools import logger
+from minitn.lib.numerical import DavidsonAlgorithm, expection
+from minitn.lib.tools import BraceMessage as __
+from minitn.lib.tools import figure
 
 
 class DVR(object):
@@ -292,11 +295,7 @@ class DVR(object):
         -------
         energy : float
         """
-        dim = len(vec)
-        vec = np.reshape(vec, (dim, 1))
-        vec_h = np.conjugate(np.transpose(vec))
-        e = np.dot(vec_h, np.dot(self._h_mat, vec))
-        return e[0, 0]
+        return expection(self._h_mat, vec)
 
     def propagator(self, tau=0.1, method='Trotter'):
         r"""Construct the propagator
@@ -475,6 +474,7 @@ class CasDVR(DVR):
         Additional string in the file name if plot. Default is the name of
         class
     """
+
     def __init__(self, basis, cut_off=None, trans_func_pair=(None, None),
                  num_prec=None, hbar=1., m_e=1.):
         super(CasDVR, self).__init__(basis=basis, hbar=hbar, m_e=m_e)
@@ -573,6 +573,7 @@ class SineDVR(DVR):
         Additional string in the file name if plot. Default is the name of
         class.
     """
+
     def __init__(self, lower_bound, upper_bound, n_dvr, hbar=1., m_e=1.):
         super(SineDVR, self).__init__(hbar=hbar, m_e=m_e)
         self.a = lower_bound
@@ -721,6 +722,7 @@ class FastSineDVR(SineDVR):
         Additional string in the file name if plot. Default is the name of
         class.
     """
+
     def __init__(self, lower_bound, upper_bound, n_dvr, hbar=1., m_e=1.):
         # Same as SineDVR
         super(FastSineDVR, self).__init__(
@@ -744,6 +746,7 @@ class FastSineDVR(SineDVR):
             t_diag : (n,) ndarray
                 In FBR
             """
+
             def __init__(self, v_diag, t_diag):
                 n = len(v_diag)
                 self.v = v_diag
@@ -796,22 +799,26 @@ class PO_DVR(object):
     energy : [float]
     eigenstates (m, n) ndarray
     """
+
     def __init__(self, conf_list, hbar=1., m_e=1., fast=False):
         self.rank = len(conf_list)
         self.n_list = []
+        self.bound_list = []
         self.dvr_list = []
         DVR_1d = FastSineDVR if fast else SineDVR
         for i in range(self.rank):
             lower_bound, upper_bound, n_dvr = conf_list[i]
             self.n_list.append(n_dvr)
+            self.bound_list.append((lower_bound, upper_bound))
             sp_dvr = DVR_1d(
-                    lower_bound, upper_bound, n_dvr, hbar=hbar, m_e=m_e
+                lower_bound, upper_bound, n_dvr, hbar=hbar, m_e=m_e
             )
             self.dvr_list.append(sp_dvr)
         self.dim = np.prod(self.n_list)
         self.grid_points_list = np.array(
             [dvr_i.grid_points for dvr_i in self.dvr_list]
         )
+        self.hbar = hbar
 
         self.v_rst = None
         self._diag_v_rst = None
@@ -852,8 +859,7 @@ class PO_DVR(object):
 
         Returns
         -------
-        (n, n) np.ndarray
-            A 2-d matrix.
+        (N, N) LinearOperator
         """
         class _Hamiltonian(LinearOperator):
             """All parameters are in DVR.
@@ -865,6 +871,7 @@ class PO_DVR(object):
             v_rst : (N,) ndarray
                 diagonal of V_rst matrix
             """
+
             def __init__(self, h_list, v_rst):
                 self.h_list = h_list
                 self.v_rst = v_rst
@@ -915,12 +922,8 @@ class PO_DVR(object):
         energy : [float]
         eigenstates : np.ndarray
         """
-        v = 1.
-        for i in range(self.rank):
-            _, v_i = self.dvr_list[i].solve(n_state=1)
-            v = np.tensordot(v, v_i[0], axes=0)
-        v = np.reshape(v, -1)
         h_op = self.h_mat()
+        v = self._init_state()
         if davidson:
             solver = DavidsonAlgorithm(h_op.dot, [v], n_vals=n_state)
             self.energy, self.eigenstates = solver.kernel()
@@ -928,6 +931,69 @@ class PO_DVR(object):
             self.energy, v = eigsh(h_op, k=n_state, which='SA', v0=v)
             self.eigenstates = np.transpose(v)
         return self.energy, self.eigenstates
+
+    def _init_state(self):
+        v = 1.
+        for i in range(self.rank):
+            _, v_i = self.dvr_list[i].solve(n_state=1)
+            v = np.tensordot(v, v_i[0], axes=0)
+        v = np.reshape(v, -1)
+        return v
+
+    def propagation(self, init=None, start=0., stop=5., max_inter=0.01):
+        if init is None:
+            init = self._init_state()
+        length = len(init)
+        init = np.pad(init, (0, length), 'constant')
+        factor = 1.0 / self.hbar
+        h_op = self.h_mat()
+
+        def propagator(t, y):
+            real, imag = y[:length], y[length:]
+            real, imag = factor * h_op(imag), -factor * h_op(real)
+            y = np.append(real, imag)
+            return y
+
+        solver = RK45(
+            propagator,
+            start, init, stop, max_step=max_inter
+        )
+        while True:
+            try:
+                solver.step()
+                y = solver.y
+                real, imag = y[:length], y[length:]
+                e = expection(h_op, real) + expection(h_op, imag)
+                t = solver.t
+                logging.info(__("t: {:.3f}, E: {:.8f}", t, e))
+                logging.debug(__("V: {}", solver.y[:3]))
+                yield t, (y[:length], y[length:])
+            except RuntimeError:
+                break
+
+    def plot_propagation(self, init=None, start=0., stop=1.,
+                         max_inter=0.01, filt=1.e-6, sample=20):
+        if init is None:
+            init = self._init_state()
+        it = self.propagation(
+            init=init, start=start, stop=stop, max_inter=max_inter)
+        x_lim, y_lim = self.bound_list[:2]
+        x, y = self.grid_points_list[:2]
+        x, y = np.meshgrid(x, y)
+        z_lim = np.max(np.abs(init)) * 1.5
+        shape = self.n_list[:2]
+        bound = np.linspace(-z_lim, z_lim, 100)
+        for i, (t, vec) in enumerate(it):
+            if i % sample:
+                continue
+            real, _ = vec
+            real = np.reshape(real, shape)
+            with figure() as fig:
+                plt.contourf(x, y, real, bound, cmap='seismic')
+                plt.colorbar(boundaries=bound)
+                t = int(1000 * t)
+                plt.savefig('functions-{:08d}mu.png'.format(t))
+        return
 
     def subindex(self, N):
         """

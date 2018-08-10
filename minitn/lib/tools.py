@@ -4,11 +4,17 @@
 """
 from __future__ import absolute_import, division
 
-from builtins import map, range, zip
-from itertools import tee
+import contextlib
 import logging
-
+from builtins import map, range, zip
+from functools import wraps
+from itertools import tee
 from operator import itemgetter
+from time import time
+
+import matplotlib.pyplot as plt
+from matplotlib import rc
+
 
 
 def unzip(iterable):
@@ -27,36 +33,43 @@ def unzip(iterable):
     """
 
     _tmp, iterable = tee(iterable, 2)
-    iters = tee(iterable, len(_tmp.next()))
+    iters = tee(iterable, len(next(_tmp)))
     return (map(itemgetter(i), it) for i, it in enumerate(iters))
 
 
-class Message(object):
-    def __init__(self, fmt, args):
+class BraceMessage:
+    def __init__(self, fmt, *args, **kwargs):
         self.fmt = fmt
         self.args = args
+        self.kwargs = kwargs
 
     def __str__(self):
-        return self.fmt.format(*self.args)
+        return self.fmt.format(*self.args, **self.kwargs)
 
 
-class StyleAdapter(logging.LoggerAdapter):
-    def __init__(self, logger, extra=None):
-        super(StyleAdapter, self).__init__(logger, extra or {})
-
-    def log(self, level, msg, *args, **kwargs):
-        if self.isEnabledFor(level):
-            msg, kwargs = self.process(msg, kwargs)
-            self.logger._log(level, Message(msg, args), (), **kwargs)
+__ = BraceMessage
 
 
-class LogLevel(object):
-    ERROR = logging.INFO
-    WARNING = logging.WARNING
-    INFO = logging.INFO
-    DEBUG = logging.DEBUG
-    DEBUG1 = logging.DEBUG - 1
-    DEBUG2 = logging.DEBUG - 2
-    DEBUG3 = logging.DEBUG - 3
+def timethis(func):
+    @wraps(func)
+    def timed(*args, **kwargs):
+        start = time()
+        r = func(*args, **kwargs)
+        end = time()
+        logging.debug(
+            __('{}.{} : {}', func.__module__, func.__name__, end - start)
+        )
+        return r
+    return timed
 
-logger = StyleAdapter(logging.getLogger(__name__))
+
+@contextlib.contextmanager
+def figure(*args, **kwargs):
+    rc('font', **{'family': 'sans-serif', 'sans-serif': ['Helvetica']})
+    rc('text', usetex=True)
+    fig = plt.figure(*args, **kwargs)
+    # for Palatino and other serif fonts use:
+    # rc('font',**{'family':'serif','serif':['Palatino']})
+
+    yield fig
+    plt.close(fig)

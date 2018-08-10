@@ -7,6 +7,8 @@ import logging
 import numpy as np
 import sympy as sym
 
+if __name__ == '__main__':
+    import _context
 from minitn.lib.numerical import PotentialFunction
 from minitn.lib.symbolic import BasisFunction
 from minitn.dvr import CasDVR

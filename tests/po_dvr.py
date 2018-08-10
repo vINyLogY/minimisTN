@@ -10,7 +10,7 @@ import numpy as np
 if __name__ == '__main__':
     import _context
 from minitn.dvr import PO_DVR
-from minitn.lib.numerical import PotentialFunction
+from minitn.lib.numerical import PotentialFunction, expection
 
 
 def test_po_dvr(x0, L, n, v_func, fast=True, davidson=False):
@@ -22,8 +22,10 @@ def test_po_dvr(x0, L, n, v_func, fast=True, davidson=False):
         c = i * 0.01
         v_rst = PotentialFunction.linear_corr(i * 0.01)
         po_dvr.set_v_func(vf_list, v_rst=v_rst)
-        e, _ = po_dvr.solve(n_state=3, davidson=davidson)
+        e, v = po_dvr.solve(n_state=3, davidson=davidson)
         logging.info('c: {:.2f}; e: {}'.format(i * 0.01, e))
+        e0 = expection(po_dvr.h_mat(), v[0])
+        logging.info('e0: {:.8f}'.format(e0))
     return
 
 
