@@ -1109,7 +1109,6 @@ class PO_DVR(object):
         omega = 2 * np.pi / n / tau
         freq = np.arange(n) * omega
         sigma = fftpack.ifft(auto)
-        print(type(sigma[1]))
         return freq, sigma
 
     def subindex(self, N):

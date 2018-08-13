@@ -37,7 +37,7 @@ def main():
         plt.plot(freq, np.abs(sigma), 'k-')
         plt.xlim(0., 3.)
         plt.ylim(0., 1.)
-        plt.show()
+        plt.savefig('spectrum.svg')
 
 
 if __name__ == '__main__':
