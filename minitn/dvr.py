@@ -841,19 +841,18 @@ class PO_DVR(object):
             self.dvr_list[i].set_v_func(v_i)
         self.v_rst = v_rst
         if self.v_rst is not None:
-            self._calc_diag_v_rst()
+            self._diag_v_rst = self._calc_diag(self.v_rst)
         return
 
-    def _calc_diag_v_rst(self):
+    def _calc_diag(self, func):
         v = []
         for i in range(self.dim):
             x = []
             sub = self.subindex(i)
             for j, n in enumerate(sub):
                 x.append(self.grid_points_list[j, n])
-            v.append(self.v_rst(x))
-        self._diag_v_rst = np.array(v)
-        return self._diag_v_rst
+            v.append(func(x))
+        return np.array(v)
 
     def h_mat(self, direct=True):
         """Return the Hamiltonian energy matrix in DVR.
@@ -908,7 +907,7 @@ class PO_DVR(object):
         if direct:
             return _Hamiltonian(h_list, self._diag_v_rst)
 
-    def solve(self, n_state=1, davidson=True):
+    def solve(self, n_state=1, davidson=False):
         r"""Solve the TISE with the potential energy given.
 
         Parameters
@@ -942,21 +941,33 @@ class PO_DVR(object):
         v = np.reshape(v, -1)
         return v
 
-    def mu_mat(self):
-        """Return the dipole moment matrix in DVR.
+    def mu_mat(self, dim):
+        """Return the dipole moment matrix in DVR at direction ``dim``.
+
+        Parameters
+        ----------
+        dim : int
 
         Returns
         -------
         (N, N) LinearOperator
+
+        Notes
+        -----
+        Suppose dim 0, 1, 2 correspond to x, y, z.
+        Ignore constant factor.
         """
         class _Mu(LinearOperator):
-            def __init__(self):
-                pass
+            def __init__(self, diag_mu):
+                self._diag = diag_mu
+                shape = [len(diag_mu)] * 2
+                super(_Mu, self).__init__('d', shape)
 
             def _matvec(self, vec):
-                pass
+                return self._diag * vec
 
-        return NotImplemented
+        diag_mu = self._calc_diag(lambda args: 1. - args[dim])
+        return _Mu(diag_mu)
 
     def propagation(self, init=None, start=0., stop=5., max_inter=0.01,
                     const_energy=True):
@@ -983,8 +994,7 @@ class PO_DVR(object):
         if init is None:
             init = self._init_state()
         h_op = self.h_mat()
-        if const_energy:
-            e0 = expection(h_op, init)
+        e0 = expection(h_op, init)
         length = len(init)
         init = np.pad(init, (0, length), 'constant')
         factor = 1.0 / self.hbar
@@ -996,8 +1006,8 @@ class PO_DVR(object):
             return y
 
         solver = RK45(
-            propagator,
-            start, init, stop, max_step=max_inter
+            propagator, start, init, stop,
+            max_step=max_inter
         )
         while True:
             t = solver.t
@@ -1014,9 +1024,13 @@ class PO_DVR(object):
             except RuntimeError:
                 raise StopIteration
             else:
-                if const_energy:
-                    e = expection(h_op, real) + expection(h_op, imag)
-                    if abs(e - e0) > 1.e-8:
+                e = expection(h_op, real) + expection(h_op, imag)
+                if abs(e - e0) > 1.e-8:
+                    logging.warning('Energy is not conserved. ')
+                    if const_energy:
+                        logging.warning(__(
+                            'Propagation stopped at t = {:.3f}.', solver.t
+                        ))
                         raise StopIteration
 
     def plot_propagation(self, init=None, start=0., stop=1.,
@@ -1067,7 +1081,7 @@ class PO_DVR(object):
                 plt.contourf(x, y, vec, bound, cmap='seismic')
                 plt.colorbar(boundaries=bound)
                 plt.savefig('functions-{}.png'.format(msg))
-            received = (yield vec)
+            received = yield
             if received is None:
                 raise StopIteration
             else:
@@ -1087,14 +1101,22 @@ class PO_DVR(object):
         )
         dot = np.dot
         for i, (tau, (real, imag)) in enumerate(it):
-            if tau == t_2:
+            if tau >= t_2:
                 raise StopIteration
             t = tau * 2
             auto = dot(real, real) - dot(imag, imag) + 2.0j * dot(real, imag)
             yield t, auto
 
-    def spectrum(self, init=None, cut=5., max_inter=0.01):
+    def spectrum(self, init=None, length=5., max_inter=0.01, window=None):
         """Power spectrum.
+
+        Parameters
+        ----------
+        init : (N,) ndarray, optional
+        cut : float
+        max_inter : float
+        window : float -> float
+            Window function with length.
 
         Returns
         -------
@@ -1102,14 +1124,23 @@ class PO_DVR(object):
         sigma : [complex]
         """
         t, auto = zip(*self.autocorrelation(
-            init=init, stop=cut, max_inter=max_inter
+            init=init, stop=length, max_inter=max_inter
         ))
         n = len(t)
         tau = (t[-1] - t[0]) / (n - 1)
-        omega = 2 * np.pi / n / tau
-        freq = np.arange(n) * omega
-        sigma = fftpack.ifft(auto)
-        return freq, sigma
+        uniform = all(abs(t_i - i * tau) < 1.e-8 for i, t_i in enumerate(t))
+
+        if window is not None:
+            zipped = zip(t, auto)
+            auto = [a_i * window(t) for t, a_i in zipped]
+
+        if uniform:
+            omega = 2 * np.pi / n / tau
+            freq = np.arange(n) * omega
+            sigma = fftpack.ifft(auto)
+            return freq, sigma
+        else:
+            raise NotImplementedError("Need NUDFT, or use smaller max_inter.")
 
     def subindex(self, N):
         """

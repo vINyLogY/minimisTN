@@ -16,6 +16,28 @@ from minitn.lib.tools import BraceMessage as __
 from minitn.lib.tools import timethis, unzip
 
 
+class WindowFunction(object):
+    """Some window functions for fourier transformation.
+
+    References
+    ----------
+    [1] http://www.pci.uni-heidelberg.de/tc/usr/mctdh/lit/intro_MCTDH.pdf
+    """
+    @staticmethod
+    def g0prime(length):
+        def _g(t):
+            return 1. - np.abs(t) / length
+        return _g
+
+    @staticmethod
+    def g1prime(length):
+        def _g(t):
+            y1 = (1. - np.abs(t) / length) * np.cos(np.pi * t / length)
+            y2 = np.sin(np.pi * np.abs(t) / length) / np.pi
+            return y1 + y2
+        return _g
+
+
 class BasisFunction(object):
     """Some Basis Functions.
     """

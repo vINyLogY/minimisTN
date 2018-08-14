@@ -16,7 +16,6 @@ import matplotlib.pyplot as plt
 from matplotlib import rc
 
 
-
 def unzip(iterable):
     """The same as zip(*iter) but returns iterators, instead
     of expand the iterator. Mostly used for large sequence.
