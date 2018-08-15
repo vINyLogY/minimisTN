@@ -52,7 +52,7 @@ def main():
     x0, L, n = -5., 10., 40
     v_func = PotentialFunction.sho()
     t0 = time.time()
-    #test_po_dvr(x0, L, n, v_func, fast=False, davidson=True)
+    # test_po_dvr(x0, L, n, v_func, fast=False, davidson=True)
     t1 = time.time()
     test_po_dvr(x0, L, n, v_func, fast=False, davidson=False)
     t2 = time.time()

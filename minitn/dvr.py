@@ -854,7 +854,7 @@ class PO_DVR(object):
             v.append(func(x))
         return np.array(v)
 
-    def h_mat(self, direct=True):
+    def h_mat(self):
         """Return the Hamiltonian energy matrix in DVR.
 
         Returns
@@ -871,7 +871,6 @@ class PO_DVR(object):
             v_rst : (N,) ndarray
                 diagonal of V_rst matrix
             """
-
             def __init__(self, h_list, v_rst):
                 self.h_list = h_list
                 self.v_rst = v_rst
@@ -904,8 +903,7 @@ class PO_DVR(object):
         h_list = []
         for i in range(self.rank):
             h_list.append(self.dvr_list[i].h_mat())
-        if direct:
-            return _Hamiltonian(h_list, self._diag_v_rst)
+        return _Hamiltonian(h_list, self._diag_v_rst)
 
     def solve(self, n_state=1, davidson=False):
         r"""Solve the TISE with the potential energy given.

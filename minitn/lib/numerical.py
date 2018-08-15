@@ -11,9 +11,10 @@ from builtins import map, range, zip
 import numpy as np
 from scipy.integrate import quad
 from scipy.linalg import eigh, norm, orth
+from scipy.sparse.linalg import LinearOperator
 
 from minitn.lib.tools import BraceMessage as __
-from minitn.lib.tools import timethis, unzip
+from minitn.lib.tools import time_this, unzip
 
 
 class WindowFunction(object):
@@ -197,7 +198,7 @@ class DavidsonAlgorithm(object):
         self._ritz_vals = ritz_vals
         return
 
-    @timethis
+    @time_this
     def kernel(self):
         """Run Davidson algorithm.
 
@@ -384,3 +385,11 @@ def expection(op, vec):
     vec_h = np.conjugate(vec)
     e = np.dot(vec_h, op.dot(vec))
     return e
+
+
+class Id(object):
+    def __call__(self, vec):
+        return vec
+
+    def dot(self, vec):
+        return vec

@@ -49,7 +49,7 @@ class BraceMessage:
 __ = BraceMessage
 
 
-def timethis(func):
+def time_this(func):
     @wraps(func)
     def timed(*args, **kwargs):
         start = time()
