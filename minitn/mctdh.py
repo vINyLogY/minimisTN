@@ -214,8 +214,9 @@ class MCTDH(PO_DVR):
         a_h = np.conj(a)
         density = self._partial_product(i, a, a_h)
         inv_density = linalg.inv(density + np.identity(m) * err)
-        mat_h = np.conj(np.transpose(mat))
-        projection = np.identity(n) - np.dot(mat, mat_h)
+        sp = self._get_sub_vec(i)
+        sp_h = np.conj(np.transpose(sp))
+        projection = np.identity(n) - np.dot(sp, sp_h)
 
         tmp = partial(i, a, mat)
         for j, mat_j in mod_term:
