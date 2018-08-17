@@ -14,7 +14,7 @@ from builtins import filter, map, range, zip
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy
-from scipy import fftpack
+from scipy import fftpack, linalg
 from scipy.integrate import RK45
 from scipy.sparse.linalg import LinearOperator, eigsh
 
@@ -26,9 +26,29 @@ from minitn.lib.tools import figure
 
 
 class MCTDH(PO_DVR):
+    r""" Structure of the wavefunction/state::
+
+        n_0|   |   |n_p-1
+          C_0 ... C_p-1
+             \ | /
+          m_0 \|/ m_p-1
+               A
+
+    and corresponding Hamiltonian:
+    * Option 1::
+
+          n_0/   \n_p-1
+           h_0   h_p-1
+        n_0/ \   / \n_p-1
+               + r
+               |
+           -- ... --
+
+    Note that the order of contraction is essential.
+    """
     def __init__(self, conf_list, shape_list, fast=False, hbar=1., m_e=1., ):
-        """
-        N-dimensional DVR using sine-DVR for 1-D.
+        r"""
+        N-dimensional DVR using sine-DVR for 1-D::
 
         Parameters
         ----------
@@ -43,237 +63,233 @@ class MCTDH(PO_DVR):
         super(MCTDH, self).__init__(
             conf_list, fast=fast, hbar=hbar, m_e=m_e
         )
-        self.shape_list = shape_list
         # shape[1] is m and shape[0] is n
-        self.shape_m = [shape[1] for shape in shape_list]
-        self.shape_n = [shape[0] for shape in shape_list]
-        size_c_list = [np.prod(shape) for shape in shape_list]
-        self.size_list = [np.prod(shape_m)] + size_c_list
+        shape_a = [shape[1] for shape in shape_list]
+        # add shape of A tensor to the end
+        self.shape_list = shape_list + [shape_a]
+        self.size_list = [np.prod(shape) for shape in shape_list]
         self.size = sum(self.size_list)
 
         self.h_terms = None
+        self.mod_terms = None
         self.vec = None
 
     def gen_h_terms(self, extra=None):
-        """
+        r"""Use a simple seperated Hamiltonian operator::
+
+            h_0 ... h_p-1
+               \ | /
+                \|/
+                 + r
+
+        Notice that r is a index rather than a tensor
+
         Parameters
         ----------
-        extra : [[float -> float]]
+        extra : [[(i, float -> float)]]
 
         Returns
         -------
-        mpo : [(r, n_i, n_i) ndarray]
-            A list of MPO matrix. (with ``length == rank``)
+        h_terms : [[(int, (n_i, n_i) ndarray)]]
+            A list of Hamiltonian matrix. (with ``length == rank``)
         """
-        h_list = [dvr.h_mat() for dvr in self.dvr_list]
-        eye_list = [eye(h.shape[0]) for h in h_list]
-        h_terms = []
-        for i in range(self.rank):
-            h_terms.append([])
-            for j in range(self.rank):
-                op = h_list[j] if j == i else eye_list[j]
-                h_terms[i].append(op)
+        dvr_list = self.dvr_list
+        h_terms = [
+            (i, dvr.h_mat()) for i, dvr in enumerate(self.dvr_list)
+        ]
         if extra is not None:
             for term in extra:
-                zipped = zip(term, self.dvr_list)
-                t_i = [np.diag(func(dvr.grid_points)) for func, dvr in zipped]
-                mpo.extend(t_i)
-        self.h_term = h_terms
-        return self.h_terms
+                t_i = [
+                    (i, np.diag(func(self.grid_points_list[i:])))
+                    for i, func in term
+                ]
+                h_terms.append(t_i)
+        self.h_terms = h_terms
+        return h_terms
 
-    def _init_state(self):
-        """Form the initial vector according to shape list.
+    def update_mod_terms(self):
+        mod_terms = []
+        for term in self.h_terms:
+            mod_terms.append([])
+            for i, h in term:
+                c = self._get_c_mat(i)
+                c_h = np.conj(np.transpose(c))
+                t = (i, np.dot(c_h, h.dot(c)))
+                mod_terms[-1].append(t)
+        self.mod_terms = mod_terms
+        return mod_terms
+
+    def init_state(self):
+        r"""Form the initial vector according to shape list::
+
+            n_0|   |   |n_p-1
+              C_0 ... C_p-1
+                 \ | /
+              m_0 \|/ m_p-1
+                   A
+
         Returns
         -------
         init : (self.size,) ndarray
-            Formally, init = np.append(A, c_1, ..., c_p), where
-            A is a (m_1 * ... * m_p,) ndarray,
-            c_i is a (n_i * m_i,) ndarray, i <- {1, ... p},
-            and N = m_1 * ... * m_p, m_i < n_i.
+            Formally, init = np.append([C_0, ..., C_p-1, A]), where
+            C_i is a (n_i * m_i,) ndarray, i <- {0, ..., p-1},
+            A is a (M,) ndarray,
+            and M = m_0 * ... * m_p-1, m_i < n_i.
         """
         dvr_list = self.dvr_list
         c_list = []
-        for i, shape in enumerate(self.shape_list):
-            m_i = shape[1]
+        for i, (_, m_i) in enumerate(self.shape_list[:-1]):
             _, v_i = dvr_list[i].solve(n_state=m_i)
             v_i = np.transpose(v_i)
             c_list.append(np.reshape(v_i, -1))
-        vec_a = np.zeros(self.size_list[0])
+        vec_a = np.zeros(self.size_list[-1])
         vec_a[0] = 1.0
-        vec_list = [vec_a] + c_list
+        vec_list = c_list + [vec_a]
         init = np.append(vec_list)
         self.vec = init
         return init
 
     def h_mat(self):
+        """Formal Hamiltonian H acting on a MCTDH vector s. t.::
+
+                 .
+        i hbar |vec> = H |vec>
+
+        Returns
+        -------
+            (self.size, self.size) LinearOperator
+        """
         class _EffHamiltonian(LinearOperator):
-            def __init__(self, size_list, op_list):
-                self.size_list = size_list
-                self.op_list = op_list
-                shape = [sum(size_list)] * 2
+            """
+            Parameters
+            ----------
+            instance : MCTDH
+                An MCTDH instance.
+            """
+            def __init__(self, instance):
+                self.size = instance.size
+                self.n = len(instance.h_terms)
+                self.term_func = instance.term_hamiltonian
+                self.updater = instance.updater
+                self.instance = instance
+                shape = [self.size] * 2
                 super(_EffHamiltonian, self).__init__('d', shape)
 
             def _matvec(self, vec):
-                ans_list = []
-                zipped = zip(self.size_list, self.op_list)
-                for s, op in zipped:
-                    vec_i = vec[:s]
-                    vec = vec[s:]
-                    ans_list.append(op.dot(vec_i))
-                ans = np.append(*ans_list)
+                ans = np.zeros(self.size)
+                self.updater()
+                for i in range(self.n):
+                    ans += self.term_func(i, vec)
+                self.instance.vec = ans
                 return ans
 
-        op_list = [self._coeff_op()]
-        for i in range(self.rank):
-            op_list.append(self._sp_op(i))
-        return self._EffHamiltonian(self.size_list, op_list)
+        return _EffHamiltonian(instance)
 
-    def _coeff_op(self):
-        class _Coeff(LinearOperator):
-            def __init__(self, h_terms, c_list):
-                self.shape_m = [c_i.shape[1] for c_i in c_list]
-                shape = [np.prod(shape_m)] * 2
-                super(_Coeff, self).__init__('d', shape)
+    def term_hamiltonian(self, r, vec):
+        """
+        Parameters
+        ----------
+        r : int
+        vec : (self.size,) ndarray
+        """
+        h_term = self.h_terms[r]
+        mod_term = self.mod_terms[r]
+        steps = len(shape_list)
+        ans = []
+        for i in range(steps):
+            v_i = self._get_sub_vec(i, vec)
+            if i < steps - 1:
+                v_i = self._sp_op(i, v_i, h_term, mod_term)
+            else:
+                v_i = self._coeff_op(v_i, mod_term)
+            v_i = np.reshape(v_1, -1)
+            ans.append(v_i)
+        ans = np.append(ans)
+        return ans
 
-                self.h_terms = h_terms
-                self.c_list = c_list
-                new_terms = []
-                for i, term in enumerate(self.h_terms):
-                    new_terms.append([])
-                    zipped = zip(term, c_list)
-                    for h, c in zipped:
-                        c_h = np.conj(np.transpose(c))
-                        t = np.dot(c_h, np.dot(h, c))
-                        new_terms[i].append(t)
-                self.new_terms = new_terms
+    def _sp_op(self, i, mat, h_term, mod_term, err=1.e-8):
+        n, m = mat.shape
+        partial = self._partial_transform
+        a = self._get_sub_vec(-1)
+        a_h = np.conj(a)
+        density = self._partial_product(i, a, a_h)
+        inv_density = linalg.inv(density + np.identity(m) * err)
+        mat_h = np.conj(np.transpose(mat))
+        projection = np.identity(n) - np.dot(mat, mat_h)
 
-            def _matvec(self, vec):
-                shape_in = self.shape_m
-                ans = np.zeros(shape)
-                for term in self.new_terms:
-                    v = vec
-                    for i, h_i in enumerate(term):
-                        shape_out = shape[:i] + shape[i + 1:] + [shape[i]]
-                        v = np.swapaxes(v, -1, i)
-                        v = np.reshape(v, (-1, shape_in[i]))
-                        v = np.array(list(map(h_i.dot, v)))
-                        v = np.reshape(v, shape_out)
-                        v = np.swapaxes(v, -1, i)
-                    ans += v
-                ans = np.reshape(ans, -1)
-                return ans
+        tmp = partial(i, a, mat)
+        for j, mat_j in mod_term:
+            if j != i:
+                tmp = partial(j, tmp, mat_j)
+        for j, mat_j in h_term:
+            if j == i:
+                tmp = partial(i, tmp, mat_j)
+                tmp = partial(i, tmp, projection)
 
-        h_terms = self.h_terms
-        c_list = self._get_c_list()
-        return _Coeff(h_terms, c_list)
+        tmp_h = partial(i, a_h, inv_density)
+        ans = self._partial_product(i, tmp, tmp_h)
+        return ans
 
-    def _get_c_list(self):
-        vec = self.vec[self.size_list[0]:]
-        sizes = self.size_list[1:]
-        zipped = zip(sizes, self.shape_list)
-        c_list = []
-        for s, shape in zipped:
-            vec_i = vec[:s]
-            vec = vec[s:]
-            c_i = np.reshape(vec_i, shape)
-            c_list.append(c_i)
-        return c_list
+    def _coeff_op(self, tensor, mod_term):
+        for i, mat in mod_term:
+            tensor = MCTDH._partial_transform(i, tensor, mat)
+        return tensor
 
-    def _sp_op(self, k):
-        class _Sp(LinearOperator):
-            def __init__(self, k, h_terms, coeff, c_list):
-                self.shape_k = c_list[k].shape
-                self.shape_m = [c_i.shape[1] for c_i in c_list]
-                self.shape_nk = c_list[k].shape[0]
-                self.k = k
-                shape = [np.prod(shape_m)] * 2
-                super(_Sp, self).__init__('d', shape)
+    @staticmethod
+    def _partial_product(i, a, b):
+        r"""
+        Parameters
+        ----------
+        i : int
+        a : (..., n, ...) ndarray
+        b : (..., m, ...) ndarray
 
-                self.h_terms = h_terms
-                self.coeff = coeff
-                self.c_list = c_list
+        Returns
+        -------
+        mat : (n, m) ndarray
+        """
+        a = np.moveaxis(a, i, 0)
+        a = np.reshape(tensor, (m, -1))
+        b = np.moveaxis(b, i, -1)
+        b = np.reshape(b, (-1, m))
+        mat = np.dot(a, b)
+        return mat
 
-            def _matvec(self, vec):
-                # construct with mean field <H>^k and projection
-                k = self.k
-                new_terms = []
-                for i, term in enumerate(self.h_terms):
-                    new_terms.append([])
-                    zipped = zip(term, c_list)
-                    for h, c in zipped:
-                        if i != k:
-                            c_h = np.conj(np.transpose(c))
-                        else:
-                            c_h = self._projection()
-                        t = np.dot(c_h, np.dot(h, c))
-                        new_terms[j].append(t)
+    @staticmethod
+    def _partial_transform(i, tensor, mat):
+        r"""
+        Parameters
+        ----------
+        i : int
+        tensor : (..., m_i, ...) ndarray
+        mat : (n_i, m_i) ndarray
 
-                # construct with coeff
-                shape_in = self.shape_m
-                ans = np.zeros(shape)
-                for term in new_terms:
-                    v = self.coeff
-                    for i, h_i in enumerate(term):
-                        shape_out = shape[:i] + shape[i + 1:] + [-1]
-                        v = np.swapaxes(v, -1, i)
-                        v = np.reshape(v, (-1, shape_in[i]))
-                        v = np.array(list(map(h_i.dot, v)))
-                        v = np.reshape(v, shape_out)
-                        v = np.swapaxes(v, -1, i)
-                    ans += v
+        Returns
+        -------
+        tensor : (..., n_i, ...) ndarray
+        """
+        shape = tensor.shape[:i] + tensor.shape[i + 1:] + [mat.shape[0]]
+        v_i = np.swapaxes(tensor, -1, i)
+        v_i = np.reshape(v_i, (-1, mat.shape[1]))
+        v_i = np.array(list(map(mat.dot, v_i)))
+        v_i = np.reshape(tmp, shape)
+        v_i = np.swapaxes(v_i, -1, i)
+        return v_i
 
-                # construct with coeff_h and inv_density
-                ans = np.swapaxes(ans, -1, _i)
-                coeff_h = np.conj(np.swapaxes(coeff, 0, _i))
-                ans = np.dot(coeff_h, ans)
-                ans = np.dot(self._inv_density(), ans)
-                return ans
+    def _get_sub_vec(self, i, vec=None):
+        """Get C_i mat or A tensor from MCTDH vec.
 
-            def _projection(self):
-                # TODO
-                pass
-
-            def _inv_density(self):
-                # TODO
-                pass
-
-        h_op = super(MCTDH, self).h_mat()
-        coeff = np.reshape(self.vec[:self.size_list[0]], self.shape_m)
-        c_list = self._get_c_list()
-        return _Sp(i, h_op, c_list)
-
-
-# Helper functions
-def _sp_transform(c_list, coeff):
-    r"""Do the contraction::
-
-        n_1|   |   |n_p
-          c_1 ... c_p
-            \  |  /
-         m_1 \ | / m_p
-             coeff
-
-    Parameters
-    ----------
-    c_list : [(n_i, m_i) ndarray]
-        SPF matrix.
-    coeff : (m_1, ..., m_p) ndarray
-        Coefficient tensor in SPF basis.
-
-    Returns
-    -------
-    coeff : (n_1, ..., n_p) ndarray
-        Coefficient tensor in primitive basis.
-    """
-    # shape will be update to the right shape of vec
-    # during iteration
-    shape = coeff.shape
-    for i, c_i in enumerate(c_list):
-        shape = shape[:i] + [c_i.shape[0]] + shape[i + 1:]
-        shape_i = shape[:i] + shape[i + 1:] + [c_i.shape[0]]
-        v_i = np.swapaxes(coeff, -1, i)
-        v_i = np.reshape(v_i, (-1, c_i.shape[1]))
-        v_i = np.array(list(map(c_i.dot, v_i)))
-        v_i = np.reshape(tmp, shape_i)
-        coeff = np.swapaxes(v_i, -1, i)
-    return coeff
+        Parameters
+        ----------
+        i : int
+            If 0 <= i < len(self.shape_list) - 1, return C_i mat, else return
+            A tensor.
+        """
+        if vec is None:
+            vec = self.vec
+        size_list = self.size_list
+        i = i % len(size_list)
+        start = sum(size_list[:i])
+        end = sum(size_list[:i + 1])
+        sub = vec[start:end]
+        return np.reshape(sub, self.shape_list[i])

@@ -816,9 +816,8 @@ class PO_DVR(object):
             )
             self.dvr_list.append(sp_dvr)
         self.dim = np.prod(self.n_list)
-        self.grid_points_list = np.array(
-            [dvr_i.grid_points for dvr_i in self.dvr_list]
-        )
+        self.grid_points_list = [dvr_i.grid_points for dvr_i in self.dvr_list]
+        self.h_list = [dvr_i.h_mat() for i in self.dvr_list]
         self.hbar = hbar
 
         self.v_rst = None
@@ -850,7 +849,7 @@ class PO_DVR(object):
             x = []
             sub = self.subindex(i)
             for j, n in enumerate(sub):
-                x.append(self.grid_points_list[j, n])
+                x.append(self.grid_points_list[j][n])
             v.append(func(x))
         return np.array(v)
 
@@ -900,7 +899,6 @@ class PO_DVR(object):
             def _rmatvec(self, vec):
                 return self._matvec(vec)
 
-        h_list = []
         for i in range(self.rank):
             h_list.append(self.dvr_list[i].h_mat())
         return _Hamiltonian(h_list, self._diag_v_rst)
