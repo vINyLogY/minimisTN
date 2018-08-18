@@ -817,13 +817,16 @@ class PO_DVR(object):
             self.dvr_list.append(sp_dvr)
         self.dim = np.prod(self.n_list)
         self.grid_points_list = [dvr_i.grid_points for dvr_i in self.dvr_list]
-        self.h_list = [dvr_i.h_mat() for i in self.dvr_list]
         self.hbar = hbar
 
+        self.h_list = None
         self.v_rst = None
         self._diag_v_rst = None
         self.energy = None
         self.eigenstates = None
+
+    def energy_expection(self, vec):
+        return expection(self.h_mat(), vec)
 
     def set_v_func(self, v_list, v_rst=None):
         """Set the potential energy function.
@@ -839,6 +842,7 @@ class PO_DVR(object):
         for i, v_i in enumerate(v_list):
             self.dvr_list[i].set_v_func(v_i)
         self.v_rst = v_rst
+        self.h_list = [dvr.h_mat() for dvr in self.dvr_list]
         if self.v_rst is not None:
             self._diag_v_rst = self._calc_diag(self.v_rst)
         return
@@ -899,9 +903,7 @@ class PO_DVR(object):
             def _rmatvec(self, vec):
                 return self._matvec(vec)
 
-        for i in range(self.rank):
-            h_list.append(self.dvr_list[i].h_mat())
-        return _Hamiltonian(h_list, self._diag_v_rst)
+        return _Hamiltonian(self.h_list, self._diag_v_rst)
 
     def solve(self, n_state=1, davidson=False):
         r"""Solve the TISE with the potential energy given.
@@ -920,7 +922,7 @@ class PO_DVR(object):
         eigenstates : np.ndarray
         """
         h_op = self.h_mat()
-        v = self._init_state()
+        v = self.init_state()
         if davidson:
             solver = DavidsonAlgorithm(h_op.dot, [v], n_vals=n_state)
             self.energy, self.eigenstates = solver.kernel()
@@ -929,7 +931,7 @@ class PO_DVR(object):
             self.eigenstates = np.transpose(v)
         return self.energy, self.eigenstates
 
-    def _init_state(self):
+    def init_state(self):
         v = 1.
         for i in range(self.rank):
             _, v_i = self.dvr_list[i].solve(n_state=1)
@@ -966,7 +968,7 @@ class PO_DVR(object):
         return _Mu(diag_mu)
 
     def propagation(self, init=None, start=0., stop=5., max_inter=0.01,
-                    const_energy=True):
+                    const_energy=True, updater=None):
         """A generator doing the propagation.
 
         Parameters
@@ -979,8 +981,10 @@ class PO_DVR(object):
             End point t_1.
         max_inter : float, optional
             Maximum of time gap.
-        const_enengy : bool
+        const_enengy : bool, optional
             Whether to keep energy as a constant
+        updater : -> a, optional
+            Action after computing one step.
 
         Yields
         ------
@@ -988,9 +992,9 @@ class PO_DVR(object):
             (time, (real_vector, imaginary_vector))
         """
         if init is None:
-            init = self._init_state()
+            init = self.init_state()
         h_op = self.h_mat()
-        e0 = expection(h_op, init)
+        e0 = self.energy_expection(init)
         length = len(init)
         init = np.pad(init, (0, length), 'constant')
         factor = 1.0 / self.hbar
@@ -1009,25 +1013,27 @@ class PO_DVR(object):
             t = solver.t
             y = solver.y
             real, imag = y[:length], y[length:]
-            logging.debug(__(
-                "t: {:.3f}, E: {:.8f}, |v|: {:.8f}",
-                t, expection(h_op, real) + expection(h_op, imag),
-                scipy.linalg.norm(solver.y)
+            e = self.energy_expection(real) + self.energy_expection(imag)
+            logging.info(__(
+                "t: {:.3f}, E: {:.8f}, |v|^2: {:.8f}",
+                t, e, scipy.linalg.norm(solver.y) ** 2
             ))
+            if abs(e - e0) > 1.e-8:
+                logging.warning('Energy is not conserved. ')
+                if const_energy:
+                    logging.warning(__(
+                        'Propagation stopped at t = {:.3f}.', solver.t
+                    ))
+                    raise StopIteration
             yield t, (real, imag)
             try:
                 solver.step()
             except RuntimeError:
+                logging.debug('Iterator normal terminated.')
                 raise StopIteration
             else:
-                e = expection(h_op, real) + expection(h_op, imag)
-                if abs(e - e0) > 1.e-8:
-                    logging.warning('Energy is not conserved. ')
-                    if const_energy:
-                        logging.warning(__(
-                            'Propagation stopped at t = {:.3f}.', solver.t
-                        ))
-                        raise StopIteration
+                if updater is not None:
+                    updater(solver)
 
     def plot_propagation(self, init=None, start=0., stop=1.,
                          max_inter=0.01, filt=1.e-6, sample=20):
@@ -1036,7 +1042,7 @@ class PO_DVR(object):
         def string(t):
             return '{:08d}'.format(int(t))
         if init is None:
-            init = self._init_state()
+            init = self.init_state()
         it = self.propagation(
             init=init, start=start, stop=stop, max_inter=max_inter)
         plotter = self.plot_wf(init, string(0))
@@ -1083,7 +1089,8 @@ class PO_DVR(object):
             else:
                 vec, msg = received
 
-    def autocorrelation(self, init=None, stop=5., max_inter=0.01):
+    def autocorrelation(self, init=None, stop=5., max_inter=0.01,
+                        get_coeff=None):
         """Time autocorrelation function generator.
 
         Yields
@@ -1097,6 +1104,8 @@ class PO_DVR(object):
         )
         dot = np.dot
         for i, (tau, (real, imag)) in enumerate(it):
+            if get_coeff is not None:
+                real, imag = map(get_coeff, (real, imag))
             if tau >= t_2:
                 raise StopIteration
             t = tau * 2

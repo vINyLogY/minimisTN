@@ -21,7 +21,7 @@ def main():
     po_dvr = PO_DVR(conf_list, fast=False)
     # po_dvr.set_v_func(vf_list)
     # _, v = po_dvr.solve()
-    c = 0.5
+    c = 0.25
     logging.info(__('c: {:f}', c))
     v_rst = PotentialFunction.linear_corr(c)
     po_dvr.set_v_func(vf_list, v_rst=v_rst)

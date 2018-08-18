@@ -7,7 +7,7 @@ from __future__ import absolute_import, division
 import contextlib
 import logging
 from builtins import map, range, zip
-from functools import wraps
+from functools import wraps, partial
 from itertools import tee
 from operator import itemgetter
 from time import time
@@ -51,7 +51,7 @@ __ = BraceMessage
 
 def time_this(func):
     @wraps(func)
-    def timed(*args, **kwargs):
+    def _time_this(*args, **kwargs):
         start = time()
         r = func(*args, **kwargs)
         end = time()
@@ -59,7 +59,8 @@ def time_this(func):
             __('{}.{} : {}', func.__module__, func.__name__, end - start)
         )
         return r
-    return timed
+
+    return _time_this
 
 
 @contextlib.contextmanager

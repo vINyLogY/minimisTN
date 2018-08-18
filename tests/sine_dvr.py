@@ -5,8 +5,10 @@ from __future__ import division
 import logging
 import sys
 
+import _context
 from minitn.dvr import FastSineDVR, SineDVR
-from minitn.lib.numerical import PotentialFunction
+from minitn.lib.numerical import PotentialFunction, expection
+from minitn.lib.tools import __
 
 
 def test_sine_dvr(x0, L, n, v_func, n_plot=None, message=None, fast=False):
@@ -20,6 +22,11 @@ def test_sine_dvr(x0, L, n, v_func, n_plot=None, message=None, fast=False):
     e, v = sine_dvr.solve()
     for i, e_i in enumerate(e[:6]):
         logging.info('e{}: {}'.format(i, e_i))
+    v0 = expection(sine_dvr.v_mat(), v[0])
+    t0 = expection(sine_dvr.t_mat(), v[0])
+    logging.info(__(
+        'v0: {}; t0: {}', v0, t0
+    ))
     sine_dvr.plot_eigen(npts=100, n_plot=n_plot, scale=1.)
     sine_dvr.plot_dvr(npts=100)
     return
