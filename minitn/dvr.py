@@ -967,8 +967,10 @@ class PO_DVR(object):
         diag_mu = self._calc_diag(lambda args: 1. - args[dim])
         return _Mu(diag_mu)
 
-    def propagation(self, init=None, start=0., stop=5., max_inter=0.01,
-                    const_energy=True, updater=None):
+    def propagation(
+        self, init=None, start=0., stop=5., max_inter=0.01,
+        const_energy=False, updater=None, normalizer=None
+    ):
         """A generator doing the propagation.
 
         Parameters
@@ -985,6 +987,7 @@ class PO_DVR(object):
             Whether to keep energy as a constant
         updater : -> a, optional
             Action after computing one step.
+        normalizer : (2N,) ndarray -> (2N,) ndarray
 
         Yields
         ------
@@ -1010,13 +1013,17 @@ class PO_DVR(object):
             max_step=max_inter
         )
         while True:
+            # Normalization
+            # if normalizer is not None:
+            #     solver.y = normalizer(solver.y)
+
             t = solver.t
             y = solver.y
             real, imag = y[:length], y[length:]
             e = self.energy_expection(real) + self.energy_expection(imag)
             logging.info(__(
                 "t: {:.3f}, E: {:.8f}, |v|^2: {:.8f}",
-                t, e, scipy.linalg.norm(solver.y) ** 2
+                t, e, scipy.linalg.norm(y) ** 2
             ))
             if abs(e - e0) > 1.e-8:
                 logging.warning('Energy is not conserved. ')
@@ -1090,7 +1097,7 @@ class PO_DVR(object):
                 vec, msg = received
 
     def autocorrelation(self, init=None, stop=5., max_inter=0.01,
-                        get_coeff=None):
+                        get_coeff=None, normalizer=None):
         """Time autocorrelation function generator.
 
         Yields
@@ -1100,8 +1107,9 @@ class PO_DVR(object):
         """
         t_2 = stop / 2
         it = self.propagation(
-            init=init, start=0., stop=stop / 2, max_inter=max_inter
-        )
+            init=init, start=0., stop=stop / 2, max_inter=max_inter,
+            normalizer=normalizer
+            )
         dot = np.dot
         for i, (tau, (real, imag)) in enumerate(it):
             if get_coeff is not None:

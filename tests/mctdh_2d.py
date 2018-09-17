@@ -39,16 +39,18 @@ def test_mctdh(x0, L, m, n, v_func):
         'E0: {:.8f}', case.expection(init)
     ))
     logging.info('=' * 60)
-    length = 10.
+    length = 5.
     window = WindowFunction.g0prime(length)
-    freq, sigma = case.spectrum(
-        length=length, max_inter=0.001, window=window
-    )
+    t, auto = zip(*case.autocorrelation(
+        stop=length, max_inter=0.001
+        ))
+    # freq, sigma = case.spectrum(
+    #     length=length, max_inter=0.001, window=None
+    # )
     with figure() as fig:
-        plt.plot(freq, np.abs(sigma), '.')
-        plt.plot(freq, np.abs(sigma), 'k-')
-        plt.xlim(-1., 20.)
-        plt.savefig('MCTDH-spectrum.svg')
+        plt.plot(t, np.abs(auto), '.')
+        plt.plot(t, np.abs(auto), 'k-')
+        plt.show()
     return
 
 

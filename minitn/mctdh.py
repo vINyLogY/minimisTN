@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
-r"""A Simple DVR Program (n-D)
+r"""A Simple MCTDH Program, Based on PO-DVR
 
 References
 ----------
@@ -11,6 +11,7 @@ from __future__ import absolute_import, division
 import logging
 from builtins import filter, map, range, zip
 from functools import partial
+from math import sqrt
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -244,6 +245,7 @@ class MCTDH(PO_DVR):
 
         tmp_h = partial(i, a_h, inv_density)
         ans = self._partial_product(i, tmp, tmp_h)
+
         return ans
 
     def _coeff_op(self, tensor, mod_term):
@@ -338,19 +340,44 @@ class MCTDH(PO_DVR):
             return
 
         return func(
-            *args, updater=_updater, const_energy=False, **kwargs
+            *args, updater=_updater, **kwargs
         )
 
     def autocorrelation(self, *args, **kwargs):
         func = super(MCTDH, self).autocorrelation
         __doc__ = func.__doc__
+        dot = np.dot
 
         def _get_coeff(vec):
             ans = self.get_sub_vec(-1, vec)
             ans = np.reshape(ans, -1)
             return ans
 
-        return func(*args, get_coeff=_get_coeff, **kwargs)
+        def _normalizer(combined_vec):
+            length = self.size
+            real, imag = combined_vec[:length], combined_vec[length:]
+            new_real, new_imag = [], []
+            for i in range(-1, self.rank):
+                get_sub_vec_i = partial(self.get_sub_vec, i)
+                real_i, imag_i = map(get_sub_vec_i, (real, imag))
+                real_i = np.reshape(real_i, -1)
+                imag_i = np.reshape(imag_i, -1)
+                if i == -1:
+                    std_norm = sqrt(1.0)
+                else:
+                    std_norm = sqrt(self.shape_list[i][1])
+                norm = (
+                    (dot(real_i, real_i) + dot(imag_i, imag_i))**0.5 / std_norm
+                )
+                new_real.append(real_i / norm)
+                new_imag.append(imag_i / norm)
+            ans = np.concatenate(new_real + new_imag, axis=None)
+            return ans
+
+        return func(
+            *args, get_coeff=_get_coeff, normalizer=_normalizer,
+            **kwargs
+        )
 
 
 

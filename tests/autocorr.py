@@ -37,18 +37,23 @@ def main():
     #     'norm_0: {}', scipy.linalg.norm(init)
     # ))
     # e0 = expection(po_dvr.h_mat(), po_dvr.init_state())
+    t, auto = zip(*po_dvr.autocorrelation(
+        stop=length, max_inter=0.001
+        ))
+    with figure() as fig1:
+        plt.plot(t, np.abs(np.real(auto)))
+        plt.show()
+
     freq, sigma = po_dvr.spectrum(
-        init=init, length=length, max_inter=0.001, window=window)
+        init=init, length=length, max_inter=0.001, window=window
+    )
     # freq -= e0
-    # with figure() as fig1:
-    #     plt.plot(t, np.abs(auto))
-    #     plt.show()
     with figure() as fig2:
         plt.plot(freq, np.abs(sigma), '.')
         plt.plot(freq, np.abs(sigma), 'k-')
         plt.xlim(-1., 5.)
         plt.ylim(0., 1.)
-        plt.show()
+        plt.savefig('spectrum.svg')
 
 if __name__ == '__main__':
     main()
