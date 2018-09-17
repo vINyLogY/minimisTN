@@ -1014,8 +1014,8 @@ class PO_DVR(object):
         )
         while True:
             # Normalization
-            # if normalizer is not None:
-            #     solver.y = normalizer(solver.y)
+            if normalizer is not None:
+                solver.y = normalizer(solver.y)
 
             t = solver.t
             y = solver.y
@@ -1097,7 +1097,7 @@ class PO_DVR(object):
                 vec, msg = received
 
     def autocorrelation(self, init=None, stop=5., max_inter=0.01,
-                        get_coeff=None, normalizer=None):
+                        get_coeff=None, **kwargs):
         """Time autocorrelation function generator.
 
         Yields
@@ -1107,8 +1107,7 @@ class PO_DVR(object):
         """
         t_2 = stop / 2
         it = self.propagation(
-            init=init, start=0., stop=stop / 2, max_inter=max_inter,
-            normalizer=normalizer
+            init=init, start=0., stop=stop / 2, max_inter=max_inter, **kwargs
             )
         dot = np.dot
         for i, (tau, (real, imag)) in enumerate(it):
@@ -1120,7 +1119,8 @@ class PO_DVR(object):
             auto = dot(real, real) - dot(imag, imag) + 2.0j * dot(real, imag)
             yield t, auto
 
-    def spectrum(self, init=None, length=5., max_inter=0.01, window=None):
+    def spectrum(self, init=None, length=5., max_inter=0.01, window=None,
+                 **kwargs):
         """Power spectrum.
 
         Parameters
@@ -1137,7 +1137,7 @@ class PO_DVR(object):
         sigma : [complex]
         """
         t, auto = zip(*self.autocorrelation(
-            init=init, stop=length, max_inter=max_inter
+            init=init, stop=length, max_inter=max_inter, **kwargs
         ))
         n = len(t)
         tau = (t[-1] - t[0]) / (n - 1)

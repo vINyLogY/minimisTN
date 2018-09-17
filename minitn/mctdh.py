@@ -6,7 +6,7 @@ References
 ----------
 .. [1] J. Chem. Phys. 119, 1289 (2003)
 """
-from __future__ import absolute_import, division
+from __future__ import absolute_import, division, print_function
 
 import logging
 from builtins import filter, map, range, zip
@@ -331,16 +331,43 @@ class MCTDH(PO_DVR):
             ans += np.dot(a_h, h_a)
         return ans
 
-    def propagation(self, *args, **kwargs):
+    def propagation(self, renormalize=False, *args, **kwargs):
         func = super(MCTDH, self).propagation
         __doc__ = func.__doc__
+        dot = np.dot
 
         def _updater(instance):
             self.vec = instance.y
             return
 
+        def _normalizer(combined_vec):
+            length = self.size
+            real, imag = combined_vec[:length], combined_vec[length:]
+            new_real, new_imag = [], []
+            for i in range(self.rank + 1):
+                get_sub_vec_i = partial(self.get_sub_vec, i)
+                real_i, imag_i = map(get_sub_vec_i, (real, imag))
+                real_i = np.reshape(real_i, -1)
+                imag_i = np.reshape(imag_i, -1)
+                if i == self.rank:
+                    std_norm = sqrt(1.0)
+                else:
+                    std_norm = sqrt(self.shape_list[i][1])
+                norm = (
+                    (dot(real_i, real_i) + dot(imag_i, imag_i))**0.5 / std_norm
+                )
+                logging.debug(__(
+                    'norm {}: {}', i, norm
+                ))
+                new_real.append(real_i / norm)
+                new_imag.append(imag_i / norm)
+            ans = np.concatenate(new_real + new_imag, axis=None)
+            return ans
+
+        normalizer = _normalizer if renormalize else None
+
         return func(
-            *args, updater=_updater, **kwargs
+            *args, updater=_updater, normalizer=normalizer, **kwargs
         )
 
     def autocorrelation(self, *args, **kwargs):
@@ -353,32 +380,10 @@ class MCTDH(PO_DVR):
             ans = np.reshape(ans, -1)
             return ans
 
-        def _normalizer(combined_vec):
-            length = self.size
-            real, imag = combined_vec[:length], combined_vec[length:]
-            new_real, new_imag = [], []
-            for i in range(-1, self.rank):
-                get_sub_vec_i = partial(self.get_sub_vec, i)
-                real_i, imag_i = map(get_sub_vec_i, (real, imag))
-                real_i = np.reshape(real_i, -1)
-                imag_i = np.reshape(imag_i, -1)
-                if i == -1:
-                    std_norm = sqrt(1.0)
-                else:
-                    std_norm = sqrt(self.shape_list[i][1])
-                norm = (
-                    (dot(real_i, real_i) + dot(imag_i, imag_i))**0.5 / std_norm
-                )
-                new_real.append(real_i / norm)
-                new_imag.append(imag_i / norm)
-            ans = np.concatenate(new_real + new_imag, axis=None)
-            return ans
-
         return func(
-            *args, get_coeff=_get_coeff, normalizer=_normalizer,
+            *args, get_coeff=_get_coeff,
             **kwargs
         )
-
 
 
 # EOF

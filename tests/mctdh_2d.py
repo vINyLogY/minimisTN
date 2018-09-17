@@ -42,7 +42,8 @@ def test_mctdh(x0, L, m, n, v_func):
     length = 5.
     window = WindowFunction.g0prime(length)
     t, auto = zip(*case.autocorrelation(
-        stop=length, max_inter=0.001
+        stop=length, max_inter=0.001, const_energy=False,
+        renormalize=True
         ))
     # freq, sigma = case.spectrum(
     #     length=length, max_inter=0.001, window=None
