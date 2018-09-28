@@ -25,7 +25,7 @@ def main():
     logging.info(__('c: {:f}', c))
     v_rst = PotentialFunction.linear_corr(c)
     po_dvr.set_v_func(vf_list, v_rst=v_rst)
-    po_dvr.plot_propagation(stop=1., max_inter=0.01)
+    po_dvr.plot_propagation(stop=10., max_inter=0.01)
     # for i in po_dvr.propagation(stop=1., max_inter=0.01):
     #     continue
 

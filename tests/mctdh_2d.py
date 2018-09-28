@@ -20,7 +20,7 @@ from minitn.lib.tools import time_this, figure
 from minitn.mctdh import MCTDH
 
 
-def linear(x, c=0.1):
+def linear(x, c=0.25):
     return sqrt(c) * x
 
 
@@ -41,19 +41,21 @@ def test_mctdh(x0, L, m, n, v_func, c):
         'E0: {:.8f}', case.expection(init)
     ))
     logging.info('=' * 60)
-    length = 30.
+    length = 50.
     window = WindowFunction.g0prime(length)
     t, auto = zip(*case.autocorrelation(
-        stop=length, max_inter=0.001, const_energy=True,
+        stop=length, max_inter=0.001, const_energy=False,
         renormalize=True
         ))
     # freq, sigma = case.spectrum(
     #     length=length, max_inter=0.001, window=None
     # )
+    np.save('t_auto_MCTDH', t)
+    np.save('auto_MCTDH', auto)
     with figure() as fig:
         plt.plot(t, np.abs(auto), '.')
         plt.plot(t, np.abs(auto), 'k-')
-        namestr = 'MCTDH-C{}.svg'.format(c)
+        namestr = 'MCTDH-C{}.pdf'.format(c)
         plt.savefig(namestr)
     return
 
@@ -62,10 +64,9 @@ def main():
     import time
     x0, L, m, n = -5., 10., 10, 40
     v_func = PotentialFunction.sho()
-    for i in range(30):
-        c = i * 0.01
-        test_mctdh(x0, L, m, n, v_func, c=c)
+    test_mctdh(x0, L, m, n, v_func, c=0.25)
 
 
 if __name__ == '__main__':
+    logging.root.setLevel(logging.INFO)
     main()

@@ -346,22 +346,21 @@ class DVR(object):
             n_plot = len(self.energy)
         x = np.linspace(x_min, x_max, npts)
         vx = [self.v_func(x_) for x_ in x]
-        fig = plt.figure()
-        plt.subplots_adjust(left=0.1, right=0.9, bottom=0.1, top=0.9)
-        plt.plot(x, vx, 'k-', lw=2)
-        y_min = min(vx)
-        y_max = self.v_func(0)
-        for i in range(n_plot):
-            e = self.energy[i]
-            plt.plot([x[0], x[-1]], [e, e], '--', color='gray')
-            phi = (self.dvr2cont(self.eigenstates[i]))(x)
-            plt.plot(x, scale * phi + e)
-            y_max = min(y_min, e - scale * min(phi))
-            y_max = max(y_max, e + scale * max(phi))
-        plt.xlim(x_min, x_max)
-        plt.ylim(y_min, 1.05 * y_max)
-        plt.savefig('eigenstates-{}.png'.format(self.comment))
-        plt.close(fig)
+        with figure() as fig:
+            plt.subplots_adjust(left=0.1, right=0.9, bottom=0.1, top=0.9)
+            plt.plot(x, vx, 'k-', lw=2)
+            y_min = min(vx)
+            y_max = self.v_func(0)
+            for i in range(n_plot):
+                e = self.energy[i]
+                plt.plot([x[0], x[-1]], [e, e], '--', color='gray')
+                phi = (self.dvr2cont(self.eigenstates[i]))(x)
+                plt.plot(x, scale * phi + e)
+                y_max = min(y_min, e - scale * min(phi))
+                y_max = max(y_max, e + scale * max(phi))
+            plt.xlim(x_min, x_max)
+            plt.ylim(y_min, 1.05 * y_max)
+            plt.savefig('eigenstates-{}.pdf'.format(self.comment))
         return
 
     def plot_func(self, func_list, x_min, x_max,
@@ -382,17 +381,16 @@ class DVR(object):
         if npts is None:
             npts = self.n
         x = np.linspace(x_min, x_max, npts)
-        fig = plt.figure()
-        plt.subplots_adjust(left=0.1, right=0.9, bottom=0.1, top=0.9)
-        for func in func_list:
-            chi = func(x)
-            y_max = max(y_max, max(chi))
-            y_min = min(y_min, min(chi))
-            plt.plot(x, chi)
-        plt.xlim(x_min, x_max)
-        plt.ylim(y_min * 1.05, y_max * 1.05)
-        plt.savefig('functions-{}.png'.format(self.comment))
-        plt.close(fig)
+        with figure() as fig:
+            plt.subplots_adjust(left=0.1, right=0.9, bottom=0.1, top=0.9)
+            for func in func_list:
+                chi = func(x)
+                y_max = max(y_max, max(chi))
+                y_min = min(y_min, min(chi))
+                plt.plot(x, chi)
+            plt.xlim(x_min, x_max)
+            plt.ylim(y_min * 1.05, y_max * 1.05)
+            plt.savefig('functions-{}.pdf'.format(self.comment))
         return
 
     def plot_dvr(self, x_min, x_max, npts=None, indices=None):
@@ -414,22 +412,21 @@ class DVR(object):
         x = np.linspace(x_min, x_max, npts)
         y_min = 0.
         y_max = 0.
-        fig = plt.figure()
-        plt.subplots_adjust(left=0.1, right=0.9, bottom=0.1, top=0.9)
-        for i in indices:
-            x_i = self.grid_points[i]
-            plt.plot([x_i, x_i], [-10., 10.], '--', color='gray')
-            chi = (self.dvr_func(i))(x)
-            if (self.dvr_func(i))(x_i) < 0.:
-                chi = -1. * chi
-            y_max = max(y_max, max(chi))
-            y_min = min(y_min, min(chi))
-            plt.plot(x, chi)
-        plt.plot([x_min, x_max], [0., 0.], 'k-')
-        plt.xlim(x_min, x_max)
-        plt.ylim(y_min * 1.05, y_max * 1.05)
-        plt.savefig('dvr_functions-{}.png'.format(self.comment))
-        plt.close(fig)
+        with figure() as fig:
+            plt.subplots_adjust(left=0.1, right=0.9, bottom=0.1, top=0.9)
+            for i in indices:
+                x_i = self.grid_points[i]
+                plt.plot([x_i, x_i], [-10., 10.], '--', color='gray')
+                chi = (self.dvr_func(i))(x)
+                if (self.dvr_func(i))(x_i) < 0.:
+                    chi = -1. * chi
+                y_max = max(y_max, max(chi))
+                y_min = min(y_min, min(chi))
+                plt.plot(x, chi)
+            plt.plot([x_min, x_max], [0., 0.], 'k-')
+            plt.xlim(x_min, x_max)
+            plt.ylim(y_min * 1.05, y_max * 1.05)
+            plt.savefig('dvr_functions-{}.pdf'.format(self.comment))
         return
 
 
@@ -1089,7 +1086,7 @@ class PO_DVR(object):
             with figure() as fig:
                 plt.contourf(x, y, vec, bound, cmap='seismic')
                 plt.colorbar(boundaries=bound)
-                plt.savefig('functions-{}.png'.format(msg))
+                plt.savefig('functions-{}.pdf'.format(msg))
             received = yield
             if received is None:
                 raise StopIteration

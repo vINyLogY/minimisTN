@@ -4,6 +4,8 @@
 tst.*
 *.txt
 !/requirements.txt
+*.pdf
+*.npy
 
 # Optimized
 *.py[cod]

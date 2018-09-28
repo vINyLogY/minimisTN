@@ -217,7 +217,7 @@ class MCTDH(PO_DVR):
         ans = np.concatenate(ans, axis=None)
         return ans
 
-    def _sp_op(self, i, mat, h_list, mod_term, err=1.e-8):
+    def _sp_op(self, i, mat, h_list, mod_term, err=1.e-6):
         if not h_list:
             return np.zeros((mat.shape))
 
