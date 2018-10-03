@@ -38,33 +38,34 @@ def test_mctdh(x0, L, m, n, v_func, c):
     init = case.init_state()
     logging.info(__('shape of init vec: {}', init.shape))
     logging.info(__(
-        'E0: {:.8f}', case.expection(init)
+        'E0: {:.8f}', case.energy_expection(init)
     ))
     logging.info('=' * 60)
     length = 50.
     window = WindowFunction.g0prime(length)
     t, auto = zip(*case.autocorrelation(
-        stop=length, max_inter=0.001, const_energy=False,
+        stop=length, max_inter=0.001, const_energy=None,
         renormalize=True
         ))
     # freq, sigma = case.spectrum(
     #     length=length, max_inter=0.001, window=None
     # )
-    np.save('t_auto_MCTDH', t)
-    np.save('auto_MCTDH', auto)
-    with figure() as fig:
-        plt.plot(t, np.abs(auto), '.')
-        plt.plot(t, np.abs(auto), 'k-')
-        namestr = 'MCTDH-C{}.pdf'.format(c)
-        plt.savefig(namestr)
+    np.save('t_auto_MCTDH_{}'.format(m), t)
+    np.save('auto_MCTDH_{}'.format(m), auto)
+    # with figure() as fig:
+    #     plt.plot(t, np.abs(auto), '.')
+    #     plt.plot(t, np.abs(auto), 'k-')
+    #     namestr = 'MCTDH-C{}.pdf'.format(c)
+    #     plt.savefig(namestr)
     return
 
 
 def main():
     import time
-    x0, L, m, n = -5., 10., 10, 40
+    x0, L, n = -5., 10., 40
     v_func = PotentialFunction.sho()
-    test_mctdh(x0, L, m, n, v_func, c=0.25)
+    for m in range(10):
+        test_mctdh(x0, L, m, n, v_func, c=0.25)
 
 
 if __name__ == '__main__':

@@ -880,7 +880,7 @@ class PO_DVR(object):
 
             def _matvec(self, vec):
                 v = np.reshape(vec, self.io_sizes)
-                ans = np.zeros(self.io_sizes)
+                ans = np.zeros_like(v)
                 for i, h_i in enumerate(self.h_list):
                     v_i = np.swapaxes(v, -1, i)
                     size_i = (
@@ -966,7 +966,7 @@ class PO_DVR(object):
 
     def propagation(
         self, init=None, start=0., stop=5., max_inter=0.01,
-        const_energy=False, updater=None, normalizer=None
+        const_energy=None, updater=None, normalizer=None
     ):
         """A generator doing the propagation.
 
@@ -996,13 +996,13 @@ class PO_DVR(object):
         h_op = self.h_mat()
         e0 = self.energy_expection(init)
         length = len(init)
-        init = np.pad(init, (0, length), 'constant')
+        init = init.astype(complex)
         factor = 1.0 / self.hbar
 
         def propagator(t, y):
-            real, imag = y[:length], y[length:]
+            real, imag = y.real, y.imag
             real, imag = factor * h_op(imag), -factor * h_op(real)
-            y = np.append(real, imag)
+            y = real + 1.0j * imag
             return y
 
         solver = RK45(
@@ -1016,15 +1016,15 @@ class PO_DVR(object):
 
             t = solver.t
             y = solver.y
-            real, imag = y[:length], y[length:]
-            e = self.energy_expection(real) + self.energy_expection(imag)
-            logging.info(__(
+            real, imag = y.real, y.imag
+            e = self.energy_expection(y)
+            logging.debug(__(
                 "t: {:.3f}, E: {:.8f}, |v|^2: {:.8f}",
                 t, e, scipy.linalg.norm(y) ** 2
             ))
             if abs(e - e0) > 1.e-8:
                 logging.warning('Energy is not conserved. ')
-                if const_energy:
+                if const_energy and abs(e - e0) > const_energy:
                     logging.warning(__(
                         'Propagation stopped at t = {:.3f}.', solver.t
                     ))

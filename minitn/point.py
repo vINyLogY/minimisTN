@@ -296,11 +296,14 @@ class Point(object):
 
 
 class ML_MCTDH(object):
-    pass
+    raise NotImplementedError
 
 
 def main():
-    pass
+    raise NotImplementedError
 
+
+if __name__ == '__main__':
+    main()
 
 # EOF

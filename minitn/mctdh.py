@@ -115,16 +115,25 @@ class MCTDH(PO_DVR):
         self.h_terms = h_terms
         return h_terms
 
-    def update_mod_terms(self):
+    def update_mod_terms(self, vec=None, write=True):
+        def _eval(op, vec):
+            vec_h = np.conj(np.transpose(vec))
+            mod_op = np.dot(vec_h, np.dot(op, vec))
+            return mod_op
+
         mod_terms = []
         for term in self.h_terms:
             mod_terms.append([])
             for i, h in term:
-                c = self.get_sub_vec(i)
-                c_h = np.conj(np.transpose(c))
-                t = (i, np.dot(c_h, h.dot(c)))
+                c = self.get_sub_vec(i, vec=vec)
+                real, imag = c.real, c.imag
+                eval_ = partial(_eval, h)
+                h_real, h_imag = map(eval_, (real, imag))
+                mod_h = h_real + h_imag
+                t = (i, mod_h)
                 mod_terms[-1].append(t)
-        self.mod_terms = mod_terms
+        if write:
+            self.mod_terms = mod_terms
         return mod_terms
 
     def init_state(self):
@@ -154,6 +163,7 @@ class MCTDH(PO_DVR):
         vec_list = c_list + [vec_a]
         init = np.concatenate(vec_list, axis=None)
         self.vec = init
+        self.update_mod_terms()
         return init
 
     def h_mat(self):
@@ -175,17 +185,14 @@ class MCTDH(PO_DVR):
             """
             def __init__(self, instance):
                 self.size = instance.size
-                self.n = len(instance.h_terms)
+                self.n_terms = len(instance.h_terms)
                 self.term_func = instance.term_hamiltonian
-                self.updater = instance.update_mod_terms
-                self.instance = instance
                 shape = [self.size] * 2
                 super(_EffHamiltonian, self).__init__('d', shape)
 
             def _matvec(self, vec):
-                self.updater()
-                ans = np.zeros(self.size)
-                for i in range(self.n):
+                ans = np.zeros_like(vec, dtype=complex)
+                for i in range(self.n_terms):
                     ans += self.term_func(i, vec)
                 return ans
 
@@ -226,7 +233,7 @@ class MCTDH(PO_DVR):
         ))
 
         n, m = mat.shape
-        partial = self._partial_transform
+        partial_transform = self._partial_transform
         a = self.get_sub_vec(-1)
         a_h = np.conj(a)
         density = self._partial_product(i, a, a_h)
@@ -235,16 +242,14 @@ class MCTDH(PO_DVR):
         sp_h = np.conj(np.transpose(sp))
         projection = np.identity(n) - np.dot(sp, sp_h)
 
-        tmp = partial(i, a, mat)
+        tmp = partial_transform(i, a, mat)
         for mat_j in h_list:
-            tmp = partial(i, tmp, mat_j)
-            tmp = partial(i, tmp, projection)
+            tmp = partial_transform(i, tmp, mat_j)
         for j, mat_j in mod_term:
             if j != i:
-                tmp = partial(j, tmp, mat_j)
-
-        tmp_h = partial(i, a_h, inv_density)
-        ans = self._partial_product(i, tmp, tmp_h)
+                tmp = partial_transform(j, tmp, mat_j)
+        tmp = self._partial_product(i, tmp, a_h)
+        ans = np.dot(projection, np.dot(tmp, inv_density))
 
         return ans
 
@@ -318,13 +323,13 @@ class MCTDH(PO_DVR):
         sub = vec[start:end]
         return np.reshape(sub, self.shape_list[i])
 
-    def expection(self, vec=None):
+    def energy_expection(self, vec=None):
         if vec is None:
             vec = self.vec
         a_tensor = self.get_sub_vec(-1, vec)
-        self.update_mod_terms()
+        mod_terms = self.update_mod_terms(vec=vec, write=False)
         ans = 0.
-        for r, term in enumerate(self.mod_terms):
+        for r, term in enumerate(mod_terms):
             h_a = self._coeff_op(a_tensor, term)
             h_a = np.reshape(h_a, -1)
             a_h = np.conj(np.reshape(a_tensor, -1))
@@ -338,30 +343,26 @@ class MCTDH(PO_DVR):
 
         def _updater(instance):
             self.vec = instance.y
+            self.update_mod_terms()
             return
 
-        def _normalizer(combined_vec):
-            length = self.size
-            real, imag = combined_vec[:length], combined_vec[length:]
-            new_real, new_imag = [], []
+        def _normalizer(vec):
+            ans = []
             for i in range(self.rank + 1):
-                get_sub_vec_i = partial(self.get_sub_vec, i)
-                real_i, imag_i = map(get_sub_vec_i, (real, imag))
-                real_i = np.reshape(real_i, -1)
-                imag_i = np.reshape(imag_i, -1)
+                vec_i = self.get_sub_vec(i, vec)
+                vec_i = np.reshape(vec_i, -1)
                 if i == self.rank:
                     std_norm = sqrt(1.0)
                 else:
                     std_norm = sqrt(self.shape_list[i][1])
                 norm = (
-                    (dot(real_i, real_i) + dot(imag_i, imag_i))**0.5 / std_norm
+                    linalg.norm(vec_i) / std_norm
                 )
                 logging.debug(__(
                     'norm {}: {}', i, norm
                 ))
-                new_real.append(real_i / norm)
-                new_imag.append(imag_i / norm)
-            ans = np.concatenate(new_real + new_imag, axis=None)
+                ans.append(vec_i / norm)
+            ans = np.concatenate(ans, axis=None)
             return ans
 
         normalizer = _normalizer if renormalize else None
