@@ -378,6 +378,9 @@ class MCTDH(PO_DVR):
 
         def _get_coeff(vec):
             ans = self.get_sub_vec(-1, vec)
+            for i in range(self.rank):
+                mat = self.get_sub_vec(i, vec)
+                self._partial_transform(i, ans, mat)
             ans = np.reshape(ans, -1)
             return ans
 

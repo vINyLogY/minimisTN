@@ -48,20 +48,31 @@ def main():
 
     # Plot
     zipped = []
-    for m in range(1, 10):
+    for m in range(10):
+        if not m % 2:
+            continue
         try:
             t_m = np.load('t_auto_MCTDH_{}.npy'.format(m))
             auto_m = np.load('auto_MCTDH_{}.npy'.format(m))
-            zipped.append((t_m, auto_m))
+            zipped.append((m, t_m, auto_m))
         except:
             pass
     with figure() as fig1:
-        plt.plot(t, np.abs(auto), 'b-')
-        for t_m, auto_m in zipped:
-            plt.plot(t_m, np.abs(auto_m), '--')
+        l, = plt.plot(
+            t, np.abs(auto), '-',
+            label='\\textrm{Standard procedure}'
+        )
+        handles = [l]
+        for m, t_m, auto_m in zipped:
+            l, = plt.plot(
+                t_m, np.abs(auto_m), '--',
+                label=r'''$n^{(1)}'''+' = {}$'.format(m)
+            )
+            handles.append(l)
         plt.xlim(xmin=0, xmax=50)
         plt.xlabel(r"""$t$""")
         plt.ylabel(r"""$|a(t)|$""")
+        plt.legend(handles=handles, loc='best')
         plt.savefig('autocorr_MCTDH.pdf')
 
 
