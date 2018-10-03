@@ -272,7 +272,7 @@ class MCTDH(PO_DVR):
 
         Returns
         -------
-        mat : (n, m) ndarray 
+        mat : (n, m) ndarray
             Or return a float if i is None.
         """
         if i is None:
@@ -384,15 +384,9 @@ class MCTDH(PO_DVR):
         partial_transform = self._partial_transform
 
         def _dot(v1, v2):
-            ans = get_sub_vec(-1, v1)
-            for i in range(self.rank):
-                m1 = get_sub_vec(i, v1)
-                m2 = np.transpose(get_sub_vec(i, v2))
-                m = dot(m2, m1)
-                ans = partial_transform(i, ans, m)
-            ans = np.reshape(ans, -1)
+            t1 = np.reshape(get_sub_vec(-1, v1), -1)
             t2 = np.reshape(get_sub_vec(-1, v2), -1)
-            ans = dot(ans, t2)
+            ans = dot(t1, t2)
             return ans
 
         return func(*args, dot=_dot, **kwargs)

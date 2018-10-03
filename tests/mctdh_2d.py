@@ -64,7 +64,7 @@ def main():
     import time
     x0, L, n = -5., 10., 40
     v_func = PotentialFunction.sho()
-    for m in range(1, 10):
+    for m in range(1, 11):
         test_mctdh(x0, L, m, n, v_func, c=0.25)
 
 

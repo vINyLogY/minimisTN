@@ -48,8 +48,8 @@ def main():
 
     # Plot
     zipped = []
-    for m in range(10):
-        if not m % 2:
+    for m in range(1, 11):
+        if m % 2:
             continue
         try:
             t_m = np.load('t_auto_MCTDH_{}.npy'.format(m))
