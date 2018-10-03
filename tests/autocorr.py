@@ -47,23 +47,23 @@ def main():
         np.save('auto', auto)
 
     # Plot
-    try:
-        t_m = np.load('t_auto_MCTDH.npy')
-        auto_m = np.load('auto_MCTDH.npy')
-        with figure() as fig1:
-            plt.plot(t, np.abs(auto), 'b-')
-            plt.plot(t_m, np.abs(auto_m), 'r--')
-            plt.xlim(xmin=0, xmax=50)
-            plt.ylim(ymin=0.98, ymax=1.)
-            plt.xlabel(r"""$t$""")
-            plt.ylabel(r"""$|a(t)|$""")
-            plt.savefig('autocorr_MCTDH.pdf')
-    except:
-        with figure() as fig2:
-            plt.plot(t, np.abs(auto), 'b-')
-            plt.xlabel(r"""$t$""")
-            plt.ylabel(r"""$|a(t)|$""")
-            plt.savefig('autocorr.pdf')
+    zipped = []
+    for m in range(1, 10):
+        try:
+            t_m = np.load('t_auto_MCTDH_{}.npy'.format(m))
+            auto_m = np.load('auto_MCTDH_{}.npy'.format(m))
+            zipped.append((t_m, auto_m))
+        except:
+            pass
+    with figure() as fig1:
+        plt.plot(t, np.abs(auto), 'b-')
+        for t_m, auto_m in zipped:
+            plt.plot(t_m, np.abs(auto_m), '--')
+        plt.xlim(xmin=0, xmax=50)
+        plt.xlabel(r"""$t$""")
+        plt.ylabel(r"""$|a(t)|$""")
+        plt.savefig('autocorr_MCTDH.pdf')
+
 
 if __name__ == '__main__':
     # logging.getLogger().setLevel(logging.INFO)
