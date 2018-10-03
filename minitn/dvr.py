@@ -984,7 +984,7 @@ class PO_DVR(object):
             Whether to keep energy as a constant
         updater : -> a, optional
             Action after computing one step.
-        normalizer : (2N,) ndarray -> (2N,) ndarray
+        normalizer : (N,) ndarray -> (N,) ndarray
 
         Yields
         ------
@@ -1094,7 +1094,7 @@ class PO_DVR(object):
                 vec, msg = received
 
     def autocorrelation(self, init=None, stop=5., max_inter=0.01,
-                        get_coeff=None, **kwargs):
+                        dot=None, **kwargs):
         """Time autocorrelation function generator.
 
         Yields
@@ -1106,10 +1106,9 @@ class PO_DVR(object):
         it = self.propagation(
             init=init, start=0., stop=stop / 2, max_inter=max_inter, **kwargs
             )
-        dot = np.dot
+        if dot is None:
+            dot = np.dot
         for i, (tau, (real, imag)) in enumerate(it):
-            if get_coeff is not None:
-                real, imag = map(get_coeff, (real, imag))
             if tau >= t_2:
                 raise StopIteration
             t = tau * 2

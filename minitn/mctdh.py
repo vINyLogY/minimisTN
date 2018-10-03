@@ -266,20 +266,25 @@ class MCTDH(PO_DVR):
         r"""
         Parameters
         ----------
-        i : int
+        i : {int, None}
         a : (..., n, ...) ndarray
         b : (..., m, ...) ndarray
 
         Returns
         -------
-        mat : (n, m) ndarray
+        mat : (n, m) ndarray 
+            Or return a float if i is None.
         """
-        n = a.shape[i]
-        m = b.shape[i]
-        a = np.moveaxis(a, i, 0)
-        a = np.reshape(a, (n, -1))
-        b = np.moveaxis(b, i, -1)
-        b = np.reshape(b, (-1, m))
+        if i is None:
+            a = np.reshape(a, -1)
+            b = np.reshape(b, -1)
+        else:
+            n = a.shape[i]
+            m = b.shape[i]
+            a = np.moveaxis(a, i, 0)
+            a = np.reshape(a, (n, -1))
+            b = np.moveaxis(b, i, -1)
+            b = np.reshape(b, (-1, m))
         mat = np.dot(a, b)
         return mat
 
@@ -375,19 +380,22 @@ class MCTDH(PO_DVR):
         func = super(MCTDH, self).autocorrelation
         __doc__ = func.__doc__
         dot = np.dot
+        get_sub_vec = self.get_sub_vec
+        partial_transform = self._partial_transform
 
-        def _get_coeff(vec):
-            ans = self.get_sub_vec(-1, vec)
+        def _dot(v1, v2):
+            ans = get_sub_vec(-1, v1)
             for i in range(self.rank):
-                mat = self.get_sub_vec(i, vec)
-                ans = self._partial_transform(i, ans, mat)
+                m1 = get_sub_vec(i, v1)
+                m2 = np.transpose(get_sub_vec(i, v2))
+                m = dot(m2, m1)
+                ans = partial_transform(i, ans, m)
             ans = np.reshape(ans, -1)
+            t2 = np.reshape(get_sub_vec(-1, v2), -1)
+            ans = dot(ans, t2)
             return ans
 
-        return func(
-            *args, get_coeff=_get_coeff,
-            **kwargs
-        )
+        return func(*args, dot=_dot, **kwargs)
 
 
 # EOF
