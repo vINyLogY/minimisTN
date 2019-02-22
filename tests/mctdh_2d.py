@@ -41,7 +41,7 @@ def test_mctdh(x0, L, m, n, v_func, c):
         'E0: {:.8f}', case.energy_expection(init)
     ))
     logging.info('=' * 60)
-    length = 50.
+    length = 1.
     window = WindowFunction.g0prime(length)
     t, auto = zip(*case.autocorrelation(
         stop=length, max_inter=0.001, const_energy=None,
@@ -64,10 +64,10 @@ def main():
     import time
     x0, L, n = -5., 10., 40
     v_func = PotentialFunction.sho()
-    for m in range(1, 11):
+    for m in range(1, 2):
         test_mctdh(x0, L, m, n, v_func, c=0.25)
 
 
 if __name__ == '__main__':
-    logging.root.setLevel(logging.INFO)
+    logging.root.setLevel(logging.DEBUG+1)
     main()

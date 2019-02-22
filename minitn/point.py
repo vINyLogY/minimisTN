@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
-r"""Tensor data structure
+r"""[Deprecated] Tensor data structure
 
 Interface to numpy.ndarray.
 
@@ -32,7 +32,8 @@ class Point(object):
         The shape of the tensor.
     _access : {int: (Point, int)}
     """
-    def __init__(self, array, leaf=False, normalize_axis=None):
+
+    def __init__(self, array=None, leaf=False, normalize_axis=None):
         r"""
         Parameters
         ----------
@@ -51,7 +52,7 @@ class Point(object):
         if (
             leaf and
             array is not None and
-            (ans.ndim != 2 or ans.shape[0] != ans.shape[1])
+            (array.ndim != 2 or array.shape[0] != array.shape[1])
         ):
             raise TypeError('Invalid Point type.')
 
@@ -293,17 +294,5 @@ class Point(object):
             ans = np.reshape(ans, new_shape)
             ans = np.moveaxis(ans, -1, i)
         return ans
-
-
-class ML_MCTDH(object):
-    raise NotImplementedError
-
-
-def main():
-    raise NotImplementedError
-
-
-if __name__ == '__main__':
-    main()
 
 # EOF

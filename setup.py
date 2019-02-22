@@ -23,5 +23,5 @@ setuptools.setup(
         'Topic :: Scientific/Engineering :: Chemistry'
     ],
     packages=setuptools.find_packages(exclude=['docs', 'tests']),
-    install_requires=['matplotlib', 'numpy', 'scipy', 'sympy'],
+    install_requires=['matplotlib', 'numpy', 'scipy', 'sympy', 'future', 'six'],
 )

@@ -33,7 +33,7 @@ def main():
         logging.info(__('c: {:f}', c))
         v_rst = PotentialFunction.linear_corr(c)
         po_dvr.set_v_func(vf_list, v_rst=v_rst)
-        length = 50.
+        length = 1.
         init = None
         # init = (po_dvr.mu_mat(0)).dot(po_dvr.init_state())
         # logging.debug(__(
@@ -50,7 +50,8 @@ def main():
     zipped = []
     for m in range(1, 11):
         if m % 2:
-            continue
+            # continue
+            pass
         try:
             t_m = np.load('t_auto_MCTDH_{}.npy'.format(m))
             auto_m = np.load('auto_MCTDH_{}.npy'.format(m))
@@ -69,7 +70,7 @@ def main():
                 label=r'''$n^{(1)}'''+' = {}$'.format(m)
             )
             handles.append(l)
-        plt.xlim(xmin=0, xmax=50)
+        plt.xlim(xmin=0, xmax=1)
         plt.xlabel(r"""$t$""")
         plt.ylabel(r"""$|a(t)|$""")
         plt.legend(handles=handles, loc='best')
