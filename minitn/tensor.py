@@ -21,6 +21,7 @@ from minitn.lib.tools import __
 
 _empty = object()
 
+
 class Tensor(object):
     r"""
     Attributes
@@ -37,6 +38,7 @@ class Tensor(object):
     _access : {int: (Point, int)}
     _partial_env : {int: 2-d ndarray}
     """
+
     def __init__(self, name=None, array=None, axis=None):
         r"""
         Parameters
@@ -54,7 +56,10 @@ class Tensor(object):
         self._access = {}
 
         # Cache
-        self._partial_env = {}    # {(int, matrix)}, saving mean field 
+        self._partial_env = {}    # {(int, matrix)}, saving mean field
+
+        # For some special methods
+        self.aux = None
         return
 
     def __str__(self):
@@ -62,7 +67,9 @@ class Tensor(object):
         return 'Tensor ' + string if self.name is not None else repr(self)
 
     def set_array(self, array):
-        self._array = np.array(array) if array is not None else None
+        self._array = (
+            np.array(array, dtype='complex128') if array is not None else None
+        )
         return
 
     def reset(self):
@@ -72,8 +79,8 @@ class Tensor(object):
     def array(self):
         if self._array is None:
             raise RuntimeError('No specific array set at {0}!'.format(self))
-        else: 
-            return np.array(self._array)
+        else:
+            return np.array(self._array, dtype='complex128')    # Return a copy
 
     @property
     def shape(self):
@@ -84,10 +91,10 @@ class Tensor(object):
 
     @property
     def order(self):
-        if self.array is None:
+        if self._array is None:
             return None
         else:
-            return self._array.ndim
+            return len(self._array.shape)
 
     @staticmethod
     def link(a, i, b, j):
@@ -182,7 +189,7 @@ class Tensor(object):
     def link_to(self, i, b, j):
         Tensor.link(self, i, b, j)
         return
-    
+
     def unlink_to(self, i):
         try:
             self.check_linkage(i)
@@ -201,13 +208,14 @@ class Tensor(object):
         -----
         tuple : (int, Tensor, int)
         """
+        def key(x): return x[0]
         if axis is _empty:
             axis = self.axis
-        for i, (tensor, j) in self._access.items():
+        for i, (tensor, j) in sorted(self._access.items(), key=key):
             if axis is None or i != axis:
                 yield (i, tensor, j)
 
-    def visitor(self, axis=_empty):
+    def visitor(self, axis=_empty, leaf=True):
         """
         Yield
         -----
@@ -216,7 +224,8 @@ class Tensor(object):
         yield self
         for _, child, j in self.children(axis=axis):
             for tensor in child.visitor(axis=j):
-                yield tensor
+                if leaf or not isinstance(tensor, Leaf):
+                    yield tensor
 
     def linkage_visitor(self, axis=_empty):
         """
@@ -229,44 +238,85 @@ class Tensor(object):
             for linkage in child.linkage_visitor(axis=j):
                 yield linkage
 
-    def partial_env(self, i, proper=False):
+    def partial_env(self, i, proper=False, use_aux=False):
         """
+        Parameters
+        ----------
+        i : {int, None}
+        proper : bool
+        use_aux : bool
+            Whether to use self.aux as conj.
         Returns
         -------
-        ans : 2-d ndarray
+        ans : {2-d ndarray, None}
         """
         if proper:    # Only calculate non-proper subtree directly
                       # to support the Leaf
             child, j = self._access[i]
-            return child.partial_env(j, proper=False)
+            return child.partial_env(j, proper=False, use_aux=use_aux)
 
-        else:    # Main algorithm
+        else:
             # Check the cache
-            if i not in self._partial_env:
+            if i in self._partial_env:
+                return self._partial_env[i]
+            # Main algorithm
+            else:
                 env_ = [
-                    (i_, tensor.partial_env(j, proper=False))
+                    (i_, tensor.partial_env(j, proper=False, use_aux=use_aux))
                     for i_, tensor, j in self.children(axis=i)
                 ]    # Recursively
                 # Make use of the normalization condition
                 if (
-                    i == self.axis and 
+                    i == self.axis and
                     not (True for _, matrix in env_ if matrix is not None)
                 ):
                     ans = None
                 else:
                     temp = self.array
-                    conj = np.conj(self.array)
                     for i_, matrix in env_:
-                        if matrix is not None:
-                            temp = Tensor.partial_product(temp, i_, matrix)
+                        temp = Tensor.partial_product(temp, i_, matrix)
+                    conj = self.aux if use_aux else np.conj(self.array)
                     ans = Tensor.partial_trace(temp, i, conj, i)
-                # Cache the answer
-                self._partial_env[i] = ans
-            # Return the cached answer
-            return self._partial_env[i]
+                # Cache the answer and return
+                if i is not None:
+                    self._partial_env[i] = ans
+                else:
+                    ans = ans if ans is not None else 1.
+                return ans
+
+    def global_inner_product(self):
+        for leaf in self.leaves():
+            leaf.aux = None
+        return self.partial_env(None, use_aux=True)
+        
+    def global_norm(self):
+        for t in self.visitor():
+            t.aux = t.array
+        return self.global_inner_product()
+
+    def local_inner_product(self):
+        a, b, i = self.array, self.aux, self.axis
+        return Tensor.partial_trace(a, i, b, i)
+
+    def local_norm(self):
+        self.aux = self.array
+        return self.local_inner_product()
+
+    def leaves(self):
+        """
+        Returns
+        -------
+        [Leaf]
+        """
+        ans = []
+        for tensor in self.visitor():
+            if isinstance(tensor, Leaf):
+                ans.append(tensor)
+        return ans
 
     def projector(self, comp=False):
-        """
+        """[Deprecated] Return the projector corresponding to self.
+
         Returns
         -------
         ans : ndarray
@@ -291,7 +341,34 @@ class Tensor(object):
 
     @staticmethod
     def partial_product(array1, i, array2, j=0):
-        r"""
+        r"""Times a matrix to a tensor.
+    
+               |
+            -- 1 -i--j- 2 --
+               |
+
+        Parameters
+        ----------
+        array1 : ndarray
+        i : int
+        array2 : {2-d ndarray, None}
+            None means doing nothing
+        j : int
+            Default: 0
+
+        Returns
+        -------
+        ans : ndarray
+        """
+        if array2 is None:
+            return array1
+        else:
+            return Tensor._partial_product(array1, i, array2, j)
+
+    @staticmethod
+    def _partial_product(array1, i, array2, j):
+        r"""Times a matrix to a tensor.
+    
                |
             -- 1 -i--j- 2 --
                |
@@ -321,27 +398,38 @@ class Tensor(object):
 
     @staticmethod
     def partial_trace(array1, i, array2, j):
-        r"""
+        r"""Partial trace of 2 tensors, return a matrix. 
+
                 +----+
+                |    |
             -i- 1 -- 2 -j-
 
         Parameters
         ----------
         array1 : ndarray
-        i : int
+        i : {int, None}
+            if i is None then j must be None.
         array2 : ndarray 
-        j : int
+        j : {int, None}
+            if j is None then i must be None.
         
         Returns
         -------
         ans : ndarray
+            Of shape `(n, m)`
         """
-        shape_1, shape_2 = map(list, (array1.shape, array2.shape))
-        n, m = shape_1[i], shape_2[j]
-        array1 = np.moveaxis(array1, i, 0)
-        array1 = np.reshape(array1, (n, -1))
-        array2 = np.moveaxis(array2, j, -1)
-        array2 = np.reshape(array2, (-1, m))
+        if i is not None and j is not None:
+            shape_1, shape_2 = map(list, (array1.shape, array2.shape))
+            n, m = shape_1[i], shape_2[j]
+            array1 = np.moveaxis(array1, i, 0)
+            array1 = np.reshape(array1, (n, -1))
+            array2 = np.moveaxis(array2, j, -1)
+            array2 = np.reshape(array2, (-1, m))
+        elif i is None and j is None:
+            array1 = np.reshape(array1, -1)
+            array2 = np.reshape(array2, -1)
+        else:
+            raise TypeError('Invalid parameters i={} and j={}!'.format(i, j))
         ans = np.dot(array1, array2)
         return ans
 
@@ -359,6 +447,7 @@ class Leaf(Tensor):
     name : str
     _access : {0: (Tensor, int)}
     """
+
     def __init__(self, name=None, array=None):
         super(Leaf, self).__init__(name=name, array=array, axis=None)
         return
@@ -367,13 +456,17 @@ class Leaf(Tensor):
         string = self.name
         return 'Leaf ' + string if self.name is not None else repr(self)
 
+    @property
+    def array(self):
+        ans = self._array
+        return ans if ans is None else np.array(ans, dtype='complex128')
 
     order = 1    # Treat as an end point in a tensor tree
 
     def reset(self):
         self._array = None
 
-    def partial_env(self, i, proper=False):
+    def partial_env(self, i, proper=False, use_aux=False):
         """
         Returns
         -------
@@ -384,6 +477,6 @@ class Leaf(Tensor):
         elif i != 0:
             raise RuntimeError('For Leaf {} `i` must be 0'.format(self))
         else:
-            return self._array
+            return self.aux if use_aux else self.array
 
 # EOF

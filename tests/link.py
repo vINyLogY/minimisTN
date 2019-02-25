@@ -12,6 +12,8 @@ import numpy as np
 
 from minitn.lib.tools import __
 from minitn.tensor import Tensor, Leaf
+from minitn.dvr import SineDVR
+from minitn.ml import Multi_layer
 
 logging.root.setLevel(logging.DEBUG)
 
@@ -63,7 +65,36 @@ print(m1.projector())
 print(m1.partial_env(1))
 print(m1.partial_env(0))
 
+hlist = []    # \sum_i x_i^2 + \sum_i x_i * x_{i+1}
+low, up, n_dvr = -5., 5., 1
+dvr = SineDVR(low, up, n_dvr)
+# single
+square = lambda x: x ** 2
+dvr.set_v_func(square)
+s_h = dvr.h_mat()
+for leaf in ham:
+    hlist.append([(leaf, s_h)])
+# couple
+"""
+linear = lambda x: x
+dvr.set_v_func(linear)
+l_h = dvr.v_mat()
+for i in range(dofs - 1):
+    term = [(ham[i], l_h), (ham[i + 1], l_h)]
+    hlist.append(term)
+"""
 
+for i, term in enumerate(hlist):
+    print('In term {}:'.format(i))
+    for leaf, array in term:
+        msg = "    leaf: {},\n    array: {}".format(leaf, array)
+        print(msg)
+
+solver = Multi_layer(mps[0], hlist)
+diff = solver.eom()
+for tensor, array in diff.items():
+    msg = "tensor: {},\narray: {}".format(tensor, array)
+    print(msg)
 
 
 # EOF

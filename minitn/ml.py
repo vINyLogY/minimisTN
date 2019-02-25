@@ -19,7 +19,7 @@ from scipy import linalg
 
 from minitn.lib.tools import __
 from minitn.tensor import Tensor, Leaf
-from minitn.dvr import SineDVR, FastSineDVR
+from minitn.dvr import SineDVR
 
 class Multi_layer(object):
     r"""Structure of the wavefunction/state::
@@ -45,6 +45,10 @@ class Multi_layer(object):
 
     Note that the order of contraction is essential.
     """
+    # Coefficient settings...
+    hbar = 1.
+    err = 1.e-6
+
     def __init__(self, root, h_list):
         """
         Parameters
@@ -66,27 +70,34 @@ class Multi_layer(object):
                 leaf.reset()
         return
 
-    def eom(self, err=1.e-6):
-        """Returns the derivative of each Tensor.
+    @classmethod
+    def settings(cls, hbar=1., err=1.e-6):
+        cls.hbar = hbar
+        cls.err = err
+        return
+
+    def eom(self):
+        """Write the derivative of each Tensor in tensor.aux.
+
         Parameters
         ----------
         err : float
             Noise used in inversion.
-
-        Returns
-        -------
-            ans : {Tensor: ndarray}
-
-        TODO: Test this.
+        hbar : float
+            Default is 1.0
         """
         visitor = self.root.visitor
         # All partial densities (and checks)...
         density = {}
         for tensor in visitor():
             tensor.check_completness(strict=True)
+            tensor.aux = None
             axis = tensor.axis
             if axis is None:
-                if tensor is self.root:
+                if tensor is self.root or isinstance(tensor, Leaf):
+                    continue
+                elif isinstance(tensor, Leaf):
+                    tensor.reset()
                     continue
                 else:
                     raise RuntimeError(
@@ -95,34 +106,40 @@ class Multi_layer(object):
             else:
                 density[tensor] = tensor.partial_env(axis, proper=True)
         # Term by term...
-        ans = {}
         for term in self.h_list:
             for leaf, array in term:
                 leaf.set_array(array)
-            for tensor in visitor():
+            for tensor in visitor(leaf=False):
                 partial_env = tensor.partial_env
                 partial_product = Tensor.partial_product
-                axis = tensor.axis
-                m = tensor.shape[axis]
                 # Env Hamiltonians
                 tmp = tensor.array
                 for i in range(tensor.order):
                     env_ = partial_env(i, proper=True)
                     tmp = partial_product(tmp, i, env_)
-                # Trick step: inversion
-                inv = linalg.inv(density[tensor] + np.identity(m) * err)
-                tmp = partial_product(tmp, axis, inv)
-                # Projection
-                tmp_1 = np.array(tmp)
-                array = tensor.array
-                conj_array = np.conj(array)
-                tmp = Tensor.partial_trace(tmp, axis, conj_array, axis)
-                tmp = partial_product(array, axis, tmp, j=1)
-                tmp = tmp_1 - tmp
-                if tensor in ans:
-                    ans[tensor] += tmp
-                else:
-                    ans[tensor] = tmp
+                axis = tensor.axis
+                if axis is not None:
+                    m = tensor.shape[axis]
+                    # Trick step: inversion
+                    inv = linalg.inv(
+                        density[tensor] + np.identity(m) * Multi_layer.err
+                    )
+                    tmp = partial_product(tmp, axis, inv)
+                    # Projection
+                    tmp_1 = np.array(tmp)
+                    array = tensor.array
+                    conj_array = np.conj(array)
+                    tmp = Tensor.partial_trace(tmp, axis, conj_array, axis)
+                    tmp = partial_product(array, axis, tmp, j=1)
+                    tmp = (tmp_1 - tmp)
+                out = tensor.aux
+                tensor.aux = tmp if out is None else out + tmp
+        for tensor in visitor(leaf=False):
+            tensor.aux /= 1.0j * Multi_layer.hbar
+        return
+
+    def propagator(self, diff, ode_inter=0.01):
+        pass
 
 
-
+# EOF

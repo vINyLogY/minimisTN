@@ -33,7 +33,7 @@ def test_mctdh(x0, L, m, n, v_func, c):
     case.set_v_func(vf_list)
     lin = partial(linear, c=c)
     # ex = []    # H_rst = 0
-    ex = [[(0, linear), (1, linear)]]    # H_rst = 0.5xy
+    ex = [[(0, linear), (1, linear)]]    # H_rst = cxy
     case.gen_h_terms(extra=ex, kinetic_only=False)
     init = case.init_state()
     logging.info(__('shape of init vec: {}', init.shape))
