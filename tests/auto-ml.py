@@ -10,7 +10,7 @@ from functools import partial
 
 import numpy as np
 
-from minitn.lib.tools import __, time_this, figure
+from minitn.lib.tools import __, time_this
 from minitn.tensor import Tensor, Leaf
 from minitn.dvr import SineDVR
 from minitn.ml import Multi_layer
@@ -66,28 +66,13 @@ def test_2layers(lower, upper, n_dvr, n_spf, dofs, c):
     solver = Multi_layer(root, h_list)
     h = 0.001
     cmf_step = 10
-    i = 0
-    flag = False
-    for _, r in solver.propagator(h, cmf_step=cmf_step, method='RK4'):
-        if cmf_step is None or i == 0 or i % cmf_step == 0:
-            print('* t: {}'.format(i * h))
-            for tensor in r.visitor(leaf=False):
-                norm = np.sum(tensor.local_norm())
-                msg = "tensor: {}, norm: {}".format(
-                    tensor, norm
-                )
-                print(msg)
-                if norm > 1.1 * n_spf:
-                    logging.warning('Big Norm!')
-                    flag = True
-            logging.info(__(
-                'energy: {}', root.expection()
-            ))
-        i += 1
-        if flag:
-            break
+    m = 10000
+    t, auto = zip(*solver.autocorr(
+        end=m, ode_inter=h, cmf_step=cmf_step, method='RK45'
+    ))
+    np.save('t_auto_ML_{}'.format(m), t)
+    np.save('auto_ML_{}'.format(m), auto)
 
-    print(root.global_norm())
     return
 
 

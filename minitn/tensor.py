@@ -285,21 +285,35 @@ class Tensor(object):
                 return ans
 
     def global_inner_product(self):
+        """No conj
+        """
         for leaf in self.leaves():
             leaf.aux = None
         return self.partial_env(None, use_aux=True)
-        
+
+    def matrix_element(self):
+        for leaf in self.leaves():
+            leaf.aux = leaf.array
+        return self.partial_env(None, use_aux=True)
+
     def global_norm(self):
-        for t in self.visitor():
-            t.aux = t.array
+        for t in self.visitor(leaf=False):
+            t.aux = np.conj(t.array)
         return self.global_inner_product()
 
+    def expection(self):
+        for t in self.visitor(leaf=False):
+            t.aux = np.conj(t.array)
+        return self.matrix_element()
+
     def local_inner_product(self):
+        """No conj
+        """
         a, b, i = self.array, self.aux, self.axis
         return Tensor.partial_trace(a, i, b, i)
 
     def local_norm(self):
-        self.aux = self.array
+        self.aux = np.conj(self.array)
         return self.local_inner_product()
 
     def leaves(self):
@@ -313,6 +327,24 @@ class Tensor(object):
             if isinstance(tensor, Leaf):
                 ans.append(tensor)
         return ans
+
+    def vectorize(self):
+        vec_list = []
+        for t in self.visitor(leaf=False):
+            vec = np.reshape(t.array, -1)
+            vec_list.append(vec)
+        ans = np.concatenate(vec_list, axis=None)
+        return ans
+
+    def tensorize(self, vec):
+        start = 0
+        for t in self.visitor(leaf=False):
+            shape = t.shape
+            end = start + np.prod(shape)
+            array = np.reshape(vec[start:end], shape)
+            t.set_array(array)
+            start = end
+        return
 
     def projector(self, comp=False):
         """[Deprecated] Return the projector corresponding to self.
@@ -342,7 +374,7 @@ class Tensor(object):
     @staticmethod
     def partial_product(array1, i, array2, j=0):
         r"""Times a matrix to a tensor.
-    
+
                |
             -- 1 -i--j- 2 --
                |
@@ -368,7 +400,7 @@ class Tensor(object):
     @staticmethod
     def _partial_product(array1, i, array2, j):
         r"""Times a matrix to a tensor.
-    
+
                |
             -- 1 -i--j- 2 --
                |
@@ -412,7 +444,7 @@ class Tensor(object):
         array2 : ndarray 
         j : {int, None}
             if j is None then i must be None.
-        
+
         Returns
         -------
         ans : ndarray
