@@ -10,13 +10,19 @@ from functools import partial
 
 import numpy as np
 
-from minitn.lib.tools import __, time_this
+from minitn.lib.tools import __, time_this, figure
 from minitn.tensor import Tensor, Leaf
 from minitn.dvr import SineDVR
+from minitn.mctdh import MCTDH
 from minitn.ml import Multi_layer
 
 
-@time_this
+def square(x): return 0.5 * (x ** 2)
+
+
+def linear(x, c=0.5): return c * x
+
+
 def test_2layers(lower, upper, n_dvr, n_spf, dofs, c):
     assert(n_spf < n_dvr)
 
@@ -25,19 +31,19 @@ def test_2layers(lower, upper, n_dvr, n_spf, dofs, c):
     basis = []
     hamiltonian = []
     for i in range(dofs):
-        bi = Tensor(name='B' + str(i), axis=0)
+        bi = Tensor(name='B' + str(i), axis=1)
         basis.append(bi)
         hi = Leaf(name='L' + str(i))
         hamiltonian.append(hi)
-        bi.link_to(0, root, i)
-        bi.link_to(1, hi, 0)
+        bi.link_to(1, root, i)
+        bi.link_to(0, hi, 0)
 
     # Generate initial state
     dvr = SineDVR(lower, upper, n_dvr)
-    def square(x): return 0.5 * (x ** 2)
     dvr.set_v_func(square)
     # SPFs
     _, array_i = dvr.solve(n_state=n_spf)
+    array_i = np.transpose(array_i)
     for i in range(dofs):
         basis[i].set_array(array_i)
     # Root state
@@ -55,8 +61,8 @@ def test_2layers(lower, upper, n_dvr, n_spf, dofs, c):
     for leaf in hamiltonian:
         h_list.append([(leaf, s_h)])
     # couple
-    def linear(x, c=c): return c * x
-    dvr.set_v_func(linear)
+    linear_ = partial(linear, c=c)
+    dvr.set_v_func(linear_)
     l_h = dvr.v_mat()
     for i in range(dofs - 1):
         term = [(hamiltonian[i], l_h), (hamiltonian[i + 1], l_h)]
@@ -64,21 +70,17 @@ def test_2layers(lower, upper, n_dvr, n_spf, dofs, c):
 
     # ML-MCTDH
     solver = Multi_layer(root, h_list)
-    h = 0.001
-    cmf_step = None
-    m = 100
-    for t, a in solver.autocorr(
-        end=m, ode_inter=h, cmf_step=cmf_step, method='Newton'
-    ):
-        logging.info(__(
-            't: {}, auto: {}', t, np.abs(a)
-        ))
-
-    return
+    return solver
 
 
-if __name__ == '__main__':
-    logging.root.setLevel(logging.DEBUG + 1)
-    test_2layers(lower=-5., upper=5., n_dvr=400, n_spf=5, dofs=2, c=0.5)
-
-# EOF
+def test_mctdh(x0, x1, n_dvr, n_spf, c):
+    vf_list = [square] * 2
+    conf_list = [[x0, x1, n_dvr]] * 2
+    shape_list = [(n_dvr, n_spf)] * 2
+    case = MCTDH(conf_list, shape_list)
+    case.set_v_func(vf_list)
+    linear_ = partial(linear, c=c)
+    ex = [[(0, linear_), (1, linear_)]]    # H_rst = cxy
+    case.gen_h_terms(extra=ex, kinetic_only=False)
+    case.init_state()
+    return case

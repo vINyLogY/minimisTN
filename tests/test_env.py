@@ -9,13 +9,13 @@ from math import sqrt
 from functools import partial
 
 import numpy as np
-import matplotlib.pyplot as plt
+import PyQt5
 
-from minitn.lib.tools import BraceMessage as __
+# from minitn.lib.tools import BraceMessage as __
 
 def main():
     logging.root.setLevel(logging.DEBUG)
-    print(__("{0}, {1}!", 'hello', 'world'))
+    print("{0}, {1}!", 'hello', 'world')
     logging.info('INfo!')
 
 main()

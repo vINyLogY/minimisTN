@@ -35,6 +35,8 @@ class Tensor(object):
     axis : int
         The direction of normalization.
     name : str
+    aux : ndarray, None
+        For anything
     _access : {int: (Point, int)}
     _partial_env : {int: 2-d ndarray}
     """
@@ -285,23 +287,29 @@ class Tensor(object):
                 return ans
 
     def global_inner_product(self):
-        """No conj
+        """Return <aux*|array> (NO conj)
         """
         for leaf in self.leaves():
             leaf.aux = None
         return self.partial_env(None, use_aux=True)
 
     def matrix_element(self):
+        """Return <aux*|H|array> (NO conj)
+        """
         for leaf in self.leaves():
             leaf.aux = leaf.array
         return self.partial_env(None, use_aux=True)
 
     def global_norm(self):
+        """Return <array|array>
+        """
         for t in self.visitor(leaf=False):
             t.aux = np.conj(t.array)
         return self.global_inner_product()
 
     def expection(self):
+        """Return <array|H|array>
+        """
         for t in self.visitor(leaf=False):
             t.aux = np.conj(t.array)
         return self.matrix_element()
@@ -323,26 +331,30 @@ class Tensor(object):
         [Leaf]
         """
         ans = []
-        for tensor in self.visitor():
+        for tensor in self.visitor(leaf=True):
             if isinstance(tensor, Leaf):
                 ans.append(tensor)
         return ans
 
-    def vectorize(self):
+    def vectorize(self, use_aux=False):
         vec_list = []
         for t in self.visitor(leaf=False):
-            vec = np.reshape(t.array, -1)
+            array = t.aux if use_aux else t.array
+            vec = np.reshape(array, -1)
             vec_list.append(vec)
         ans = np.concatenate(vec_list, axis=None)
         return ans
 
-    def tensorize(self, vec):
+    def tensorize(self, vec, use_aux=False):
         start = 0
         for t in self.visitor(leaf=False):
             shape = t.shape
             end = start + np.prod(shape)
             array = np.reshape(vec[start:end], shape)
-            t.set_array(array)
+            if use_aux:
+                t.aux = array
+            else:
+                t.set_array(array)
             start = end
         return
 
@@ -385,7 +397,7 @@ class Tensor(object):
         i : int
         array2 : {2-d ndarray, None}
             None means doing nothing
-        j : int
+        j : {0, 1}
             Default: 0
 
         Returns
@@ -477,6 +489,7 @@ class Leaf(Tensor):
     shape : (int, int)
         The shape of the local Hamiltonian.
     name : str
+    aux : ndarray, None
     _access : {0: (Tensor, int)}
     """
 

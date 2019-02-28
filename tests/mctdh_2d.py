@@ -12,8 +12,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-if __name__ == '__main__':
-    import _context
+# if __name__ == '__main__':
+#     import _context
 from minitn.lib.numerical import PotentialFunction, WindowFunction, expection
 from minitn.lib.tools import BraceMessage as __
 from minitn.lib.tools import time_this, figure
@@ -42,7 +42,7 @@ def test_mctdh(x0, L, m, n, v_func, c):
     ))
     logging.info('=' * 60)
     length = 1.
-    window = WindowFunction.g0prime(length)
+    # window = WindowFunction.g0prime(length)
     t, auto = zip(*case.autocorrelation(
         stop=length, max_inter=0.001, const_energy=None,
         renormalize=True
@@ -61,7 +61,6 @@ def test_mctdh(x0, L, m, n, v_func, c):
 
 
 def main():
-    import time
     x0, L, n = -5., 10., 40
     v_func = PotentialFunction.sho()
     for m in range(1, 2):

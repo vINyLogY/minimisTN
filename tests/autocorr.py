@@ -10,8 +10,8 @@ import matplotlib.pyplot as plt
 import scipy
 from scipy.fftpack import fft, ifft
 
-if __name__ == '__main__':
-    import _context
+# if __name__ == '__main__':
+#     import _context
 from minitn.dvr import PO_DVR
 from minitn.lib.numerical import PotentialFunction, WindowFunction, expection
 from minitn.lib.tools import figure, BraceMessage as __
@@ -34,7 +34,6 @@ def main():
         v_rst = PotentialFunction.linear_corr(c)
         po_dvr.set_v_func(vf_list, v_rst=v_rst)
         length = 1.
-        init = None
         # init = (po_dvr.mu_mat(0)).dot(po_dvr.init_state())
         # logging.debug(__(
         #     'norm_0: {}', scipy.linalg.norm(init)
@@ -58,7 +57,7 @@ def main():
             zipped.append((m, t_m, auto_m))
         except:
             pass
-    with figure() as fig1:
+    with figure():
         l, = plt.plot(
             t, np.abs(auto), '-',
             label='\\textrm{Standard procedure}'

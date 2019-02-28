@@ -167,7 +167,12 @@ class DVR(object):
         self.energy, v = eigsh(self._h_mat, k=n_state, which='SA')
         # self.energy, v = scipy.linalg.eigh(
         #     self._h_mat, eigvals=(0, n_state - 1))
-        self.eigenstates = np.transpose(v)
+        tmp = np.transpose(v)
+        es = []
+        for i in tmp:
+            vi = i if i[0] >= 0.0 else -i
+            es.append(vi)
+        self.eigenstates = np.array(es)
         return self.energy, self.eigenstates
 
     def dvr2fbr_mat(self, mat):
