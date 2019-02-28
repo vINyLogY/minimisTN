@@ -55,7 +55,7 @@ def time_this(func):
         start = time()
         r = func(*args, **kwargs)
         end = time()
-        logging.debug(
+        logging.warn(
             __('{}.{} : {}', func.__module__, func.__name__, end - start)
         )
         return r

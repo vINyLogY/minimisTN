@@ -258,8 +258,10 @@ class Tensor(object):
             return child.partial_env(j, proper=False, use_aux=use_aux)
 
         else:
+            partial_product = Tensor.partial_product
+            partial_trace = Tensor.partial_trace
             # Check the cache
-            if i in self._partial_env:
+            if i in self._partial_env and not use_aux:
                 return self._partial_env[i]
             # Main algorithm
             else:
@@ -276,12 +278,13 @@ class Tensor(object):
                 else:
                     temp = self.array
                     for i_, matrix in env_:
-                        temp = Tensor.partial_product(temp, i_, matrix)
+                        temp = partial_product(temp, i_, matrix)
                     conj = self.aux if use_aux else np.conj(self.array)
-                    ans = Tensor.partial_trace(temp, i, conj, i)
+                    ans = partial_trace(temp, i, conj, i)
                 # Cache the answer and return
                 if i is not None:
-                    self._partial_env[i] = ans
+                    if not use_aux:
+                        self._partial_env[i] = ans
                 else:
                     ans = ans if ans is not None else 1.
                 return ans

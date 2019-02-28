@@ -48,7 +48,8 @@ class Multi_layer(object):
     """
     # Coefficient settings...
     hbar = 1.
-    err = 1e-12
+    err = 1.e-12
+    pinv = True
 
     def __init__(self, root, h_list):
         """
@@ -75,10 +76,32 @@ class Multi_layer(object):
         return
 
     @classmethod
-    def settings(cls, hbar=1., err=1.e-6):
+    def settings(cls, hbar=1., err=1.e-6, pinv=False):
         cls.hbar = hbar
         cls.err = err
+        cls.pinv = pinv
         return
+
+    def term_visitor(self):
+        visitor = self.root.visitor
+        for n, term in enumerate(self.h_list):
+            for t in visitor():
+                t.reset()
+            for leaf, array in term:
+                leaf.set_array(array)
+            yield (n, visitor)
+
+    def matrix_element(self):
+        ans = 0.0
+        for _ in self.term_visitor():
+            ans += self.root.matrix_element()
+        return ans
+
+    def expection(self):
+        ans = 0.0
+        for _ in self.term_visitor():
+            ans += self.root.expection()
+        return ans
 
     def eom(self, check=False, cmf=False):
         r"""Write the derivative of each Tensor in tensor.aux.
@@ -108,21 +131,20 @@ class Multi_layer(object):
                 axis = tensor.axis
                 if axis is not None:
                     density = tensor.partial_env(axis, proper=True)
-                    self.inv_density[tensor] = linalg.inv(
-                        density +
-                        Multi_layer.err * np.identity(tensor.shape[axis])
-                    )
+                    if Multi_layer.pinv:
+                        self.inv_density[tensor] = linalg.pinv2(density)
+                    else:
+                        self.inv_density[tensor] = linalg.inv(
+                            density + 
+                            Multi_layer.err * np.identity(tensor.shape[axis])
+                        )
 
         # Term by term...
-        for n, term in enumerate(self.h_list):
-            for t in visitor():
-                t.reset()
-            for leaf, array in term:
-                leaf.set_array(array)
-
-            for tensor in visitor(leaf=False):
+        partial_product = Tensor.partial_product
+        partial_trace = Tensor.partial_trace
+        for n, network in self.term_visitor():
+            for tensor in network(leaf=False):
                 partial_env = tensor.partial_env
-                partial_product = Tensor.partial_product
 
                 # Env Hamiltonians
                 tmp = tensor.array
@@ -144,7 +166,7 @@ class Multi_layer(object):
                     tmp_1 = np.array(tmp)
                     array = tensor.array
                     conj_array = np.conj(array)
-                    tmp = Tensor.partial_trace(tmp, axis, conj_array, axis)
+                    tmp = partial_trace(tmp, axis, conj_array, axis)
                     tmp = partial_product(array, axis, tmp, j=1)
                     tmp = (tmp_1 - tmp)
 
@@ -174,12 +196,12 @@ class Multi_layer(object):
 
             logging.info(__(
                 "t: {:.3f}, E: {:.8f}, |v|^2: {:.8f}",
-                _i * ode_inter, self.root.expection(),
-                linalg.norm(self.root.vectorize()) **2
+                _i * ode_inter, self.expection(),
+                (self.root.global_norm()) **2
             ))
             yield (_i * ode_inter, self.root)
-            _i += 1
             cmf = (cmf_step is not None and _i % cmf_step != 0)
+            _i += 1
             visitor = self.root.visitor
             if method == 'Newton':
                 self.eom(cmf=cmf)
@@ -237,8 +259,8 @@ class Multi_layer(object):
     def autocorr(
         self, end=None, ode_inter=0.01, cmf_step=None, method='RK45', fast=True
     ):
-        self._init = {}
         if not fast:
+            self._init = {}
             for t in self.root.visitor(leaf=False):
                 self._init[t] = t.array
         for time, r in self.propagator(
@@ -246,7 +268,7 @@ class Multi_layer(object):
         ):
             for t in r.visitor(leaf=False):
                 t.aux = t.array if fast else np.conj(self._init[t])
-            auto = r.matrix_element()
+            auto = r.global_inner_product()
             ans = (2. * time, auto) if fast else (time, auto)
             yield ans
 

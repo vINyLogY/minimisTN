@@ -24,7 +24,7 @@ def main():
         if abs(n) > 1.e-14:
             print('i: {}, n: {}'.format(i, n))
     exp.eom()
-    exp.eom()    # test side effects
+    exp.eom(cmf=True)    # test side effects
     vec1 = exp.root.vectorize(use_aux=True)
     ref_op = ref.h_mat()
     v = ref_op(ref.vec) / 1.0j

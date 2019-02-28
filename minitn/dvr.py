@@ -1023,7 +1023,7 @@ class PO_DVR(object):
             y = solver.y
             real, imag = y.real, y.imag
             e = self.energy_expection(y)
-            logging.debug(__(
+            logging.info(__(
                 "t: {:.3f}, E: {:.8f}, |v|^2: {:.8f}",
                 t, e, scipy.linalg.norm(y) ** 2
             ))

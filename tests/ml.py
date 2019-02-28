@@ -2,7 +2,7 @@
 # coding: utf-8
 r"""ML type of 2d sho
 """
-from __future__ import absolute_import, division
+from __future__ import division
 
 import logging
 from builtins import filter, map, range, zip
@@ -11,7 +11,7 @@ from functools import partial
 import numpy as np
 
 from minitn.lib.tools import __, time_this, figure
-from tests.sho_model import test_2layers
+from sho_model import test_2layers
 
 
 @time_this
@@ -33,9 +33,6 @@ def main():
                     tensor, norm
                 )
                 print(msg)
-            logging.info(__(
-                'energy: {}', r.expection()
-            ))
         i += 1
     return
 
