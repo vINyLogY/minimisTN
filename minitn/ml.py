@@ -62,8 +62,8 @@ class Multi_layer(object):
         """
         self.root = root
         self.h_list = h_list
+        # Type check and initialize leaf._array with None
         for term in h_list:
-            # Type check and initialize leaf._array with None
             for leaf, array in term:
                 if not isinstance(leaf, Leaf):
                     raise TypeError('0-th ary in tuple must be of type Leaf!')

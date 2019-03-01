@@ -10,7 +10,7 @@ from builtins import map, range, zip
 
 import numpy as np
 from scipy.integrate import quad
-from scipy.linalg import eigh, norm, orth
+from scipy.linalg import eigh, norm, orth, svd
 from scipy.sparse.linalg import LinearOperator
 
 from minitn.lib.tools import BraceMessage as __
@@ -393,3 +393,22 @@ class Id(object):
 
     def dot(self, vec):
         return vec
+
+
+def compressed_svd(a, rank=None, err=None, **kwargs):
+    u, s, vh = svd(a, full_matrices=False, **kwargs)
+    if err is not None:
+        total_error = 0.0
+        for n, s_i in reversed(list(enumerate(s))):
+            total_error += s_i
+            if total_error > err:
+                rank = n + 1
+                break
+    if rank == 0:
+        raise RuntimeError('The matrix must have positive rank!')
+    if rank is not None and rank <= len(s):
+        s = s[:rank]
+        u = u[:, :rank]
+        vh = vh[:rank, :]
+    s = np.diag(s)
+    return u, s, vh

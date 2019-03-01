@@ -15,8 +15,10 @@ from builtins import filter, map, range, zip
 from functools import partial
 
 import numpy as np
+from scipy import linalg
 
 from minitn.lib.tools import __
+from minitn.lib.numerical import compressed_svd
 
 
 _empty = object()
@@ -193,6 +195,12 @@ class Tensor(object):
         return
 
     def unlink_to(self, i):
+        """
+        Return
+        ------
+        child : Tensor
+        j : int
+        """
         try:
             self.check_linkage(i)
         except KeyError:
@@ -202,7 +210,7 @@ class Tensor(object):
         else:
             child, j = self._access[i]
             Tensor.unlink(self, i, child, j)
-        return
+        return child, j
 
     def children(self, axis=_empty):
         """Generator which yields the children of self.
@@ -360,6 +368,82 @@ class Tensor(object):
                 t.set_array(array)
             start = end
         return
+
+    def split(self, axis, err=1.e-8):
+        """Split the root Tensor to a certain axis.
+
+        Parameters
+        ----------
+        axis : int
+        err : float
+
+        Return
+        ------
+        new_root : cls
+            New root node in the same environment of self.
+            With (ac) in self.name.
+        """
+        if self.axis is not None:
+            raise RuntimeError('Can only split the root Tensor!')
+        shape = self.shape
+        name = self.name
+        dim = shape.pop(axis)
+        a = np.moveaxis(self.array, axis, 0)
+        a = np.reshape(a, (dim, -1))
+        u, s, vh = compressed_svd(a, err=err)
+        root_array = np.dot(u, s)
+        root_array = np.reshape(root_array, (dim, -1))
+        child_array = np.reshape(vh, [-1] + shape)
+        child_array = np.moveaxis(child_array, 0, axis)
+        # Create new node
+        cls = type(self)
+        new_root = cls(name=name + '(ac)', axis=None)
+        new_root.set_array(root_array)
+        self.axis = axis
+        self.set_array(child_array)
+        # Fix linkage info
+        child, j = self.unlink_to(axis)
+        self.link_to(axis, new_root, 1)
+        new_root.link_to(0, child, j)
+        return new_root
+
+    def unite(self, axis):
+        """Unite a Tensor `t` on a certain axis with self.
+
+        Parameters
+        ----------
+        axis : int
+        err : float
+
+        Return
+        ------
+        new_root : cls
+            New root node in the same environment of self.
+            With the same name as in t.name.
+        """
+        if self.axis is not None:
+            raise RuntimeError(
+                'Can only unite root Tensor with another Tensor!'
+            )
+        if self.order != 2:
+            raise NotImplementedError()
+        if '(ac)' not in self.name:
+            logging.warning('Trying to break the initial topology!')
+        if axis == 1:
+            j = 0
+        elif axis == 0:
+            j = 1
+        else:
+            raise NotImplementedError()
+        new_root, i = self.unlink_to(axis)
+        array, matrix = new_root.array, self.array
+        array = Tensor.partial_product(array, i, matrix, axis)
+        new_root.set_array(array)
+        new_root.axis = None
+        # Fix linkage info
+        child, k = self.unlink_to(j)
+        new_root.link_to(i, child, k)
+        return new_root
 
     def projector(self, comp=False):
         """[Deprecated] Return the projector corresponding to self.
