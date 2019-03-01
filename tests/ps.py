@@ -22,12 +22,17 @@ root = root.split(0)
 root.check_completness(strict=True)
 for t in root.visitor():
     print(t, np.sum(t.array))
+for t in root.linkage_visitor(leaf=False):
+    print(t)
 logging.info(__('before Norm:{:.8f}', root.global_norm()))
 print('*' * 10)
 root = root.unite(1)
 root.check_completness(strict=True)
 for t in root.visitor():
     print(t, np.sum(t.array))
+for t in root.linkage_visitor(leaf=False):
+    print(t)
+
 logging.info(__('after Norm:{:.8f}', root.global_norm()))
 
 

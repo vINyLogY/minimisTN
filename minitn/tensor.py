@@ -212,7 +212,7 @@ class Tensor(object):
             Tensor.unlink(self, i, child, j)
         return child, j
 
-    def children(self, axis=_empty):
+    def children(self, axis=_empty, leaf=True):
         """Generator which yields the children of self.
         Yield
         -----
@@ -223,7 +223,8 @@ class Tensor(object):
             axis = self.axis
         for i, (tensor, j) in sorted(self._access.items(), key=key):
             if axis is None or i != axis:
-                yield (i, tensor, j)
+                if leaf or not isinstance(tensor, Leaf):
+                    yield (i, tensor, j)
 
     def visitor(self, axis=_empty, leaf=True):
         """
@@ -231,21 +232,21 @@ class Tensor(object):
         -----
         tensor : Tensor
         """
-        yield self
-        for _, child, j in self.children(axis=axis):
-            for tensor in child.visitor(axis=j):
-                if leaf or not isinstance(tensor, Leaf):
-                    yield tensor
+        if leaf or not isinstance(self, Leaf):
+            yield self
+        for _, child, j in self.children(axis=axis, leaf=leaf):
+            for tensor in child.visitor(axis=j, leaf=leaf):
+                yield tensor
 
-    def linkage_visitor(self, axis=_empty):
+    def linkage_visitor(self, axis=_empty, leaf=True):
         """
         Yield
         -----
         tuple : (Tensor, int, Tensor, int)
         """
-        for i, child, j in self.children(axis=axis):
+        for i, child, j in self.children(axis=axis, leaf=leaf):
             yield (self, i, child, j)
-            for linkage in child.linkage_visitor(axis=j):
+            for linkage in child.linkage_visitor(axis=j, leaf=leaf):
                 yield linkage
 
     def partial_env(self, i, proper=False, use_aux=False):

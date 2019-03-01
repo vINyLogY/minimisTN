@@ -19,7 +19,7 @@ from sho_model import test_2layers, test_mctdh
 def main():
     x0, x1, n_dvr, n_spf, c, dofs = -5., 5., 40, 10, 0.5, 2
     exp = test_2layers(x0, x1, n_dvr, n_spf, dofs, c)
-    t1, a1 = zip(*exp.autocorr(end=10000, ode_inter=0.01,
+    t1, a1 = zip(*exp.autocorr(end=1000, ode_inter=0.01,
                                cmf_step=10, method='RK45'))
     np.save('ml_t', t1)
     np.save('ml_a', a1)
