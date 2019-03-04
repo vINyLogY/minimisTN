@@ -194,7 +194,7 @@ class Tensor(object):
         Tensor.link(self, i, b, j)
         return
 
-    def unlink_to(self, i):
+    def unlink_to(self, i, fast=False):
         """
         Return
         ------
@@ -202,7 +202,8 @@ class Tensor(object):
         j : int
         """
         try:
-            self.check_linkage(i)
+            if not fast:
+                self.check_linkage(i)
         except KeyError:
             logging.info(__(
                 'No {0}-th linkage info of {1}', i, self
@@ -238,7 +239,7 @@ class Tensor(object):
             for tensor in child.visitor(axis=j, leaf=leaf):
                 yield tensor
 
-    def linkage_visitor(self, axis=_empty, leaf=True):
+    def linkage_visitor(self, axis=_empty, leaf=True, back=False):
         """
         Yield
         -----
@@ -246,8 +247,10 @@ class Tensor(object):
         """
         for i, child, j in self.children(axis=axis, leaf=leaf):
             yield (self, i, child, j)
-            for linkage in child.linkage_visitor(axis=j, leaf=leaf):
+            for linkage in child.linkage_visitor(axis=j, leaf=leaf, back=back):
                 yield linkage
+            if back:
+                yield (child, j, self, i)
 
     def partial_env(self, i, proper=False, use_aux=False):
         """
@@ -317,7 +320,8 @@ class Tensor(object):
         """
         for t in self.visitor(leaf=False):
             t.aux = np.conj(t.array)
-        return self.global_inner_product()
+        ans = self.global_inner_product()
+        return np.sqrt(ans)
 
     def expection(self):
         """Return <array|H|array>
@@ -334,7 +338,8 @@ class Tensor(object):
 
     def local_norm(self):
         self.aux = np.conj(self.array)
-        return self.local_inner_product()
+        ans = self.local_inner_product()
+        return np.sqrt(ans)
 
     def leaves(self):
         """
@@ -370,7 +375,7 @@ class Tensor(object):
             start = end
         return
 
-    def split(self, axis, err=1.e-8):
+    def split(self, axis, rank=None, err=None):
         """Split the root Tensor to a certain axis.
 
         Parameters
@@ -391,7 +396,7 @@ class Tensor(object):
         dim = shape.pop(axis)
         a = np.moveaxis(self.array, axis, 0)
         a = np.reshape(a, (dim, -1))
-        u, s, vh = compressed_svd(a, err=err)
+        u, s, vh = compressed_svd(a, rank=rank, err=err)
         root_array = np.dot(u, s)
         root_array = np.reshape(root_array, (dim, -1))
         child_array = np.reshape(vh, [-1] + shape)
@@ -403,7 +408,7 @@ class Tensor(object):
         self.axis = axis
         self.set_array(child_array)
         # Fix linkage info
-        child, j = self.unlink_to(axis)
+        child, j = self.unlink_to(axis, fast=True)
         self.link_to(axis, new_root, 1)
         new_root.link_to(0, child, j)
         return new_root
@@ -422,29 +427,29 @@ class Tensor(object):
             New root node in the same environment of self.
             With the same name as in t.name.
         """
-        if self.axis is not None:
+        tmp, i = self.unlink_to(axis, fast=True)
+        if tmp.axis is not None:
             raise RuntimeError(
                 'Can only unite root Tensor with another Tensor!'
             )
-        if self.order != 2:
+        if tmp.order != 2:
             raise NotImplementedError()
-        if '(ac)' not in self.name:
+        if '(ac)' not in tmp.name:
             logging.warning('Trying to break the initial topology!')
-        if axis == 1:
+        if i == 1:
             j = 0
-        elif axis == 0:
+        elif i == 0:
             j = 1
         else:
             raise NotImplementedError()
-        new_root, i = self.unlink_to(axis)
-        array, matrix = new_root.array, self.array
-        array = Tensor.partial_product(array, i, matrix, axis)
-        new_root.set_array(array)
-        new_root.axis = None
+        array, matrix = self.array, tmp.array
+        array = Tensor.partial_product(array, axis, matrix, i)
+        self.set_array(array)
+        self.axis = None
         # Fix linkage info
-        child, k = self.unlink_to(j)
-        new_root.link_to(i, child, k)
-        return new_root
+        child, k = tmp.unlink_to(j, fast=True)
+        self.link_to(axis, child, k)
+        return self
 
     def projector(self, comp=False):
         """[Deprecated] Return the projector corresponding to self.

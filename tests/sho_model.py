@@ -14,7 +14,7 @@ from minitn.lib.tools import __, time_this, figure
 from minitn.tensor import Tensor, Leaf
 from minitn.dvr import SineDVR
 from minitn.mctdh import MCTDH
-from minitn.ml import Multi_layer
+from minitn.ml import MultiLayer
 
 
 def square(x): return 0.5 * (x ** 2)
@@ -69,7 +69,7 @@ def test_2layers(lower, upper, n_dvr, n_spf, dofs, c):
         h_list.append(term)
 
     # ML-MCTDH
-    solver = Multi_layer(root, h_list)
+    solver = MultiLayer(root, h_list)
     return solver
 
 

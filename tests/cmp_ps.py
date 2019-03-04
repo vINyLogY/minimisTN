@@ -19,11 +19,20 @@ from sho_model import test_2layers, test_mctdh
 @time_this
 def main():
     x0, x1, n_dvr, n_spf, c, dofs = -5., 5., 40, 10, 0.5, 2
-    exp = test_2layers(x0, x1, n_dvr, n_spf, dofs, c)
-    t1, a1 = zip(*exp.autocorr(steps=500, ode_inter=0.001, cmf_step=None,
-                               method='RK23', fast=False, split=True))
-    np.save('ml_t', t1)
-    np.save('ml_a', a1)
+    exp1 = test_2layers(x0, x1, n_dvr, n_spf, dofs, c)
+    g1 = exp1.autocorr(steps=500, ode_inter=0.01, cmf_step=None,
+                       method='RK23', fast=False, split=True)
+    r1 = exp1.root
+    exp2 = test_2layers(x0, x1, n_dvr, n_spf, dofs, c)
+    g2 = exp2.autocorr(steps=500, ode_inter=0.01, cmf_step=None,
+                       method='RK23', fast=False, split=False)
+    r2 = exp2.root
+    for (t1, _), (t2, _) in zip(g1, g2):
+        assert(t1 == t2)
+        v1 = r1.vectorize()
+        v2 = r2.vectorize()
+        print(v1-v2)
+        pass
     return
 
 

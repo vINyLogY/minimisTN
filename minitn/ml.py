@@ -1,12 +1,11 @@
 #!/usr/bin/env python
 # coding: utf-8
-r"""Tensor data structure
-
-Interface to numpy.ndarray.
+r"""ML-MCTDH Algorithms
 
 References
 ----------
 .. [1] arXiv:1603.03039v4
+.. [2] My slides
 """
 from __future__ import absolute_import, division
 
@@ -22,7 +21,7 @@ from minitn.tensor import Tensor, Leaf
 from minitn.dvr import SineDVR
 
 
-class Multi_layer(object):
+class MultiLayer(object):
     r"""Structure of the wavefunction/state::
 
           ... ... ... 
@@ -49,6 +48,7 @@ class Multi_layer(object):
     # Coefficient settings...
     hbar = 1.
     err = 1.e-12
+    svd_err = None
     pinv = True
 
     def __init__(self, root, h_list):
@@ -70,6 +70,8 @@ class Multi_layer(object):
                 if np.array(array).ndim != 2:
                     raise TypeError('1-th ary in tuple must be 2-D ndarray!')
                 leaf.reset()
+
+        # Some cached data
         self.inv_density = {}    # {Tensor: ndarray}
         self.env_ = {}    # {(int, Tensor, int): ndarray}
         self._init = {}    # {Tensor: ndarray}
@@ -85,11 +87,13 @@ class Multi_layer(object):
     def term_visitor(self):
         visitor = self.root.visitor
         for n, term in enumerate(self.h_list):
-            for t in visitor():
+            for t in visitor(axis=None):
                 t.reset()
             for leaf, array in term:
                 leaf.set_array(array)
-            yield (n, visitor)
+            yield n
+            for leaf, _ in term:
+                leaf.reset()
 
     def matrix_element(self):
         ans = 0.0
@@ -102,6 +106,71 @@ class Multi_layer(object):
         for _ in self.term_visitor():
             ans += self.root.expection()
         return ans
+
+    def _single_eom(self, tensor, n=None, cmf=False):
+        """C.f. `Multi-Configuration Time Dependent Hartree Theory: a Tensor
+        Network Perspective`, p38. This method does not contain the `i hbar`
+        coefficient.
+
+        Parameters
+        ----------
+        tensor : Tensor
+            Must in a graph with all nodes' array set, including the leaves.
+        n : {int, None}
+            No. of Hamiltonian term (for CMF method).
+        cmf : bool
+            True to use the cache in self (CMF method), False to re-calculate.
+
+        Return:
+        -------
+        array : ndarray
+            With the same shape with tensor.shape.
+        """
+        partial_product = Tensor.partial_product
+        partial_trace = Tensor.partial_trace
+        partial_env = tensor.partial_env
+
+        # Env Hamiltonians
+        tmp = tensor.array
+        for i in range(tensor.order):
+            if not cmf:
+                env_ = partial_env(i, proper=True)
+                if n is not None:
+                    self.env_[(n, tensor, i)] = env_
+            else:
+                env_ = self.env_[(n, tensor, i)]
+            tmp = partial_product(tmp, i, env_)
+        # For non-root nodes...
+        axis = tensor.axis
+        if axis is not None:
+            # Inversion
+            inv = self.inv_density[tensor]
+            tmp = partial_product(tmp, axis, inv)
+            # Projection
+            tmp_1 = np.array(tmp)
+            array = tensor.array
+            conj_array = np.conj(array)
+            tmp = partial_trace(tmp, axis, conj_array, axis)
+            tmp = partial_product(array, axis, tmp, j=1)
+            tmp = (tmp_1 - tmp)
+        return tmp
+
+    def _form_inv_density(self):
+        visitor = self.root.visitor
+        for t in visitor():
+            t.reset()
+        for tensor in visitor():
+            axis = tensor.axis
+            if axis is not None:
+                density = tensor.partial_env(axis, proper=True)
+                if MultiLayer.pinv:
+                    self.inv_density[tensor] = linalg.pinv2(density)
+                else:
+                    self.inv_density[tensor] = linalg.inv(
+                        density +
+                        MultiLayer.err * np.identity(tensor.shape[axis])
+                    )
+        return self.inv_density
 
     def eom(self, check=False, cmf=False):
         r"""Write the derivative of each Tensor in tensor.aux.
@@ -117,154 +186,179 @@ class Multi_layer(object):
             Whether to re-calculate self.inv_density and self.env_ 
         """
         visitor = self.root.visitor
-        for t in visitor():
-            t.reset()
-            t.aux = None
-
         if check:
             for tensor in visitor():
                 tensor.check_completness(strict=True)
 
+        # Clean
+        for t in visitor():
+            t.aux = None
         # All partial densities
         if not cmf:
-            for tensor in visitor():
-                axis = tensor.axis
-                if axis is not None:
-                    density = tensor.partial_env(axis, proper=True)
-                    if Multi_layer.pinv:
-                        self.inv_density[tensor] = linalg.pinv2(density)
-                    else:
-                        self.inv_density[tensor] = linalg.inv(
-                            density + 
-                            Multi_layer.err * np.identity(tensor.shape[axis])
-                        )
-
+            self._form_inv_density()
         # Term by term...
-        partial_product = Tensor.partial_product
-        partial_trace = Tensor.partial_trace
-        for n, network in self.term_visitor():
-            for tensor in network(leaf=False):
-                partial_env = tensor.partial_env
-
-                # Env Hamiltonians
-                tmp = tensor.array
-                for i in range(tensor.order):
-                    if not cmf:
-                        env_ = partial_env(i, proper=True)
-                        self.env_[(n, tensor, i)] = env_
-                    else:
-                        env_ = self.env_[(n, tensor, i)]
-                    tmp = partial_product(tmp, i, env_)
-
-                # For non-root nodes...
-                axis = tensor.axis
-                if axis is not None:
-                    # Inversion
-                    inv = self.inv_density[tensor]
-                    tmp = partial_product(tmp, axis, inv)
-                    # Projection
-                    tmp_1 = np.array(tmp)
-                    array = tensor.array
-                    conj_array = np.conj(array)
-                    tmp = partial_trace(tmp, axis, conj_array, axis)
-                    tmp = partial_product(array, axis, tmp, j=1)
-                    tmp = (tmp_1 - tmp)
-
+        for n in self.term_visitor():
+            for tensor in visitor(leaf=False):
+                tmp = self._single_eom(tensor, n=n, cmf=cmf)
                 prev = tensor.aux
                 tensor.aux = tmp if prev is None else prev + tmp
-
+        # Times coefficient
         for tensor in visitor(leaf=False):
-            tensor.aux /= 1.0j * Multi_layer.hbar
+            tensor.aux /= 1.0j * MultiLayer.hbar
+        return
+
+    def _direct_step(self, ode_inter=0.01, cmf=False, method='RK45'):
+        visitor = self.root.visitor
+        if method == 'Newton':
+            self.eom(cmf=cmf)
+            for t in visitor(leaf=False):
+                y0 = t.array
+                dy = ode_inter * t.aux
+                t.set_array(y0 + dy)
+                t.aux = None
+        elif method == 'RK4':
+            k = [{}, {}, {}, {}]    # save [y0, k1, k2, k3]
+            self.eom(cmf=cmf)    # for k1
+            for t in visitor(leaf=False):
+                y0 = t.array
+                k1 = ode_inter * t.aux
+                t.set_array(y0 + k1 / 2)
+                k[0][t] = y0
+                k[1][t] = k1
+            self.eom(cmf=cmf)    # for k2
+            for t in visitor(leaf=False):
+                y0 = k[0][t]
+                k2 = ode_inter * t.aux
+                t.set_array(y0 + k2 / 2)
+                k[2][t] = k2
+            self.eom(cmf=cmf)    # for k3
+            for t in visitor(leaf=False):
+                y0 = k[0][t]
+                k3 = ode_inter * t.aux
+                t.set_array(y0 + k3)
+                k[3][t] = k3
+            self.eom(cmf=cmf)    # for k4
+            for t in visitor(leaf=False):
+                y0 = k[0][t]
+                k4 = ode_inter * t.aux
+                t.set_array(
+                    k[0][t] +
+                    (k[1][t] + 2. * k[2][t] + 2. * k[3][t] + k4) / 6.
+                )
+                t.aux = None
+        else:    # use scipy.integrate API
+            root = self.root
+
+            def _vec_diff(t, y):
+                root.tensorize(y)
+                self.eom(cmf=cmf)
+                ans = root.vectorize(use_aux=True)
+                return ans
+
+            y0 = root.vectorize()
+            ode_solver = integrate.solve_ivp(
+                _vec_diff, (0., ode_inter), y0, method=method
+            )
+            y1 = np.transpose(ode_solver.y)[-1]
+            root.tensorize(y1)
+        return
+
+    def _single_prop(self, tensor, tau=0.01, cmf=False, method='RK45'):
+        shape = tensor.shape
+
+        def _d(t, y):
+            tensor.set_array(np.reshape(y, shape))
+            d = np.zeros_like(y)
+            for _ in self.term_visitor():    # Do not use the cache
+                d += np.reshape(self._single_eom(tensor, n=None, cmf=cmf), -1)
+            return np.reshape(d, -1)
+
+        y0 = np.reshape(tensor.array, -1)
+        ode_solver = integrate.solve_ivp(_d, (0., tau), y0, method=method)
+        y1 = np.transpose(ode_solver.y)[-1]
+        tensor.set_array(np.reshape(y1, shape))
+        return
+
+    def _split_step(self, ode_inter=0.01, cmf=False, method='RK45', err=None):
+        """FIXME:
+        * Try WFS instead of DFS?
+        * Propagate one node in each linkage at one time?
+        * Order?
+        * ...
+        """
+        if err is None:
+            err = MultiLayer.svd_err
+        # Now the visitor is DFS and has 2 directions
+        visiting_list = list(self.root.linkage_visitor(leaf=False, back=True))
+        for t0, i, t1, j in visiting_list:
+            order0, order1 = map(
+                lambda t: len(list(t.children(axis=None, leaf=False))),
+                (t0, t1)
+            )
+            inter0, inter1 = map(
+                lambda order: ode_inter / (order * 2), (order0, order1)
+            )
+            # t0 prop inter0
+            self._single_prop(t0, tau=inter0, cmf=cmf, method=method)
+            # t0 split mid
+            mid = t0.split(i, err=err)
+            # mid prop -inter0
+            self._single_prop(mid, tau=-inter0, cmf=cmf, method=method)
+            # t1 unite mid
+            t1.unite(j)
+            # t1 prop inter1
+            self._single_prop(t1, tau=inter1, cmf=cmf, method=method)
+
+        array = self.root.array
+        norm = self.root.local_norm()
+        self.root.set_array(array / norm)
+        if __debug__:
+            for i in self.root.visitor(axis=None, leaf=False):
+                logging.info(__(
+                    'Node: {}, shape: {}, norm: {:.8f}', i, i.shape,
+                    np.sum(i.local_norm())
+                ))
         return
 
     def propagator(
-        self, end=None, ode_inter=0.01, cmf_step=None, method='RK45'
+        self, steps=None, ode_inter=0.01, cmf_step=None, method='RK45',
+        split=False
     ):
         """Propagator generator
 
         Parameters
         ----------
-        end : int
+        steps : int
         ode_inter : float
         cmf_step : {int, None}
         method : {'Newton', 'RK4', 'RK45', ...}
         """
         _i = 0
-        while True:
-            if end is not None and _i >= end:
-                raise StopIteration()
-
+        while steps is None or _i < steps:
             logging.info(__(
-                "t: {:.3f}, E: {:.8f}, |v|^2: {:.8f}",
+                "Propagating at t: {:.3f}, E: {:.8f}, |v|: {:.8f}",
                 _i * ode_inter, self.expection(),
-                (self.root.global_norm()) **2
+                (self.root.global_norm()) ** 2
             ))
             yield (_i * ode_inter, self.root)
             cmf = (cmf_step is not None and _i % cmf_step != 0)
+            if split:
+                self._split_step(ode_inter=ode_inter, cmf=cmf, method=method)
+            else:
+                self._direct_step(ode_inter=ode_inter, cmf=cmf, method=method)
             _i += 1
-            visitor = self.root.visitor
-            if method == 'Newton':
-                self.eom(cmf=cmf)
-                for t in visitor(leaf=False):
-                    y0 = t.array
-                    dy = ode_inter * t.aux
-                    t.set_array(y0 + dy)
-                    t.aux = None
-            elif method == 'RK4':
-                k = [{}, {}, {}, {}]    # save [y0, k1, k2, k3]
-                self.eom(cmf=cmf)    # for k1
-                for t in visitor(leaf=False):
-                    y0 = t.array
-                    k1 = ode_inter * t.aux
-                    t.set_array(y0 + k1 / 2)
-                    k[0][t] = y0
-                    k[1][t] = k1
-                self.eom(cmf=cmf)    # for k2
-                for t in visitor(leaf=False):
-                    y0 = k[0][t]
-                    k2 = ode_inter * t.aux
-                    t.set_array(y0 + k2 / 2)
-                    k[2][t] = k2
-                self.eom(cmf=cmf)    # for k3
-                for t in visitor(leaf=False):
-                    y0 = k[0][t]
-                    k3 = ode_inter * t.aux
-                    t.set_array(y0 + k3)
-                    k[3][t] = k3
-                self.eom(cmf=cmf)    # for k4
-                for t in visitor(leaf=False):
-                    y0 = k[0][t]
-                    k4 = ode_inter * t.aux
-                    t.set_array(
-                        k[0][t] +
-                        (k[1][t] + 2. * k[2][t] + 2. * k[3][t] + k4) / 6.
-                    )
-                    t.aux = None
-            else:    # use scipy.integrate API
-                root = self.root
-
-                def _vec_diff(t, y):
-                    root.tensorize(y)
-                    self.eom(cmf=cmf)
-                    ans = root.vectorize(use_aux=True)
-                    return ans
-
-                y0 = root.vectorize()
-                ode_solver = integrate.solve_ivp(
-                    _vec_diff, (0., ode_inter), y0, method=method
-                )
-                y1 = np.transpose(ode_solver.y)[-1]
-                root.tensorize(y1)
 
     def autocorr(
-        self, end=None, ode_inter=0.01, cmf_step=None, method='RK45', fast=True
+        self, steps=None, ode_inter=0.01, cmf_step=None, method='RK45',
+        split=False, fast=True
     ):
         if not fast:
             self._init = {}
             for t in self.root.visitor(leaf=False):
                 self._init[t] = t.array
         for time, r in self.propagator(
-            end=end, ode_inter=ode_inter, cmf_step=cmf_step, method=method
+            steps=steps, ode_inter=ode_inter, cmf_step=cmf_step, method=method,
+            split=split
         ):
             for t in r.visitor(leaf=False):
                 t.aux = t.array if fast else np.conj(self._init[t])
