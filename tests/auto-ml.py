@@ -18,26 +18,32 @@ from sho_model import test_2layers, test_mctdh
 
 @time_this
 def main():
-    x0, x1, n_dvr, n_spf, c, dofs = -5., 5., 40, 10, 0.5, 2
+    x0, x1, n_dvr, n_spf, c, dofs = -5., 5., 40, 10, 0.5, 4
     exp = test_2layers(x0, x1, n_dvr, n_spf, dofs, c)
-    t1, a1 = zip(*exp.autocorr(steps=500, ode_inter=0.001, cmf_step=None,
-                               method='RK23', fast=False, split=True))
+    t1, a1 = zip(*exp.autocorr(steps=1000, ode_inter=0.01, cmf_step=10,
+                               method='RK45', fast=True, split=False))
     np.save('ml_t', t1)
     np.save('ml_a', a1)
+    x0, x1, n_dvr, n_spf, c, dofs = -5., 5., 40, 6, 0.5, 4
+    exp = test_2layers(x0, x1, n_dvr, n_spf, dofs, c)
+    t1, a1 = zip(*exp.autocorr(steps=1000, ode_inter=0.01, cmf_step=10,
+                               method='RK45', fast=True, split=False))
+    np.save('ml2_t', t1)
+    np.save('ml2_a', a1)
     return
 
 
 @time_this
 def refer():
-    x0, x1, n_dvr, n_spf, c = -5., 5., 40, 10, 0.5
-    ref = test_mctdh(x0, x1, n_dvr, n_spf, c)
-    t2, a2, = zip(*ref.autocorrelation(stop=20., max_inter=0.001))
+    x0, x1, n_dvr, n_spf, dof, c = -5., 5., 40, 10, 4, 0.5
+    ref = test_mctdh(x0, x1, n_dvr, n_spf, dof, c)
+    t2, a2, = zip(*ref.autocorrelation(stop=20., max_inter=0.01))
     np.save('mctdh_t', t2)
     np.save('mctdh_a', a2)
     return
 
 logging.basicConfig(
-    format='%(levelname)s: (In %(funcName)s, %(module)s)  %(message)s', level=logging.DEBUG
+    format='%(levelname)s: (In %(funcName)s, %(module)s)  %(message)s', level=logging.DEBUG+1
 )
 main()
 # refer()

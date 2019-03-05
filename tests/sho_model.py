@@ -73,14 +73,16 @@ def test_2layers(lower, upper, n_dvr, n_spf, dofs, c):
     return solver
 
 
-def test_mctdh(x0, x1, n_dvr, n_spf, c):
-    vf_list = [square] * 2
-    conf_list = [[x0, x1, n_dvr]] * 2
-    shape_list = [(n_dvr, n_spf)] * 2
+def test_mctdh(x0, x1, n_dvr, n_spf, dof, c):
+    vf_list = [square] * dof
+    conf_list = [[x0, x1, n_dvr]] * dof
+    shape_list = [(n_dvr, n_spf)] * dof
     case = MCTDH(conf_list, shape_list)
     case.set_v_func(vf_list)
     linear_ = partial(linear, c=c)
-    ex = [[(0, linear_), (1, linear_)]]    # H_rst = cxy
+    ex = []    # H_rst = cxy
+    for i in range(dof - 1):
+        ex.append([(i, linear_), (i + 1, linear_)])
     case.gen_h_terms(extra=ex, kinetic_only=False)
     case.init_state()
     return case

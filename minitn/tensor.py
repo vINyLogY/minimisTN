@@ -252,6 +252,9 @@ class Tensor(object):
             if back:
                 yield (child, j, self, i)
 
+    def iddfs_visitor(self, axis=_empty, leaf=False, back=True):
+        pass
+
     def partial_env(self, i, proper=False, use_aux=False):
         """
         Parameters

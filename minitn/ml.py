@@ -281,10 +281,13 @@ class MultiLayer(object):
 
     def _split_step(self, ode_inter=0.01, cmf=False, method='RK45', err=None):
         """FIXME:
-        * Try WFS instead of DFS?
         * Propagate one node in each linkage at one time?
         * Order?
         * ...
+
+        TODO:
+        * Propagating from top (close to leaves) to bottom (root)
+          (try IDDFS?)
         """
         if err is None:
             err = MultiLayer.svd_err
@@ -322,7 +325,7 @@ class MultiLayer(object):
 
     def propagator(
         self, steps=None, ode_inter=0.01, cmf_step=None, method='RK45',
-        split=False
+        split=False, imaginary=False
     ):
         """Propagator generator
 
@@ -342,6 +345,7 @@ class MultiLayer(object):
             ))
             yield (_i * ode_inter, self.root)
             cmf = (cmf_step is not None and _i % cmf_step != 0)
+            ode_inter = ode_inter * 1.j if imaginary else ode_inter
             if split:
                 self._split_step(ode_inter=ode_inter, cmf=cmf, method=method)
             else:
@@ -350,7 +354,7 @@ class MultiLayer(object):
 
     def autocorr(
         self, steps=None, ode_inter=0.01, cmf_step=None, method='RK45',
-        split=False, fast=True
+        split=False, fast=True, imaginary=False
     ):
         if not fast:
             self._init = {}
@@ -358,12 +362,14 @@ class MultiLayer(object):
                 self._init[t] = t.array
         for time, r in self.propagator(
             steps=steps, ode_inter=ode_inter, cmf_step=cmf_step, method=method,
-            split=split
+            split=split, imaginary=imaginary
         ):
             for t in r.visitor(leaf=False):
-                t.aux = t.array if fast else np.conj(self._init[t])
+                t.aux = (t.array if fast and not imaginary else
+                         np.conj(self._init[t]))
             auto = r.global_inner_product()
-            ans = (2. * time, auto) if fast else (time, auto)
+            ans = ((2. * time, auto) if fast and not imaginary else
+                   (time, auto))
             yield ans
 
 # EOF

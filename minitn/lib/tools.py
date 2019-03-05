@@ -62,6 +62,33 @@ def time_this(func):
 
     return _time_this
 
+empty = object()
+
+def iter_visitor(start, r, method='DFS'):
+    """Iterative visitor.
+
+    Parameters
+    ----------
+    start : obj
+        Initial object
+    r : obj -> [obj]
+        Relation function.
+    method : {'DFS', 'BFS'}, optional
+        'DFS': Depth first; 'BFS': Breadth first.
+    """
+    stack, visited = [start], set()
+    while stack:
+        if method == 'DFS':
+            vertex = stack.pop()
+        elif method == 'BFS':
+            vertex, stack = stack[0], stack[1:]
+        else:
+            raise NotImplementedError()
+        if vertex not in visited:
+            visited.add(vertex)
+            stack.extend(r(vertex) - visited)
+            yield vertex
+
 
 @contextlib.contextmanager
 def figure(*args, **kwargs):
