@@ -454,6 +454,18 @@ class Tensor(object):
         self.link_to(axis, child, k)
         return self
 
+    def normalize(self):
+        array = self.array
+        norm = np.array(self.local_norm())
+        if norm.ndim == 0:
+            self.set_array(array / norm)
+        elif norm.ndim == 2:
+            rank = np.linalg.matrix_rank(array)
+            mean_norm = np.trace(norm) / rank
+            self.set_array(array / mean_norm )
+        else:
+            raise RuntimeError()
+
     def projector(self, comp=False):
         """[Deprecated] Return the projector corresponding to self.
 

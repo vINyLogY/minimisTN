@@ -172,7 +172,7 @@ class MultiLayer(object):
                     )
         return self.inv_density
 
-    def eom(self, check=False, cmf=False):
+    def eom(self, check=False, cmf=False, imaginary=False):
         r"""Write the derivative of each Tensor in tensor.aux.
 
                    .
@@ -184,6 +184,8 @@ class MultiLayer(object):
             True to check the linkage completness.
         cmf : bool
             Whether to re-calculate self.inv_density and self.env_ 
+        imaginary : bool
+            Whether to treat t as it.
         """
         visitor = self.root.visitor
         if check:
@@ -204,13 +206,17 @@ class MultiLayer(object):
                 tensor.aux = tmp if prev is None else prev + tmp
         # Times coefficient
         for tensor in visitor(leaf=False):
-            tensor.aux /= 1.0j * MultiLayer.hbar
+            coefficient = (
+                -MultiLayer.hbar if imaginary else 1.0j * MultiLayer.hbar
+            )
+            tensor.aux /= coefficient
         return
 
-    def _direct_step(self, ode_inter=0.01, cmf=False, method='RK45'):
+    def _direct_step(self, ode_inter=0.01, cmf=False, method='RK45',
+                     imaginary=False):
         visitor = self.root.visitor
         if method == 'Newton':
-            self.eom(cmf=cmf)
+            self.eom(cmf=cmf, imaginary=imaginary)
             for t in visitor(leaf=False):
                 y0 = t.array
                 dy = ode_inter * t.aux
@@ -218,26 +224,26 @@ class MultiLayer(object):
                 t.aux = None
         elif method == 'RK4':
             k = [{}, {}, {}, {}]    # save [y0, k1, k2, k3]
-            self.eom(cmf=cmf)    # for k1
+            self.eom(cmf=cmf, imaginary=imaginary)    # for k1
             for t in visitor(leaf=False):
                 y0 = t.array
                 k1 = ode_inter * t.aux
                 t.set_array(y0 + k1 / 2)
                 k[0][t] = y0
                 k[1][t] = k1
-            self.eom(cmf=cmf)    # for k2
+            self.eom(cmf=cmf, imaginary=imaginary)    # for k2
             for t in visitor(leaf=False):
                 y0 = k[0][t]
                 k2 = ode_inter * t.aux
                 t.set_array(y0 + k2 / 2)
                 k[2][t] = k2
-            self.eom(cmf=cmf)    # for k3
+            self.eom(cmf=cmf, imaginary=imaginary)    # for k3
             for t in visitor(leaf=False):
                 y0 = k[0][t]
                 k3 = ode_inter * t.aux
                 t.set_array(y0 + k3)
                 k[3][t] = k3
-            self.eom(cmf=cmf)    # for k4
+            self.eom(cmf=cmf, imaginary=imaginary)    # for k4
             for t in visitor(leaf=False):
                 y0 = k[0][t]
                 k4 = ode_inter * t.aux
@@ -251,7 +257,7 @@ class MultiLayer(object):
 
             def _vec_diff(t, y):
                 root.tensorize(y)
-                self.eom(cmf=cmf)
+                self.eom(cmf=cmf, imaginary=imaginary)
                 ans = root.vectorize(use_aux=True)
                 return ans
 
@@ -279,7 +285,8 @@ class MultiLayer(object):
         tensor.set_array(np.reshape(y1, shape))
         return
 
-    def _split_step(self, ode_inter=0.01, cmf=False, method='RK45', err=None):
+    def _split_step(self, ode_inter=0.01, cmf=False, method='RK45', err=None, 
+                    imaginary=False):
         """FIXME:
         * Propagate one node in each linkage at one time?
         * Order?
@@ -289,6 +296,7 @@ class MultiLayer(object):
         * Propagating from top (close to leaves) to bottom (root)
           (try IDDFS?)
         """
+        if imaginary: raise NotImplementedError()
         if err is None:
             err = MultiLayer.svd_err
         # Now the visitor is DFS and has 2 directions
@@ -345,11 +353,21 @@ class MultiLayer(object):
             ))
             yield (_i * ode_inter, self.root)
             cmf = (cmf_step is not None and _i % cmf_step != 0)
-            ode_inter = ode_inter * 1.j if imaginary else ode_inter
             if split:
-                self._split_step(ode_inter=ode_inter, cmf=cmf, method=method)
+                self._split_step(
+                    ode_inter=ode_inter, cmf=cmf, method=method,
+                    imaginary=imaginary
+                )
             else:
-                self._direct_step(ode_inter=ode_inter, cmf=cmf, method=method)
+                self._direct_step(
+                    ode_inter=ode_inter, cmf=cmf, method=method,
+                    imaginary=imaginary
+                )
+            # TODO: if imaginary, need re-normalize to minimize
+            #       error
+            if imaginary:
+                for t in self.root.visitor(leaf=False):
+                    t.normalize()
             _i += 1
 
     def autocorr(
@@ -365,11 +383,9 @@ class MultiLayer(object):
             split=split, imaginary=imaginary
         ):
             for t in r.visitor(leaf=False):
-                t.aux = (t.array if fast and not imaginary else
-                         np.conj(self._init[t]))
+                t.aux = t.array if fast else np.conj(self._init[t])
             auto = r.global_inner_product()
-            ans = ((2. * time, auto) if fast and not imaginary else
-                   (time, auto))
+            ans = (2. * time, auto) if fast else (time, auto)
             yield ans
 
 # EOF
