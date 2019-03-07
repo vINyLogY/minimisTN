@@ -68,7 +68,32 @@ class Tensor(object):
 
     def __str__(self):
         string = self.name
-        return 'Tensor ' + string if self.name is not None else repr(self)
+        return 'Tensor_' + string if self.name is not None else repr(self)
+
+    @staticmethod
+    def generate(graph, root):
+        """
+        Parameters
+        ----------
+        graph : {string: [string]}
+        """
+        name = root
+        root = Tensor(name=name, axis=None)
+        order = {name: 0}    # {string: int}, which means {tensor: order}
+        stack = [(name, root)]
+        while stack:
+            sr, r = stack.pop()
+            for sc in graph[sr]:
+                if sc in graph:
+                    c = Tensor(name=sc, axis=0)
+                else:
+                    c = Leaf(name=sc)
+                r.link_to(order[sr], c, 0)
+                order[sr] += 1
+                order[sc] = 1
+                if sc in graph:
+                    stack.append((sc, c))
+        return root
 
     def set_array(self, array):
         self._array = (
@@ -607,7 +632,7 @@ class Leaf(Tensor):
 
     def __str__(self):
         string = self.name
-        return 'Leaf ' + string if self.name is not None else repr(self)
+        return 'Leaf_' + string if self.name is not None else repr(self)
 
     @property
     def array(self):
