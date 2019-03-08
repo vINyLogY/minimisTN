@@ -157,8 +157,8 @@ class MultiLayer(object):
 
     def _form_inv_density(self):
         visitor = self.root.visitor
-        for t in visitor():
-            t.reset()
+        for tensor in visitor():
+            tensor.reset()
         for tensor in visitor():
             axis = tensor.axis
             if axis is not None:

@@ -15,10 +15,13 @@ from minitn.lib.numerical import PotentialFunction, WindowFunction, expection
 from minitn.lib.tools import figure, BraceMessage as __
 
 
-t1 = np.load('ml_t.npy')
-a1 = np.load('ml_a.npy')
-t2 = np.load('ml2_t.npy')
-a2 = np.load('ml2_a.npy')
+str2 = 'ml'
+str1 = '3l'
+
+t1 = np.load(str1 + '_t.npy')
+a1 = np.load(str1 + '_a.npy')
+t2 = np.load(str2 + '_t.npy')
+a2 = np.load(str2 + '_a.npy')
 with figure():
     plt.plot(t2, np.abs(a2), '-')
     plt.plot(t1, np.abs(a1), '--')
