@@ -18,13 +18,24 @@ logging.root.setLevel(logging.DEBUG)
 x0, x1, n_dvr, n_spf, c, dofs = -5., 5., 40, 10, 0.5, 2
 exp = test_2layers(x0, x1, n_dvr, n_spf, dofs, c)
 root = exp.root
-root = root.split(0)
+print(repr(root))
+root, child = root.split(0, root=root)
+print(repr(root))
 root.check_completness(strict=True)
 for t in root.visitor():
-    print(t, np.sum(t.array))
+    print(t, np.sum(t.array), t.shape)
+print('*' * 10)
 for i, j, k, l in root.linkage_visitor(leaf=False, back=True):
     print(i, j, k, l)
-logging.info(__('before Norm:{:.8f}', root.global_norm()))
+logging.info(__('Norm:{:.8f}', root.global_norm()))
 print('*' * 10)
-
-
+print(repr(root))
+root = root.unite(0, root=root)
+print(repr(root))
+root.check_completness(strict=True)
+for t in root.visitor():
+    print(t, np.sum(t.array), t.shape)
+print('*' * 10)
+for i, j, k, l in root.linkage_visitor(leaf=False, back=True):
+    print(i, j, k, l)
+logging.info(__('Norm:{:.8f}', root.global_norm()))

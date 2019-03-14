@@ -29,13 +29,13 @@ def main():
     r2 = exp2.root
     for (t1, _), (t2, _) in zip(g1, g2):
         assert(t1 == t2)
-        v1 = r1.vectorize()
-        v2 = r2.vectorize()
-        d = np.abs(v1)-np.abs(v2)
-        for n, i in enumerate(d):
-            if abs(i) > 1.e-14:
-                print('n: {}, i: {}'.format(n, i))
-        pass
+        # v1 = r1.vectorize()
+        # v2 = r2.vectorize()
+        # d = np.abs(v1)-np.abs(v2)
+        # for n, i in enumerate(d):
+        #     if abs(i) > 1.e-14:
+        #         print('n: {}, i: {}'.format(n, i))
+        # pass
     return
 
 
@@ -53,4 +53,4 @@ logging.basicConfig(
     level=logging.DEBUG
 )
 main()
-refer()
+# refer()

@@ -285,7 +285,7 @@ class MultiLayer(object):
         tensor.set_array(np.reshape(y1, shape))
         return
 
-    def _split_step(self, ode_inter=0.01, cmf=False, method='RK45', err=None, 
+    def _split_step(self, ode_inter=0.01, cmf=False, method='RK45', err=None,
                     imaginary=False):
         """FIXME:
         * Propagate one node in each linkage at one time?
@@ -296,36 +296,47 @@ class MultiLayer(object):
         * Propagating from top (close to leaves) to bottom (root)
           (try IDDFS?)
         """
-        if imaginary: raise NotImplementedError()
+        if imaginary:
+            raise NotImplementedError()
         if err is None:
             err = MultiLayer.svd_err
         # Now the visitor is DFS and has 2 directions
         visiting_list = list(self.root.linkage_visitor(leaf=False, back=True))
-        for t0, i, t1, j in visiting_list:
-            order0, order1 = map(
-                lambda t: len(list(t.children(axis=None, leaf=False))),
-                (t0, t1)
-            )
-            inter0, inter1 = map(
-                lambda order: ode_inter / (order * 2), (order0, order1)
-            )
-            # t0 prop inter0
-            self._single_prop(t0, tau=inter0, cmf=cmf, method=method)
-            # t0 split mid
-            mid = t0.split(i, err=err)
-            # mid prop -inter0
-            self._single_prop(mid, tau=-inter0, cmf=cmf, method=method)
-            # t1 unite mid
-            t1.unite(j)
-            # t1 prop inter1
-            self._single_prop(t1, tau=inter1, cmf=cmf, method=method)
+        for t1, i, t2, j in visiting_list:
+            if __debug__:
+                link1, link2 = t1._access, t2._access
+            order1 = len(list(t1.children(axis=None, leaf=False)))
+            inter1 = ode_inter / order1
+            """[Deprecated]
+                ## t0 prop inter0
+                self._single_prop(t0, tau=inter0, cmf=cmf, method=method)
+                # t0 split mid
+                mid = t0.split(i, err=err)
+                # mid prop -inter0
+                self._single_prop(mid, tau=-inter0, cmf=cmf, method=method)
+                # t1 unite mid
+                t1.unite(j)
+                # t1 prop inter1
+                self._single_prop(t1, tau=inter1, cmf=cmf, method=method)
+            """
+            axes = list(range(t2.order - 1))
+            # unite t1 and t2 as mid
+            mid = t2.unite(j)
+            # propagate mid with inter1
+            self._single_prop(mid, tau=inter1, cmf=cmf, method=method)
+            # split mid to t2' and t1', where t2' is new root.
+            mid.split(axis=axes, indice=(j, i), root=t2, child=t1)
+            # propagate t2' with -inter1
+            self._single_prop(t2, tau=-inter1, cmf=cmf, method=method)
+            assert(t1._access == link1)
+            assert(t2._access == link2)
 
         array = self.root.array
         norm = self.root.local_norm()
         self.root.set_array(array / norm)
         if __debug__:
             for i in self.root.visitor(axis=None, leaf=False):
-                logging.info(__(
+                logging.debug(__(
                     'Node: {}, shape: {}, norm: {:.8f}', i, i.shape,
                     np.sum(i.local_norm())
                 ))

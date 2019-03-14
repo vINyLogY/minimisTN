@@ -21,7 +21,7 @@ from sho_model import test_2layers, square, linear
 
 @time_this
 def ref():
-    x0, x1, n_dvr, n_spf, c, dofs = -5., 5., 40, 4, 0.5, 4
+    x0, x1, n_dvr, n_spf, c, dofs = -5., 5., 40, 10, 0.5, 8
     exp = test_2layers(x0, x1, n_dvr, n_spf, dofs, c)
     t1, a1 = zip(*exp.autocorr(steps=1000, ode_inter=0.01, cmf_step=10,
                                method='RK23', fast=True, split=False))
@@ -33,18 +33,26 @@ def ref():
 @time_this
 def main():
     graph = {
-        0: [1, 2],
-        1: [3, 4],
+        0: [1, 2],    # 1
+        1: [3, 4],    # 2
         2: [5, 6],
-        3: [7],
-        4: [8],
-        5: [9],
-        6: [10]
+        3: [7, 8],    # 3
+        4: [9, 10],
+        5: [11, 12],
+        6: [13, 14],
+        7: [15],    # leaves
+        8: [16],
+        9: [17],
+        10: [18],
+        11: [19],
+        12: [20],
+        13: [21],
+        14: [22],
     }
-    n_1, n_2, n_3 = 3, 6, 40
-    dvr = SineDVR(-5., 5, n_3)
+    n_1, n_2, n_3, n_4 = 5, 5, 5, 40
+    dvr = SineDVR(-5., 5, n_4)
     dvr.set_v_func(square)
-    _, array_i = dvr.solve(n_state=n_2)
+    _, array_i = dvr.solve(n_state=n_3)
 
     root = Tensor.generate(graph, 0)
     leaves = []
@@ -56,6 +64,9 @@ def main():
             array = np.eye(n_1, n_2 ** 2)
             array = np.reshape(array, (n_1, n_2, n_2))
         elif 3 <= int(t.name) <= 6:
+            array = np.eye(n_1, n_3 ** 2)
+            array = np.reshape(array, (n_1, n_2, n_2))
+        elif 7 <= int(t.name) <= 14:
             array = array_i
         else:
             array = None
@@ -72,7 +83,7 @@ def main():
     linear_ = partial(linear, c=0.5)
     dvr.set_v_func(linear_)
     l_h = dvr.v_mat()
-    for i in range(4 - 1):
+    for i in range(8 - 1):
         term = [(leaves[i], l_h), (leaves[i + 1], l_h)]
         h_list.append(term)
 

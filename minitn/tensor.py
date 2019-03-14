@@ -13,6 +13,7 @@ from __future__ import absolute_import, division
 import logging
 from builtins import filter, map, range, zip
 from functools import partial
+from itertools import chain
 
 import numpy as np
 from scipy import linalg
@@ -56,7 +57,7 @@ class Tensor(object):
         self.name = str(name)
         self.axis = axis
 
-        self._array = array
+        self.set_array(array)
         self._access = {}
 
         # Cache
@@ -72,7 +73,8 @@ class Tensor(object):
 
     @staticmethod
     def generate(graph, root):
-        """
+        """Helper function to generate a graph with Tensors as nodes.
+
         Parameters
         ----------
         graph : {string: [string]}
@@ -403,81 +405,147 @@ class Tensor(object):
             start = end
         return
 
-    def split(self, axis, rank=None, err=None):
-        """Split the root Tensor to a certain axis.
+    def split(self, axis, indice=None, root=None, child=None,
+              rank=None, err=None):
+        """Split the root Tensor to a certain axis/certain axes.
 
         Parameters
         ----------
-        axis : int
+        axis : {int, [int]}
+        rank : int
+            Max rank in SVD
         err : float
+            Max error in SVD
+        indice : (int, int)
+            Linkage between root and child
+        root : Tensor
+            Tensor to be a new root node. `None` to create a new Tensor.
+        child : Tensor
+            Tensor to be a new child node. `None` to create a new Tensor.
 
         Return
         ------
-        new_root : cls
+        root : Tensor
             New root node in the same environment of self.
-            With (ac) in self.name.
+        child : Tensor
+            New child node in the same environment of self.
         """
         if self.axis is not None:
             raise RuntimeError('Can only split the root Tensor!')
-        shape = self.shape
-        name = self.name
-        dim = shape.pop(axis)
-        a = np.moveaxis(self.array, axis, 0)
-        a = np.reshape(a, (dim, -1))
-        u, s, vh = compressed_svd(a, rank=rank, err=err)
-        root_array = np.dot(u, s)
-        root_array = np.reshape(root_array, (dim, -1))
-        child_array = np.reshape(vh, [-1] + shape)
-        child_array = np.moveaxis(child_array, 0, axis)
-        # Create new node
-        cls = type(self)
-        new_root = cls(name=name + '(ac)', axis=None)
-        new_root.set_array(root_array)
-        self.axis = axis
-        self.set_array(child_array)
-        # Fix linkage info
-        child, j = self.unlink_to(axis, fast=True)
-        self.link_to(axis, new_root, 1)
-        new_root.link_to(0, child, j)
-        return new_root
+        try:
+            axes1 = list(sorted(axis))
+        except TypeError:
+            axes1 = [axis]
 
-    def unite(self, axis):
+        # save all data needed in `self` (may be reinitialized)
+        a = self.array
+        axes2 = list(range(self.order))
+        for i in axes1:
+            axes2.remove(i)
+        children = list(self.children(axis=None))
+        cls = type(self)
+        shape1 = self.shape
+        name = self.name
+        index1, index2 = indice if indice is not None else (0, 0)
+        #
+        if '+' in name:
+            name1, name2 = name.split('+')
+        else:
+            name1, name2 = name, name + '\''
+
+        shape2 = []
+        for i in axes2:
+            shape2.append(shape1.pop(i))
+            a = np.moveaxis(a, i, -1)
+        a = np.reshape(a, (np.prod(shape1), np.prod(shape2)))
+        u, s, vh = compressed_svd(a, rank=rank, err=err)
+        root_array = np.reshape(np.dot(u, s), shape1 + [-1])
+        root_array = np.moveaxis(root_array, -1, index1)
+        child_array = np.reshape(vh, [-1] + shape2)
+        child_array = np.moveaxis(child_array, 0, index2)
+        if root is None:
+            root = cls(name=name1, array=root_array, axis=None)
+        else:
+            root.name, root.axis = name1, None
+            root.set_array(root_array)
+        if child is None:
+            child = cls(name=name2, array=child_array, axis=0)
+        else:
+            child.name, child.axis = name2, index2
+            child.set_array(child_array)
+        # Fix linkage info
+        unlink = Tensor.unlink
+        link = Tensor.link
+        link_info = []
+        for i, t, j in children:
+            is_1 = i in axes1
+            index_ = index1 if is_1 else index2
+            axes = axes1 if is_1 else axes2
+            tensor = root if is_1 else child
+            unlink(self, i, t, j)
+            ax = axes.index(i)
+            if ax >= index_:
+                ax += 1
+            link_info.append((tensor, ax, t, j))
+        for linkage in link_info:
+            link(*linkage)
+        link(root, index1, child, index2)
+        return root, child
+
+    def unite(self, axis, root=None):
         """Unite a Tensor `t` on a certain axis with self.
 
         Parameters
         ----------
         axis : int
-        err : float
+        root : Tensor
+            Tensor to be a new root node. `None` to create a new Tensor.
 
         Return
         ------
-        new_root : cls
+        root : Tensor
             New root node in the same environment of self.
-            With the same name as in t.name.
         """
-        tmp, i = self.unlink_to(axis, fast=True)
-        if tmp.axis is not None:
+        cls = type(self)
+        t1 = self
+        t2, i = t1.unlink_to(axis, fast=True)
+        if t1.axis is not None and t2.axis is not None:
             raise RuntimeError(
                 'Can only unite root Tensor with another Tensor!'
             )
-        if tmp.order != 2:
-            raise NotImplementedError()
-        if '(ac)' not in tmp.name:
-            logging.warning('Trying to break the initial topology!')
-        if i == 1:
-            j = 0
-        elif i == 0:
-            j = 1
+        axes1 = list(range(t1.order))
+        axes1.remove(axis)
+        axes2 = list(range(t2.order))
+        axes2.remove(i)
+        shape1, shape2 = t1.shape, t2.shape
+        shape1.pop(axis)
+        shape2.pop(i)
+        a1, a2 = t1.array, t2.array
+        array = Tensor.partial_product(a1, axis, a2, i)
+        array = np.moveaxis(array, axis, -1)
+        array = np.reshape(array, shape1 + shape2)
+        name = t1.name + '+' + t2.name
+        if root is None:
+            root = cls(name=name, array=array, axis=None)
         else:
-            raise NotImplementedError()
-        array, matrix = self.array, tmp.array
-        array = Tensor.partial_product(array, axis, matrix, i)
-        self.set_array(array)
-        self.axis = None
+            root.name, root.axis = name, None
+            root.set_array(array)
+
         # Fix linkage info
-        child, k = tmp.unlink_to(j, fast=True)
-        self.link_to(axis, child, k)
-        return self
+        link = Tensor.link
+        unlink = Tensor.unlink
+        children1 = list(t1.children(axis=None))
+        children2 = list(t2.children(axis=None))
+        link_info = []
+        for j, t, k in children1:
+            unlink(t1, j, t, k)
+            link_info.append((root, axes1.index(j), t, k))
+        for j, t, k in children2:
+            unlink(t2, j, t, k)
+            link_info.append((root, axes2.index(j) + len(axes1), t, k))
+        for linkage in link_info:
+            link(*linkage)
+        return root
 
     def normalize(self):
         array = self.array
