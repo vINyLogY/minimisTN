@@ -559,8 +559,8 @@ class Tensor(object):
         link = Tensor.link
         unlink = Tensor.unlink
         unlink(t1, index1, t2, index2)
-        link1 = [(t1, *args) for args in t1.children(axis=None)]
-        link2 = [(t2, *args) for args in t2.children(axis=None)]
+        link1 = [(t1,) + args for args in t1.children(axis=None)]
+        link2 = [(t2,) + args for args in t2.children(axis=None)]
         link_info = []
         for s, i, t, j in link1[:axis] + link2 + link1[axis:]:
             unlink(s, i, t, j)
