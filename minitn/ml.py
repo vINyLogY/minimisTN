@@ -12,6 +12,7 @@ from __future__ import absolute_import, division
 import logging
 from builtins import filter, map, range, zip
 from functools import partial
+from copy import copy
 
 import numpy as np
 from scipy import linalg, integrate
@@ -107,7 +108,7 @@ class MultiLayer(object):
             ans += self.root.expection()
         return ans
 
-    def _single_eom(self, tensor, n=None, cmf=False):
+    def _single_eom(self, tensor, n):
         """C.f. `Multi-Configuration Time Dependent Hartree Theory: a Tensor
         Network Perspective`, p38. This method does not contain the `i hbar`
         coefficient.
@@ -116,10 +117,8 @@ class MultiLayer(object):
         ----------
         tensor : Tensor
             Must in a graph with all nodes' array set, including the leaves.
-        n : {int, None}
-            No. of Hamiltonian term (for CMF method).
-        cmf : bool
-            True to use the cache in self (CMF method), False to re-calculate.
+        n : int
+            No. of Hamiltonian term.
 
         Return:
         -------
@@ -133,12 +132,10 @@ class MultiLayer(object):
         # Env Hamiltonians
         tmp = tensor.array
         for i in range(tensor.order):
-            if not cmf:
-                env_ = partial_env(i, proper=True)
-                if n is not None:
-                    self.env_[(n, tensor, i)] = env_
-            else:
+            try:
                 env_ = self.env_[(n, tensor, i)]
+            except KeyError:
+                env_ = partial_env(i, proper=True)
             tmp = partial_product(tmp, i, env_)
         # For non-root nodes...
         axis = tensor.axis
@@ -172,6 +169,15 @@ class MultiLayer(object):
                     )
         return self.inv_density
 
+    def _form_env(self):
+        visitor = self.root.visitor
+        for n in self.term_visitor():
+            for tensor in visitor(leaf=False):
+                for i in range(tensor.order):
+                    env_ = tensor.partial_env(i, proper=True)
+                    self.env_[(n, tensor, i)] = env_
+        return self.env_
+
     def eom(self, check=False, cmf=False, imaginary=False):
         r"""Write the derivative of each Tensor in tensor.aux.
 
@@ -191,26 +197,26 @@ class MultiLayer(object):
         if check:
             for tensor in visitor():
                 tensor.check_completness(strict=True)
-
         # Clean
         for t in visitor():
             t.aux = None
         # All partial densities
         if not cmf:
             self._form_inv_density()
+            self._form_env()
         # Term by term...
         for n in self.term_visitor():
             for tensor in visitor(leaf=False):
-                tmp = self._single_eom(tensor, n=n, cmf=cmf)
+                tmp = self._single_eom(tensor, n)
                 prev = tensor.aux
                 tensor.aux = tmp if prev is None else prev + tmp
         # Times coefficient
         for tensor in visitor(leaf=False):
-            coefficient = (
-                -MultiLayer.hbar if imaginary else 1.0j * MultiLayer.hbar
-            )
-            tensor.aux /= coefficient
+            tensor.aux /= self.coefficient(imaginary=imaginary)
         return
+
+    def coefficient(self, imaginary=False):
+        return -MultiLayer.hbar if imaginary else 1.0j * MultiLayer.hbar
 
     def _direct_step(self, ode_inter=0.01, cmf=False, method='RK45',
                      imaginary=False):
@@ -269,77 +275,80 @@ class MultiLayer(object):
             root.tensorize(y1)
         return
 
-    def _single_prop(self, tensor, tau=0.01, cmf=False, method='RK45'):
+    def _split_prop(self, tensor, tau=0.01, imaginary=False, method='RK45'):
         shape = tensor.shape
 
         def _d(t, y):
             tensor.set_array(np.reshape(y, shape))
             d = np.zeros_like(y)
-            for _ in self.term_visitor():    # Do not use the cache
-                d += np.reshape(self._single_eom(tensor, n=None, cmf=cmf), -1)
+            for n in self.term_visitor():
+                d += np.reshape(self._single_eom(tensor, n), -1)
+            d /= self.coefficient(imaginary=imaginary)
             return np.reshape(d, -1)
 
         y0 = np.reshape(tensor.array, -1)
         ode_solver = integrate.solve_ivp(_d, (0., tau), y0, method=method)
         y1 = np.transpose(ode_solver.y)[-1]
         tensor.set_array(np.reshape(y1, shape))
+        tensor.normalize()
         return
 
     def _split_step(self, ode_inter=0.01, cmf=False, method='RK45', err=None,
-                    imaginary=False):
-        """FIXME:
-        * Propagate one node in each linkage at one time?
-        * Order?
-        * ...
-
+                    imaginary=False, split_first=True):
+        """
         TODO:
         * Propagating from top (close to leaves) to bottom (root)
           (try IDDFS?)
         """
-        if imaginary:
-            raise NotImplementedError()
         if err is None:
             err = MultiLayer.svd_err
-        # Now the visitor is DFS and has 2 directions
-        visiting_list = list(self.root.linkage_visitor(leaf=False, back=True))
-        for t1, i, t2, j in visiting_list:
-            if __debug__:
-                link1, link2 = t1._access, t2._access
-            order1 = len(list(t1.children(axis=None, leaf=False)))
-            inter1 = ode_inter / order1
-            """[Deprecated]
-                ## t0 prop inter0
-                self._single_prop(t0, tau=inter0, cmf=cmf, method=method)
-                # t0 split mid
-                mid = t0.split(i, err=err)
-                # mid prop -inter0
-                self._single_prop(mid, tau=-inter0, cmf=cmf, method=method)
-                # t1 unite mid
-                t1.unite(j)
+        propagate = partial(self._split_prop, imaginary=imaginary,
+                            method=method)
+        # if not cmf:
+        #     self._form_env()
+        if split_first:
+            # Now the visitor is DFS and has 2 directions
+            visiting_list = list(self.root.linkage_visitor(leaf=False,
+                                                           back=True))
+            for t1, i, t2, j in visiting_list:
+                order1 = len(list(t1.children(axis=None, leaf=False)))
+                inter1 = 0.5 * ode_inter / order1
+                order2 = len(list(t2.children(axis=None, leaf=False)))
+                inter2 = 0.5 * ode_inter / order2
+                if __debug__:
+                    link1, link2 = copy(t1._access), copy(t2._access)
                 # t1 prop inter1
-                self._single_prop(t1, tau=inter1, cmf=cmf, method=method)
-            """
-            axes = list(range(t2.order - 1))
-            # unite t1 and t2 as mid
-            mid = t2.unite(j)
-            # propagate mid with inter1
-            self._single_prop(mid, tau=inter1, cmf=cmf, method=method)
-            # split mid to t2' and t1', where t2' is new root.
-            mid.split(axis=axes, indice=(j, i), root=t2, child=t1)
-            # propagate t2' with -inter1
-            self._single_prop(t2, tau=-inter1, cmf=cmf, method=method)
-            assert(t1._access == link1)
-            assert(t2._access == link2)
-
-        array = self.root.array
-        norm = self.root.local_norm()
-        self.root.set_array(array / norm)
-        if __debug__:
-            for i in self.root.visitor(axis=None, leaf=False):
-                logging.debug(__(
-                    'Node: {}, shape: {}, norm: {:.8f}', i, i.shape,
-                    np.sum(i.local_norm())
-                ))
+                propagate(t1, tau=inter1)
+                # t1 split mid
+                mid, _ = t1.split(i, indice=(0, i), err=err, child=t1)
+                # mid prop -inter1
+                propagate(mid, tau=-inter1)
+                # t2 unite mid
+                t2.unite(j, root=t2)
+                # t2 prop inter2
+                propagate(t2, tau=inter2)
+                assert(t1._access == link1)
+                assert(t2._access == link2)
+        else:    # FIXME
+            visiting_list = list(
+                self.root.linkage_visitor(leaf=False, back=True)
+            )
+            for t1, i, t2, j in visiting_list:
+                if __debug__:
+                    link1, link2 = copy(t1._access), copy(t2._access)
+                order1 = len(list(t1.children(axis=None, leaf=False)))
+                inter1 = ode_inter / order1
+                axes = list(range(t2.order - 1))
+                # unite t1 and t2 as mid
+                mid = t2.unite(j)
+                # propagate mid with inter1
+                propagate(mid, tau=inter1)
+                # split mid to t2' and t1', where t2' is new root.
+                mid.split(axis=axes, indice=(j, i), root=t2, child=t1)
+                # propagate t2' with -inter1
+                propagate(t2, tau=-inter1)
+                assert(t1._access == link1)
+                assert(t2._access == link2)
         return
 
     def propagator(
@@ -374,8 +383,6 @@ class MultiLayer(object):
                     ode_inter=ode_inter, cmf=cmf, method=method,
                     imaginary=imaginary
                 )
-            # TODO: if imaginary, need re-normalize to minimize
-            #       error
             if imaginary:
                 for t in self.root.visitor(leaf=False):
                     t.normalize()

@@ -22,11 +22,9 @@ def main():
     exp1 = test_2layers(x0, x1, n_dvr, n_spf, dofs, c)
     g1 = exp1.autocorr(steps=500, ode_inter=0.01, cmf_step=None,
                        method='RK23', fast=False, split=True)
-    r1 = exp1.root
     exp2 = test_2layers(x0, x1, n_dvr, n_spf, dofs, c)
     g2 = exp2.autocorr(steps=500, ode_inter=0.01, cmf_step=None,
                        method='RK23', fast=False, split=False)
-    r2 = exp2.root
     for (t1, _), (t2, _) in zip(g1, g2):
         assert(t1 == t2)
         # v1 = r1.vectorize()

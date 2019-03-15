@@ -11,31 +11,51 @@ from functools import partial
 import numpy as np
 
 from minitn.lib.tools import __, time_this
-from sho_model import test_2layers
+from sho_model import test_4layers, test_2layers
+
+def test_binary():
+    exp = test_4layers(x0=-5., x1=5., n_1=5, n_2=5, n_3=5, n_4=40, c=0.5)
+    root = exp.root
+
+    root, _ = root.split(0, child=root)
+    for t in root.visitor():
+        t.check_completness(strict=True)
+        print(t, np.sum(t.array), t.shape)
+    for i, j, k, l in root.linkage_visitor(leaf=False, back=True):
+        print(i, j, k, l)
+    logging.info(__('Norm:{:.8f}', root.global_norm()))
+
+    root = root.unite(0, root=root)
+    for t in root.visitor():
+        t.check_completness(strict=True)
+        print(t, np.sum(t.array), t.shape)
+    for i, j, k, l in root.linkage_visitor(leaf=False, back=True):
+        print(i, j, k, l)
+    logging.info(__('Norm:{:.8f}', root.global_norm()))
+
+def test_others():
+    exp = test_2layers(-5., 5., 40, 6, 4, 0.5)
+    root = exp.root
+    for i, j, k, l in root.linkage_visitor(leaf=False, back=True):
+        print(i, j, k, l)
+
+    root, child = root.split(2, indice=(0, 2), child=root)
+    for t in root.visitor(axis=None):
+        t.check_completness(strict=True)
+    for i, j, k, l in root.linkage_visitor(leaf=False, back=True):
+        print(i, j, k, l)
+    logging.info(__('Norm:{:.8f}', root.global_norm()))
+
+    root = child.unite(2, root=child)
+    for t in root.visitor():
+        t.check_completness(strict=True)
+    for i, j, k, l in root.linkage_visitor(leaf=False, back=True):
+        print(i, j, k, l)
+    logging.info(__('Norm:{:.8f}', root.global_norm()))
 
 
-logging.root.setLevel(logging.DEBUG)
-x0, x1, n_dvr, n_spf, c, dofs = -5., 5., 40, 10, 0.5, 2
-exp = test_2layers(x0, x1, n_dvr, n_spf, dofs, c)
-root = exp.root
-print(repr(root))
-root, child = root.split(0, root=root)
-print(repr(root))
-root.check_completness(strict=True)
-for t in root.visitor():
-    print(t, np.sum(t.array), t.shape)
-print('*' * 10)
-for i, j, k, l in root.linkage_visitor(leaf=False, back=True):
-    print(i, j, k, l)
-logging.info(__('Norm:{:.8f}', root.global_norm()))
-print('*' * 10)
-print(repr(root))
-root = root.unite(0, root=root)
-print(repr(root))
-root.check_completness(strict=True)
-for t in root.visitor():
-    print(t, np.sum(t.array), t.shape)
-print('*' * 10)
-for i, j, k, l in root.linkage_visitor(leaf=False, back=True):
-    print(i, j, k, l)
-logging.info(__('Norm:{:.8f}', root.global_norm()))
+
+logging.root.setLevel(logging.DEBUG+2)
+# test_binary()
+test_others()
+

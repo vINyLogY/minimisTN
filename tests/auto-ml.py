@@ -20,16 +20,16 @@ from sho_model import test_2layers, test_mctdh
 def main():
     x0, x1, n_dvr, n_spf, c, dofs = -5., 5., 40, 10, 0.5, 4
     exp = test_2layers(x0, x1, n_dvr, n_spf, dofs, c)
-    t1, a1 = zip(*exp.autocorr(steps=1000, ode_inter=0.01, cmf_step=10,
-                               method='RK45', fast=True, split=False))
-    np.save('ml_t', t1)
-    np.save('ml_a', a1)
+    t1, a1 = zip(*exp.autocorr(steps=1000, ode_inter=0.01, cmf_step=None,
+                               method='RK23', fast=True, split=True))
+    np.save('data/exp_t', t1)
+    np.save('data/exp_a', a1)
     x0, x1, n_dvr, n_spf, c, dofs = -5., 5., 40, 6, 0.5, 4
     exp = test_2layers(x0, x1, n_dvr, n_spf, dofs, c)
     t1, a1 = zip(*exp.autocorr(steps=1000, ode_inter=0.01, cmf_step=10,
                                method='RK45', fast=True, split=False))
-    np.save('ml2_t', t1)
-    np.save('ml2_a', a1)
+    np.save('data/ref_t', t1)
+    np.save('data/ref_a', a1)
     return
 
 

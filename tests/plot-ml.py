@@ -12,7 +12,7 @@ import scipy
 
 from minitn.lib.tools import figure, BraceMessage as __
 
-root = 'data/'
+root = './'
 str2 = 'ref'
 str1 = 'exp'
 

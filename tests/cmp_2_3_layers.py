@@ -21,7 +21,7 @@ from sho_model import test_2layers, square, linear
 
 @time_this
 def ref():
-    x0, x1, n_dvr, n_spf, c, dofs = -5., 5., 40, 4, 0.5, 4
+    x0, x1, n_dvr, n_spf, c, dofs = -5., 5., 40, 6, 0.5, 4
     exp = test_2layers(x0, x1, n_dvr, n_spf, dofs, c)
     t1, a1 = zip(*exp.autocorr(steps=1000, ode_inter=0.01, cmf_step=10,
                                method='RK23', fast=True, split=False))
@@ -41,7 +41,7 @@ def main():
         5: [9],
         6: [10]
     }
-    n_1, n_2, n_3 = 3, 6, 40
+    n_1, n_2, n_3 = 10, 20, 40
     dvr = SineDVR(-5., 5, n_3)
     dvr.set_v_func(square)
     _, array_i = dvr.solve(n_state=n_2)
