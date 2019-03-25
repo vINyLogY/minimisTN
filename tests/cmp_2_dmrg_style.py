@@ -23,8 +23,8 @@ from sho_model import test_2layers, test_mps_dmrg
 def ref():
     x0, x1, n_dvr, n_spf, c, dofs = -5., 5., 40, 6, 0.5, 4
     exp = test_2layers(x0, x1, n_dvr, n_spf, dofs, c)
-    t1, a1 = zip(*exp.autocorr(steps=10000, ode_inter=0.001, cmf_step=100,
-                               method='RK45', fast=True, split=False))
+    t1, a1 = zip(*exp.autocorr(steps=1000, ode_inter=0.01, cmf_step=None,
+                               method='RK23', fast=False, split=False))
     np.save('./data/ref_t', t1)
     np.save('./data/ref_a', a1)
     return
@@ -34,8 +34,8 @@ def ref():
 def main():
     solver = test_mps_dmrg(x0=-5., x1=5., n_1=5, n_2=40, dofs=4, c=0.5)
     start = time()
-    t2, a2 = zip(*solver.autocorr(steps=10000, ode_inter=0.001, cmf_step=100,
-                                  method='RK45', fast=True, split=False))
+    t2, a2 = zip(*solver.autocorr(steps=1000, ode_inter=0.01, cmf_step=None,
+                                  method='RK23', fast=False, split=True))
     end = time()
     print(end - start)
     np.save('./data/exp_t', t2)

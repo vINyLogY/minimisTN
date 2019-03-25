@@ -246,13 +246,18 @@ class Tensor(object):
         -----
         tuple : (int, Tensor, int)
         """
-        def key(x): return x[0]
         if axis is _empty:
             axis = self.axis
-        for i, (tensor, j) in sorted(self._access.items(), key=key):
+        for i, tensor, j in self.access:
             if axis is None or i != axis:
                 if leaf or not isinstance(tensor, Leaf):
                     yield (i, tensor, j)
+
+    @property
+    def access(self):
+        def key(x): return x[0]
+        linkages = [(i, t, j) for i, (t, j) in self._access.items()]
+        return sorted(linkages, key=key)
 
     def visitor(self, axis=_empty, leaf=True):
         """
@@ -278,9 +283,6 @@ class Tensor(object):
                 yield linkage
             if back:
                 yield (child, j, self, i)
-
-    def iddfs_visitor(self, axis=_empty, leaf=False, back=True):
-        return NotImplemented
 
     def partial_env(self, i, proper=False, use_aux=False):
         """
