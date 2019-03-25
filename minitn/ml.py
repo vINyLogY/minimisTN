@@ -86,6 +86,8 @@ class MultiLayer(object):
         return
 
     def term_visitor(self):
+        """Visit all terms in self.h_list.
+        """
         visitor = self.root.visitor
         for n, term in enumerate(self.h_list):
             for t in visitor(axis=None):
@@ -153,6 +155,7 @@ class MultiLayer(object):
         return tmp
 
     def _form_inv_density(self):
+        self.inv_density = {}
         visitor = self.root.visitor
         for tensor in visitor():
             tensor.reset()
@@ -170,6 +173,7 @@ class MultiLayer(object):
         return self.inv_density
 
     def _form_env(self):
+        self.env_ = {}
         visitor = self.root.visitor
         for n in self.term_visitor():
             for tensor in visitor(leaf=False):
@@ -178,7 +182,7 @@ class MultiLayer(object):
                     self.env_[(n, tensor, i)] = env_
         return self.env_
 
-    def eom(self, check=False, cmf=False, imaginary=False):
+    def eom(self, check=False, imaginary=False):
         r"""Write the derivative of each Tensor in tensor.aux.
 
                    .
@@ -188,8 +192,6 @@ class MultiLayer(object):
         ----------
         check : bool
             True to check the linkage completness.
-        cmf : bool
-            Whether to re-calculate self.inv_density and self.env_ 
         imaginary : bool
             Whether to treat t as it.
         """
@@ -200,10 +202,6 @@ class MultiLayer(object):
         # Clean
         for t in visitor():
             t.aux = None
-        # All partial densities
-        if not cmf:
-            self._form_inv_density()
-            self._form_env()
         # Term by term...
         for n in self.term_visitor():
             for tensor in visitor(leaf=False):
@@ -218,38 +216,38 @@ class MultiLayer(object):
     def coefficient(self, imaginary=False):
         return -MultiLayer.hbar if imaginary else 1.0j * MultiLayer.hbar
 
-    def _direct_step(self, ode_inter=0.01, cmf=False, method='RK45',
-                     imaginary=False):
+    def _direct_step(self, ode_inter=0.01, method='RK45', imaginary=False):
         visitor = self.root.visitor
         if method == 'Newton':
-            self.eom(cmf=cmf, imaginary=imaginary)
+            self.eom(imaginary=imaginary)
             for t in visitor(leaf=False):
                 y0 = t.array
                 dy = ode_inter * t.aux
                 t.set_array(y0 + dy)
                 t.aux = None
         elif method == 'RK4':
-            k = [{}, {}, {}, {}]    # save [y0, k1, k2, k3]
-            self.eom(cmf=cmf, imaginary=imaginary)    # for k1
+            k = [{}, {}, {}, {}]  # save [y0, k1, k2, k3]
+            eom = partial(self.eom, imaginary=imaginary)
+            eom()    # for k1
             for t in visitor(leaf=False):
                 y0 = t.array
                 k1 = ode_inter * t.aux
                 t.set_array(y0 + k1 / 2)
                 k[0][t] = y0
                 k[1][t] = k1
-            self.eom(cmf=cmf, imaginary=imaginary)    # for k2
+            eom()    # for k2
             for t in visitor(leaf=False):
                 y0 = k[0][t]
                 k2 = ode_inter * t.aux
                 t.set_array(y0 + k2 / 2)
                 k[2][t] = k2
-            self.eom(cmf=cmf, imaginary=imaginary)    # for k3
+            eom()    # for k3
             for t in visitor(leaf=False):
                 y0 = k[0][t]
                 k3 = ode_inter * t.aux
                 t.set_array(y0 + k3)
                 k[3][t] = k3
-            self.eom(cmf=cmf, imaginary=imaginary)    # for k4
+            eom()    # for k4
             for t in visitor(leaf=False):
                 y0 = k[0][t]
                 k4 = ode_inter * t.aux
@@ -262,9 +260,13 @@ class MultiLayer(object):
             root = self.root
 
             def _vec_diff(t, y):
+                """This function will not change the arrays in tensor network.
+                """
+                origin = root.vectorize()
                 root.tensorize(y)
-                self.eom(cmf=cmf, imaginary=imaginary)
+                self.eom(imaginary=imaginary)
                 ans = root.vectorize(use_aux=True)
+                root.tensorize(origin)
                 return ans
 
             y0 = root.vectorize()
@@ -279,11 +281,15 @@ class MultiLayer(object):
         shape = tensor.shape
 
         def _d(t, y):
+            """This function will not change the arrays in tensor network.
+            """
+            origin = tensor.array
             tensor.set_array(np.reshape(y, shape))
             d = np.zeros_like(y)
             for n in self.term_visitor():
                 d += np.reshape(self._single_eom(tensor, n), -1)
             d /= self.coefficient(imaginary=imaginary)
+            tensor.set_array(origin)
             return np.reshape(d, -1)
 
         y0 = np.reshape(tensor.array, -1)
@@ -293,8 +299,8 @@ class MultiLayer(object):
         tensor.normalize()
         return
 
-    def _split_step(self, ode_inter=0.01, cmf=False, method='RK45', err=None,
-                    imaginary=False, split_first=True):
+    def _split_step(self, ode_inter=0.01, method='RK45', err=None,
+                    imaginary=False):
         """
         TODO:
         * Propagating from top (close to leaves) to bottom (root)
@@ -302,59 +308,28 @@ class MultiLayer(object):
         """
         if err is None:
             err = MultiLayer.svd_err
-        propagate = partial(self._split_prop, imaginary=imaginary,
-                            method=method)
-        # if not cmf:
-        #     self._form_env()
-        if split_first:
-            # Now the visitor is DFS and has 2 directions
-            visiting_list = list(self.root.linkage_visitor(leaf=False,
-                                                           back=True))
-            for t1, i, t2, j in visiting_list:
-                order1 = len(list(t1.children(axis=None, leaf=False)))
-                inter1 = 0.5 * ode_inter / order1
-                order2 = len(list(t2.children(axis=None, leaf=False)))
-                inter2 = 0.5 * ode_inter / order2
-                if __debug__:
-                    link1, link2 = copy(t1._access), copy(t2._access)
-                # t1 prop inter1
-                propagate(t1, tau=inter1)
-                # t1 split mid
-                mid, _ = t1.split(i, indice=(0, i), err=err, child=t1)
-                # mid prop -inter1
-                propagate(mid, tau=-inter1)
-                # t2 unite mid
-                t2.unite(j, root=t2)
-                # t2 prop inter2
-                propagate(t2, tau=inter2)
-                assert(t1._access == link1)
-                assert(t2._access == link2)
-        else:    # FIXME
-            visiting_list = list(
-                self.root.linkage_visitor(leaf=False, back=True)
-            )
-            for t1, i, t2, j in visiting_list:
-                if __debug__:
-                    link1, link2 = copy(t1._access), copy(t2._access)
-                order1 = len(list(t1.children(axis=None, leaf=False)))
-                inter1 = ode_inter / order1
-                axes = list(range(t2.order - 1))
-                # unite t1 and t2 as mid
-                mid = t2.unite(j)
-                # propagate mid with inter1
-                propagate(mid, tau=inter1)
-                # split mid to t2' and t1', where t2' is new root.
-                mid.split(axis=axes, indice=(j, i), root=t2, child=t1)
-                # propagate t2' with -inter1
-                propagate(t2, tau=-inter1)
-                assert(t1._access == link1)
-                assert(t2._access == link2)
+        propagate = partial(self._split_prop,
+                            imaginary=imaginary, method=method)
+        # Now the visitor is DFS and has 2 directions
+        linkage_list = list(self.root.linkage_visitor(leaf=False, back=True))
+        order_list = {t: 3 * len(list(t.children(axis=None, leaf=False)))
+                      for t in self.root.visitor(leaf=False)}    # why `3`???
+        for t1, i, t2, j in linkage_list:
+            inter1 = ode_inter / order_list[t1]
+            inter2 = ode_inter / order_list[t2]
+            # t1 prop inter1
+            propagate(t1, tau=inter1)
+            # t1 split mid
+            mid, _ = t1.split(i, err=err, child=t1)
+            # mid prop -inter1
+            propagate(mid, tau=-inter1)
+            # t2 unite mid
+            t2.unite(j, root=t2)
+            propagate(t2, tau=inter2)
         return
 
-    def propagator(
-        self, steps=None, ode_inter=0.01, cmf_step=None, method='RK45',
-        split=False, imaginary=False
-    ):
+    def propagator(self, steps=None, ode_inter=0.01, cmf_step=None,
+                   method='RK45', split=False, imaginary=False):
         """Propagator generator
 
         Parameters
@@ -374,32 +349,27 @@ class MultiLayer(object):
             yield (_i * ode_inter, self.root)
             cmf = (cmf_step is not None and _i % cmf_step != 0)
             if split:
-                self._split_step(
-                    ode_inter=ode_inter, cmf=cmf, method=method,
-                    imaginary=imaginary
-                )
+                self._split_step(ode_inter=ode_inter, method=method,
+                                 imaginary=imaginary)
             else:
-                self._direct_step(
-                    ode_inter=ode_inter, cmf=cmf, method=method,
-                    imaginary=imaginary
-                )
+                if not cmf:
+                    self._form_env()
+                    self._form_inv_density()
+                self._direct_step(ode_inter=ode_inter, method=method,
+                                  imaginary=imaginary)
             if imaginary:
-                for t in self.root.visitor(leaf=False):
-                    t.normalize()
+                self.root.normalize()
             _i += 1
 
-    def autocorr(
-        self, steps=None, ode_inter=0.01, cmf_step=None, method='RK45',
-        split=False, fast=True, imaginary=False
-    ):
+    def autocorr(self, steps=None, ode_inter=0.01, cmf_step=None,
+                 method='RK45', split=False, fast=True, imaginary=False):
         if not fast:
             self._init = {}
             for t in self.root.visitor(leaf=False):
                 self._init[t] = t.array
-        for time, r in self.propagator(
-            steps=steps, ode_inter=ode_inter, cmf_step=cmf_step, method=method,
-            split=split, imaginary=imaginary
-        ):
+        for time, r in self.propagator(steps=steps, ode_inter=ode_inter,
+                                       cmf_step=cmf_step, method=method,
+                                       split=split, imaginary=imaginary):
             for t in r.visitor(leaf=False):
                 t.aux = t.array if fast else np.conj(self._init[t])
             auto = r.global_inner_product()

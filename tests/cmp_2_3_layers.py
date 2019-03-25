@@ -82,7 +82,7 @@ def main():
     solver = MultiLayer(root, h_list)
     start = time()
     t2, a2 = zip(*solver.autocorr(steps=1000, ode_inter=0.01, cmf_step=10,
-                                  method='RK23', fast=True, split=False))
+                                  method='RK23', fast=True, split=True))
     end = time()
     print(end - start)
     np.save('./data/exp_t', t2)

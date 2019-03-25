@@ -18,7 +18,7 @@ $$
     * $c = 0.5, d=4$
     * `steps=1000, ode_inter=0.01, cmf_step=10, method='RK23', fast=True, split=False`
     * MCTDH：$n_1 = 10, n_2 = 40$
-    * MLMCTDH：$n_1 = 10, n_2 = 10, n_3 = 40$，满二叉树。
+    * MLMCTDH：$n_1 = 10, n_2 = 10, n_3 = 40​$，满二叉树。
     * $|a|-t$ 图像：
     ![case 1](.\figures\Figure_1.svg)
     * 数据文件：`data/SHO_1_*`
@@ -51,4 +51,6 @@ $$
     * 数据文件：`data/SHO_4_*`
     * 测试参考：`tests/cmp_2_4layers.py`
 
-
+5. Case 5
+    * Projector-splitting: 
+        * ？？？

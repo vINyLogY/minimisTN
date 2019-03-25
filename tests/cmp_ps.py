@@ -20,20 +20,19 @@ from sho_model import test_2layers, test_mctdh
 def main():
     x0, x1, n_dvr, n_spf, c, dofs = -5., 5., 40, 6, 0.5, 2
     exp1 = test_2layers(x0, x1, n_dvr, n_spf, dofs, c)
-    g1 = exp1.autocorr(steps=500, ode_inter=0.01, cmf_step=None,
-                       method='RK23', fast=False, split=True)
+    for args in exp1.root.linkage_visitor(leaf=False, back=True):
+        print(*args)
+    t1, a1 = zip(*exp1.autocorr(steps=500, ode_inter=0.01,
+                                cmf_step=None, method='RK23',
+                                fast=False, split=True))
     exp2 = test_2layers(x0, x1, n_dvr, n_spf, dofs, c)
-    g2 = exp2.autocorr(steps=500, ode_inter=0.01, cmf_step=None,
-                       method='RK23', fast=False, split=False)
-    for (t1, _), (t2, _) in zip(g1, g2):
-        assert(t1 == t2)
-        # v1 = r1.vectorize()
-        # v2 = r2.vectorize()
-        # d = np.abs(v1)-np.abs(v2)
-        # for n, i in enumerate(d):
-        #     if abs(i) > 1.e-14:
-        #         print('n: {}, i: {}'.format(n, i))
-        # pass
+    t2, a2 = zip(*exp2.autocorr(steps=500, ode_inter=0.01,
+                                cmf_step=None, method='RK23',
+                                fast=False, split=False))
+    with figure():
+        plt.plot(t2, np.abs(a2), '-')
+        plt.plot(t1, np.abs(a1), '--')
+        plt.show()
     return
 
 
