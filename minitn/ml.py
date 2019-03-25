@@ -303,26 +303,30 @@ class MultiLayer(object):
     def _split_step(self, ode_inter=0.01, method='RK45', err=None,
                     imaginary=False, _root=None, _axis=None):
         """
-        TODO:
-        * Propagating from top (close to leaves) to bottom (root)
-          (try IDDFS?)
+        FIXME: this method now only works for 2-D MCTDH.
         """
         if err is None:
             err = MultiLayer.svd_err
+        if _root is None:
+            _root = self.root
         propagate = partial(self._split_prop,
                             method=method, imaginary=imaginary)
-        branch_prop = partial(self._split_step,
-                              ode_inter=ode_inter, method=method,
-                              err=err, imaginary=imaginary)
-        r = self.root if _root is None else _root
-        for i, t, j in r.children(axis=_axis, leaf=False):
-            r.split(i, err=err, child=r)
-            t.unite(j, root=t)
-            branch_prop(_root=t, _axis=j)
-            mid, _ = t.split(j, err=err, child=t)
-            propagate(mid, tau=(-ode_inter))
-            r.unite(i, root=r)
-        propagate(r, ode_inter)
+
+        def _branch_prop(r, axis, tau):
+            for i, t, j in r.children(axis=axis, leaf=False):
+                r.split(i, err=err, child=r)
+                t.unite(j, root=t)
+                self._split_step(ode_inter=tau, method=method,
+                                 err=err, imaginary=imaginary,
+                                 _root=t, _axis=j)
+                mid, _ = t.split(j, err=err, child=t)
+                propagate(mid, tau=(-tau))
+                r.unite(i, root=r)
+            return
+
+        _branch_prop(_root, _axis, 0.5 * ode_inter)
+        propagate(_root, tau=ode_inter)
+        _branch_prop(_root, _axis, 0.5 * ode_inter)
         return
 
     def propagator(self, steps=None, ode_inter=0.01, cmf_step=None,

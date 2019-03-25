@@ -13,20 +13,22 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from minitn.lib.tools import __, time_this, figure
-from sho_model import test_2layers, test_mctdh
+from sho_model import test_2layers, test_4layers, test_mctdh
 
 
 @time_this
 def main():
-    x0, x1, n_dvr, n_spf, c, dofs = -5., 5., 40, 6, 0.5, 2
-    exp1 = test_2layers(x0, x1, n_dvr, n_spf, dofs, c)
+    x0, x1, n_dvr, n_spf, c, dofs = -5., 5., 40, 10, 0.5, 2
+    exp1 = test_4layers()
+    # exp1 = test_2layers(x0, x1, n_dvr, n_spf, dofs, c)
     for args in exp1.root.linkage_visitor(leaf=False, back=True):
         print(*args)
-    t1, a1 = zip(*exp1.autocorr(steps=500, ode_inter=0.01,
+    t1, a1 = zip(*exp1.autocorr(steps=500, ode_inter=0.001,
                                 cmf_step=None, method='RK23',
                                 fast=False, split=True))
-    exp2 = test_2layers(x0, x1, n_dvr, n_spf, dofs, c)
-    t2, a2 = zip(*exp2.autocorr(steps=500, ode_inter=0.01,
+    exp2 = test_4layers()
+    # exp2 = test_2layers(x0, x1, n_dvr, n_spf, dofs, c)
+    t2, a2 = zip(*exp2.autocorr(steps=500, ode_inter=0.001,
                                 cmf_step=None, method='RK23',
                                 fast=False, split=False))
     with figure():
