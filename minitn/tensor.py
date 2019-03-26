@@ -67,7 +67,7 @@ class Tensor(object):
         self.aux = None
         return
 
-    def __str__(self):
+    def __repr__(self):
         string = self.name
         return 'Tensor_' + string if self.name is not None else repr(self)
 
@@ -105,6 +105,10 @@ class Tensor(object):
 
     def reset(self):
         self._partial_env = {}
+
+    def load_cache(self, i, array):
+        self._partial_env[i] = array
+        return
 
     @property
     def array(self):
@@ -248,16 +252,16 @@ class Tensor(object):
         """
         if axis is _empty:
             axis = self.axis
-        for i, tensor, j in self.access:
+        for i, tensor, j in self.linkages:
             if axis is None or i != axis:
                 if leaf or not isinstance(tensor, Leaf):
                     yield (i, tensor, j)
 
     @property
-    def access(self):
+    def linkages(self):
         def key(x): return x[0]
-        linkages = [(i, t, j) for i, (t, j) in self._access.items()]
-        return sorted(linkages, key=key)
+        linkages_list = [(i, t, j) for i, (t, j) in self._access.items()]
+        return sorted(linkages_list, key=key)
 
     def visitor(self, axis=_empty, leaf=True):
         """
@@ -427,6 +431,26 @@ class Tensor(object):
             start = end
         return
 
+    def split_unite(self, i, operator=None, err=None):
+        """
+        Parameters
+        ----------
+        i : int
+        operator : Tensor  ->  Tensor
+        err : err
+        """
+        if __debug__:
+            linkage_old = set(self.linkage_visitor(axis=None))
+        t, j = self._access[i]
+        mid, _ = self.split(i, err=err, child=self)
+        if operator is not None:
+            mid = operator(mid)
+        t.unite(j, root=t)
+        if __debug__:
+            linkage_new = set(self.linkage_visitor(axis=None))
+            assert linkage_old == linkage_new
+        return mid
+
     def split(self, axis, indice=None, root=None, child=None,
               rank=None, err=None):
         """Split the root Tensor to a certain axis/certain axes.
@@ -579,9 +603,19 @@ class Tensor(object):
         elif norm.ndim == 2:
             rank = np.linalg.matrix_rank(array)
             mean_norm = np.trace(norm) / rank
-            self.set_array(array / mean_norm )
+            self.set_array(array / mean_norm)
         else:
             raise RuntimeError()
+
+    @staticmethod
+    def hilbert_angle(r1, r2):
+        for n1, n2 in zip(r1.visitor(leaf=False), r2.visitor(leaf=False)):
+            n1.aux = np.conj(n2.array)
+        angle = np.arccos(
+            r1.global_inner_product() /
+            (r1.global_norm() * r2.global_norm())
+        ) / np.pi * 180
+        return angle
 
     def projector(self, comp=False):
         """[Deprecated] Return the projector corresponding to self.
@@ -721,6 +755,7 @@ class Leaf(Tensor):
 
     def __init__(self, name=None, array=None):
         super(Leaf, self).__init__(name=name, array=array, axis=None)
+        self._partial_env = None
         return
 
     def __str__(self):

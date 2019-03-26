@@ -21,10 +21,12 @@ from sho_model import test_2layers, test_mps_dmrg
 
 @time_this
 def ref():
-    x0, x1, n_dvr, n_spf, c, dofs = -5., 5., 40, 6, 0.5, 4
-    exp = test_2layers(x0, x1, n_dvr, n_spf, dofs, c)
-    t1, a1 = zip(*exp.autocorr(steps=100, ode_inter=0.1,
-                               method='RK45', fast=False, split=False))
+    solver = test_mps_dmrg(x0=-5., x1=5., n_1=5, n_2=40, dofs=4, c=0.5)
+    start = time()
+    t1, a1 = zip(*solver.autocorr(steps=100, ode_inter=0.1, cmf_steps=1,
+                                  method='RK45', fast=False, split=False))
+    end = time()
+    print(end - start)
     np.save('./data/ref_t', t1)
     np.save('./data/ref_a', a1)
     return
@@ -34,14 +36,14 @@ def ref():
 def main():
     solver = test_mps_dmrg(x0=-5., x1=5., n_1=5, n_2=40, dofs=4, c=0.5)
     start = time()
-    t2, a2 = zip(*solver.autocorr(steps=100, ode_inter=0.1,
-                                  method='RK45', fast=False, split=False))
+    t2, a2 = zip(*solver.autocorr(steps=100, ode_inter=0.1, method='RK45',
+                                  fast=False, split=True))
     end = time()
     print(end - start)
     np.save('./data/exp_t', t2)
     np.save('./data/exp_a', a2)
 
 
-logging.root.setLevel(logging.DEBUG)
+logging.root.setLevel(logging.INFO)
 main()
 ref()

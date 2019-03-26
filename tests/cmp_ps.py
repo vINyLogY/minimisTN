@@ -18,22 +18,19 @@ from sho_model import test_2layers, test_4layers, test_mctdh
 
 @time_this
 def main():
-    x0, x1, n_dvr, n_spf, c, dofs = -5., 5., 40, 10, 0.5, 2
+    x0, x1, n_dvr, n_spf, c, dofs = -10., 10., 100, 6, 0.5, 3
     exp1 = test_4layers()
-    # exp1 = test_2layers(x0, x1, n_dvr, n_spf, dofs, c)
-    for args in exp1.root.linkage_visitor(leaf=False, back=True):
-        print(*args)
-    t1, a1 = zip(*exp1.autocorr(steps=500, ode_inter=0.001,
-                                cmf_step=None, method='RK23',
-                                fast=False, split=True))
+    exp1 = test_2layers(x0, x1, n_dvr, n_spf, dofs, c)
+    g1 = exp1.autocorr(steps=100, ode_inter=0.01,
+                       method='RK45', split=True)
     exp2 = test_4layers()
-    # exp2 = test_2layers(x0, x1, n_dvr, n_spf, dofs, c)
-    t2, a2 = zip(*exp2.autocorr(steps=500, ode_inter=0.001,
-                                cmf_step=None, method='RK23',
-                                fast=False, split=False))
+    exp2 = test_2layers(x0, x1, n_dvr, n_spf, dofs, c)
+    g2 = exp2.autocorr(steps=100, ode_inter=0.01,
+                       method='RK45', split=False)
+    (t1, a1), (t2, a2) = zip(*g1), zip(*g2)
     with figure():
-        plt.plot(t2, np.abs(a2), '-')
-        plt.plot(t1, np.abs(a1), '--')
+        plt.plot(t2, a2, '-')
+        plt.plot(t1, a1, '--')
         plt.show()
     return
 
@@ -46,6 +43,7 @@ def refer():
     np.save('mctdh_t', t2)
     np.save('mctdh_a', a2)
     return
+
 
 logging.basicConfig(
     format='%(levelname)s: (In %(funcName)s, %(module)s)  %(message)s',
