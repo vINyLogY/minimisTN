@@ -12,14 +12,10 @@ setuptools.setup(
     description='A small program solving multidimensional problem',
     long_description=long_description,
     url='https://github.com/vINyLogY/minimisTN',
-    author='yuuko',
+    author='Xinxian Chen',
     author_email='vinylogy9@gmail.com',
-    license='MIT',
+    license='GNU GPLv3',
     classifiers=[
-        'Development Status :: 1 - Planning',
-        'License :: OSI Approved :: MIT License',
-        'Operating System :: OS Independent',
-        'Programming Language :: Python :: 2.7',
         'Topic :: Scientific/Engineering :: Chemistry'
     ],
     packages=setuptools.find_packages(exclude=['docs', 'tests']),
