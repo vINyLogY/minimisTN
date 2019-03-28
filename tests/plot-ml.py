@@ -21,6 +21,10 @@ a1 = np.load(root + str1 + '_a.npy')
 t2 = np.load(root + str2 + '_t.npy')
 a2 = np.load(root + str2 + '_a.npy')
 with figure():
-    plt.plot(t2, np.abs(a2), '-')
-    plt.plot(t1, np.abs(a1), '--')
+    plt.plot(t2, np.real(a2), '-')
+    plt.plot(t1, np.real(a1), '--')
+    plt.show()
+with figure():
+    plt.plot(t2, np.imag(a2), '-')
+    plt.plot(t1, np.imag(a1), '--')
     plt.show()

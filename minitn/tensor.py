@@ -12,15 +12,12 @@ from __future__ import absolute_import, division
 
 import logging
 from builtins import filter, map, range, zip
-from functools import partial
-from itertools import chain
 
 import numpy as np
 from scipy import linalg
 
-from minitn.lib.tools import __
 from minitn.lib.numerical import compressed_svd
-
+from minitn.lib.tools import __
 
 _empty = object()
 
@@ -438,14 +435,19 @@ class Tensor(object):
         i : int
         operator : Tensor  ->  Tensor
         err : err
+
+        Returns
+        -------
+        mid : Tensor
+        end : Tensor
         """
         if __debug__:
             linkage_old = set(self.linkage_visitor(axis=None))
-        t, j = self._access[i]
+        end, j = self._access[i]
         mid, _ = self.split(i, err=err, child=self)
         if operator is not None:
             mid = operator(mid)
-        t.unite(j, root=t)
+        end.unite(j, root=end)
         if __debug__:
             linkage_new = set(self.linkage_visitor(axis=None))
             assert linkage_old == linkage_new

@@ -118,7 +118,7 @@ class MultiLayer(object):
             ans += self.root.expection()
         return ans
 
-    def _single_eom(self, tensor, n):
+    def _single_eom(self, tensor, n, cache=False):
         """C.f. `Multi-Configuration Time Dependent Hartree Theory: a Tensor
         Network Perspective`, p38. This method does not contain the `i hbar`
         coefficient.
@@ -142,9 +142,12 @@ class MultiLayer(object):
         # Env Hamiltonians
         tmp = tensor.array
         for i in range(tensor.order):
-            if (n, tensor, i) not in self.env_:
-                self.env_[(n, tensor, i)] = partial_env(i, proper=True)
-            env_ = self.env_[(n, tensor, i)]
+            try:
+                env_ = self.env_[(n, tensor, i)]
+            except KeyError:
+                env_ = partial_env(i, proper=True)
+                if cache:
+                    self.env_[(n, tensor, i)] = env_
             tmp = partial_product(tmp, i, env_)
         # For non-root nodes...
         axis = tensor.axis
@@ -164,18 +167,18 @@ class MultiLayer(object):
     def _form_inv_density(self):
         self.inv_density = {}
         visitor = self.root.visitor
-        for tensor in visitor():
+        for tensor in visitor(axis=None):
             tensor.reset()
-        for tensor in visitor():
+        for tensor in visitor(axis=None):
             axis = tensor.axis
             if axis is not None:
                 density = tensor.partial_env(axis, proper=True)
-                if MultiLayer.pinv:
+                if type(self).pinv:
                     self.inv_density[tensor] = linalg.pinv2(density)
                 else:
                     self.inv_density[tensor] = linalg.inv(
                         density +
-                        MultiLayer.regular_err *
+                        type(self).regular_err *
                         np.identity(tensor.shape[axis])
                     )
         return self.inv_density
@@ -184,7 +187,7 @@ class MultiLayer(object):
         self.env_ = {}
         visitor = self.root.visitor
         for n in self.term_visitor():
-            for tensor in visitor(leaf=False):
+            for tensor in visitor(axis=None, leaf=False):
                 for i in range(tensor.order):
                     env_ = tensor.partial_env(i, proper=True)
                     self.env_[(n, tensor, i)] = env_
@@ -222,20 +225,12 @@ class MultiLayer(object):
         return
 
     def coefficient(self, imaginary=False):
-        return -MultiLayer.hbar if imaginary else 1.0j * MultiLayer.hbar
+        return -type(self).hbar if imaginary else 1.0j * type(self).hbar
 
     def _direct_step(self, ode_inter=0.01, method='RK45', imaginary=False):
-        def _vec_diff(t, y):
-            """This function will not change the arrays in tensor network.
-            """
-            origin = root.vectorize()
-            root.tensorize(y)
-            self.eom(imaginary=imaginary)
-            ans = root.vectorize(use_aux=True)
-            root.tensorize(origin)
-            return ans
-
         visitor = self.root.visitor
+        self._form_env()
+        self._form_inv_density()
         if method == 'Newton':
             self.eom(imaginary=imaginary)
             for t in visitor(leaf=False):
@@ -275,8 +270,18 @@ class MultiLayer(object):
                 )
                 t.aux = None
         else:
+            def _vec_diff(t, y):
+                """This function will not change the arrays in tensor network.
+                """
+                origin = root.vectorize()
+                root.tensorize(y)
+                self.eom(imaginary=imaginary)
+                ans = root.vectorize(use_aux=True)
+                root.tensorize(origin)
+                return ans
+
             OdeSolver = getattr(integrate, method)
-            cmf_steps = MultiLayer.cmf_steps
+            cmf_steps = type(self).cmf_steps
             root = self.root
             y0 = root.vectorize()
             ode_solver = OdeSolver(_vec_diff, 0, y0, ode_inter,
@@ -286,7 +291,7 @@ class MultiLayer(object):
                     logging.debug(__('CMF: #{}, ', n // cmf_steps))
                     break
                 if n % cmf_steps == 0:
-                    if n >= MultiLayer.max_ode_steps:
+                    if n >= type(self).max_ode_steps:
                         raise RuntimeWarning('Reach ODE limit {}'.format(n))
                     self._form_env()
                     self._form_inv_density()
@@ -302,13 +307,13 @@ class MultiLayer(object):
             tensor.set_array(np.reshape(y, tensor.shape))
             ans = np.zeros_like(y)
             for n in self.term_visitor(use_cache=True):
-                ans += np.reshape(self._single_eom(tensor, n), -1)
+                ans += np.reshape(self._single_eom(tensor, n, cache=True), -1)
             ans /= self.coefficient(imaginary=imaginary)
             tensor.set_array(origin)
             return np.reshape(ans, -1)
 
         OdeSolver = getattr(integrate, method)
-        cmf_steps = MultiLayer.cmf_steps
+        cmf_steps = type(self).cmf_steps
         y0 = np.reshape(tensor.array, -1)
         ode_solver = OdeSolver(_vec_diff, 0, y0, tau, vectorized=False)
         for n in count(1):
@@ -316,7 +321,7 @@ class MultiLayer(object):
                 logging.debug(__('CMF@{}: #{}, ', tensor, n // cmf_steps))
                 break
             if n % cmf_steps == 0:
-                if n >= MultiLayer.max_ode_steps:
+                if n >= type(self).max_ode_steps:
                     raise RuntimeWarning('Reach ODE limit {}'.format(n))
                 self._form_env()
             ode_solver.step()
@@ -324,16 +329,10 @@ class MultiLayer(object):
             tensor.normalize()
         return tensor
 
-    def remove_env(self, tensor_list):
-        try:
-            it = iter(tensor_list)
-        except TypeError:
-            it = [tensor_list]
-        n_term = len(self.h_list)
-        for tensor in it:
-            n_order = tensor.order
-            for n in range(n_term):
-                for i in range(n_order):
+    def remove_env(self, *args):
+        for n, _ in enumerate(self.h_list):
+            for tensor in args:
+                for i, _, _ in tensor.linkages:
                     if (n, tensor, i) in self.env_:
                         del self.env_[(n, tensor, i)]
         return
@@ -343,32 +342,32 @@ class MultiLayer(object):
         """
         FIXME: Unstable.
         """
-        err = MultiLayer.svd_err
+        err = type(self).svd_err
         if _root is None:
             self._form_env()
             _root = self.root
         propagate = partial(self._split_prop,
                             method=method, imaginary=imaginary)
 
-        def _branch_prop(r, axis, tau, backward=False):
-            _inv_prop = partial(propagate, tau=(-tau))
+        def branch_prop(r, axis, tau, backward=False):
+            def move(t1, i, t2):
+                self.remove_env(t1, t2)
+                op = partial(propagate, tau=(-tau)) if backward else None
+                mid = t1.split_unite(i, operator=op, err=err)
+                self.remove_env(t1, mid, t2)
+                return
+
             for i, t, j in r.children(axis=axis, leaf=False):
-                op = _inv_prop if backward else None
-                self.remove_env((r, t))
-                mid = r.split_unite(i, operator=op, err=err)
-                self.remove_env(mid)
+                move(r, i, t)
                 self._split_step(ode_inter=tau, method=method,
-                                 imaginary=imaginary, _root=t, _axis=j)
-                op = None if backward else _inv_prop
-                self.remove_env((r, t))
-                mid = t.split_unite(j, operator=op, err=err)
-                self.remove_env(mid)
+                                 imaginary=imaginary,
+                                 _root=t, _axis=j)
+                move(t, j, r)
             return
 
-        _branch_prop(_root, _axis, 0.5 * ode_inter, backward=False)
-        self.remove_env(_root)
+        branch_prop(_root, _axis, 0.5 * ode_inter, backward=False)
         propagate(_root, tau=ode_inter)
-        _branch_prop(_root, _axis, 0.5 * ode_inter, backward=True)
+        branch_prop(_root, _axis, 0.5 * ode_inter, backward=True)
         return
 
     def propagator(self, steps=None, ode_inter=0.01,
@@ -391,12 +390,9 @@ class MultiLayer(object):
             yield (_i * ode_inter, self.root)
             try:
                 if split:
-                    self._form_env()
                     self._split_step(ode_inter=ode_inter, method=method,
                                      imaginary=imaginary)
                 else:
-                    self._form_env()
-                    self._form_inv_density()
                     self._direct_step(ode_inter=ode_inter, method=method,
                                       imaginary=imaginary)
             except RuntimeWarning:

@@ -18,19 +18,23 @@ from sho_model import test_2layers, test_4layers, test_mctdh
 
 @time_this
 def main():
-    x0, x1, n_dvr, n_spf, c, dofs = -10., 10., 100, 6, 0.5, 3
+    x0, x1, n_dvr, n_spf, c, dofs = -10., 10., 100, 6, 0.5, 4
     exp1 = test_4layers()
     exp1 = test_2layers(x0, x1, n_dvr, n_spf, dofs, c)
-    g1 = exp1.autocorr(steps=100, ode_inter=0.01,
+    g1 = exp1.autocorr(steps=100, ode_inter=0.001, fast=False,
                        method='RK45', split=True)
     exp2 = test_4layers()
     exp2 = test_2layers(x0, x1, n_dvr, n_spf, dofs, c)
-    g2 = exp2.autocorr(steps=100, ode_inter=0.01,
+    g2 = exp2.autocorr(steps=100, ode_inter=0.001, fast=False,
                        method='RK45', split=False)
     (t1, a1), (t2, a2) = zip(*g1), zip(*g2)
     with figure():
-        plt.plot(t2, a2, '-')
-        plt.plot(t1, a1, '--')
+        plt.plot(t2, np.real(a2), '-')
+        plt.plot(t1, np.real(a1), '--')
+        plt.show()
+    with figure():
+        plt.plot(t2, np.imag(a2), '-')
+        plt.plot(t1, np.imag(a1), '--')
         plt.show()
     return
 
@@ -47,7 +51,7 @@ def refer():
 
 logging.basicConfig(
     format='%(levelname)s: (In %(funcName)s, %(module)s)  %(message)s',
-    level=logging.DEBUG
+    level=logging.INFO
 )
 main()
 # refer()
