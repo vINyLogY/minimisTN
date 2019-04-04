@@ -313,17 +313,15 @@ class MultiLayer(object):
             return np.reshape(ans, -1)
 
         OdeSolver = getattr(integrate, method)
-        cmf_steps = type(self).cmf_steps
         y0 = np.reshape(tensor.array, -1)
         ode_solver = OdeSolver(_vec_diff, 0, y0, tau, vectorized=False)
         for n in count(1):
             if ode_solver.status != 'running':
-                logging.debug(__('CMF@{}: #{}, ', tensor, n // cmf_steps))
+                logging.debug(__('CMF@{}: #{}, ', tensor, n))
                 break
-            if n % cmf_steps == 0:
-                if n >= type(self).max_ode_steps:
-                    raise RuntimeWarning('Reach ODE limit {}'.format(n))
-                self._form_env()
+            if n >= type(self).max_ode_steps:
+                raise RuntimeWarning('Reach ODE limit {}'.format(n))
+                # self._form_env()
             ode_solver.step()
             tensor.set_array(np.reshape(ode_solver.y, tensor.shape))
             tensor.normalize()

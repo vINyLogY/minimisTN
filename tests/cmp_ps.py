@@ -18,15 +18,16 @@ from sho_model import test_2layers, test_4layers, test_mctdh
 
 @time_this
 def main():
-    x0, x1, n_dvr, n_spf, c, dofs = -10., 10., 100, 6, 0.5, 4
-    exp1 = test_4layers()
-    exp1 = test_2layers(x0, x1, n_dvr, n_spf, dofs, c)
-    g1 = exp1.autocorr(steps=100, ode_inter=0.001, fast=False,
+    x0, x1, n_dvr, n_spf, c, dofs = -10., 10., 100, 6, 1., 3
+    exp1 = test_2layers(x0, x1, n_dvr, n_spf, dofs, c,
+                        random_seed=123)
+    g1 = exp1.autocorr(steps=100, ode_inter=0.01, fast=False,
                        method='RK45', split=True)
-    exp2 = test_4layers()
-    exp2 = test_2layers(x0, x1, n_dvr, n_spf, dofs, c)
-    g2 = exp2.autocorr(steps=100, ode_inter=0.001, fast=False,
+    exp2 = test_2layers(x0, x1, n_dvr, n_spf, dofs, c,
+                        random_seed=123)
+    g2 = exp2.autocorr(steps=100, ode_inter=0.01, fast=False,
                        method='RK45', split=False)
+    assert np.allclose(exp1.root.vectorize(), exp2.root.vectorize())
     (t1, a1), (t2, a2) = zip(*g1), zip(*g2)
     with figure():
         plt.plot(t2, np.real(a2), '-')
@@ -35,6 +36,10 @@ def main():
     with figure():
         plt.plot(t2, np.imag(a2), '-')
         plt.plot(t1, np.imag(a1), '--')
+        plt.show()
+    with figure():
+        plt.plot(t2, np.abs(a2), '-')
+        plt.plot(t1, np.abs(a1), '--')
         plt.show()
     return
 

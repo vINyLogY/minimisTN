@@ -409,6 +409,6 @@ def compressed_svd(a, rank=None, err=None, **kwargs):
     if rank is not None and rank <= len(s):
         s = s[:rank]
         u = u[:, :rank]
-        vh = vh[:rank, :]
+        vh = vh[:rank,:]
     s = np.diag(s)
     return u, s, vh

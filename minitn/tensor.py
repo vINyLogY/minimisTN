@@ -508,8 +508,8 @@ class Tensor(object):
             name1, name2 = name + '\'', name
 
         # Calculate arrays for new tensors
-        for i in axes2:
-            a = np.moveaxis(a, i, -1)
+        for n, i in enumerate(axes1):
+            a = np.moveaxis(a, i, n)
         a = np.reshape(a, (np.prod(shape1), np.prod(shape2)))
         u, s, vh = compressed_svd(a, rank=rank, err=err)
         root_array = np.reshape(np.dot(u, s), shape1 + [-1])

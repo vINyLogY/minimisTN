@@ -9,6 +9,7 @@ from builtins import filter, map, range, zip
 from functools import partial
 
 import numpy as np
+from scipy import linalg
 
 from minitn.lib.tools import __, time_this, figure
 from minitn.tensor import Tensor, Leaf
@@ -23,7 +24,8 @@ def square(x): return 0.5 * (x ** 2)
 def linear(x, c=0.5): return c * x
 
 
-def test_2layers(lower, upper, n_dvr, n_spf, dofs, c):
+def test_2layers(lower, upper, n_dvr, n_spf, dofs, c,
+                 random_seed=None):
     assert(n_spf < n_dvr)
 
     # Create a graph
@@ -49,8 +51,13 @@ def test_2layers(lower, upper, n_dvr, n_spf, dofs, c):
     # Root state
     r_array = 1.0
     for i in range(dofs):
-        one_dim = np.zeros(n_spf)
-        one_dim[0] = 1.0
+        if random_seed is None:
+            one_dim = np.zeros(n_spf)
+            one_dim[0] = 1.0
+        else:
+            np.random.seed(random_seed)
+            one_dim = np.random.random(size=(n_spf,))
+            one_dim /= linalg.norm(one_dim)
         r_array = np.tensordot(r_array, one_dim, axes=0)
     root.set_array(r_array)
 
