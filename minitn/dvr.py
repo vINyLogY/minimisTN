@@ -876,6 +876,7 @@ class PO_DVR(object):
             v_rst : (N,) ndarray
                 diagonal of V_rst matrix
             """
+
             def __init__(self, h_list, v_rst):
                 self.h_list = h_list
                 self.v_rst = v_rst
@@ -1110,7 +1111,7 @@ class PO_DVR(object):
         t_2 = stop / 2
         it = self.propagation(
             init=init, start=0., stop=stop / 2, max_inter=max_inter, **kwargs
-            )
+        )
         if dot is None:
             dot = np.dot
         for i, (tau, (real, imag)) in enumerate(it):

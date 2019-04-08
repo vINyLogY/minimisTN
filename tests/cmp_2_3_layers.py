@@ -23,8 +23,9 @@ from sho_model import test_2layers, square, linear
 def ref():
     x0, x1, n_dvr, n_spf, c, dofs = -5., 5., 40, 6, 0.5, 4
     exp = test_2layers(x0, x1, n_dvr, n_spf, dofs, c)
-    t1, a1 = zip(*exp.autocorr(steps=100, ode_inter=0.01, cmf_step=10,
-                               method='RK23', fast=True, split=False))
+    exp.settings(cmf_steps=10)
+    t1, a1 = zip(
+        *exp.autocorr(steps=1000, ode_inter=0.01, fast=True, split=False))
     np.save('./data/ref_t', t1)
     np.save('./data/ref_a', a1)
     return
@@ -61,7 +62,7 @@ def main():
             array = None
             leaves.append(t)
         t.set_array(array)
-    
+
     # Set the hamiltonian
     h_list = []    # \sum_i x_i^2 + c^2 * \sum_i x_i * x_{i+1}
     # single
@@ -80,9 +81,10 @@ def main():
         t.check_completness(strict=True)
 
     solver = MultiLayer(root, h_list)
+    solver.settings(cmf_steps=10)
     start = time()
-    t2, a2 = zip(*solver.autocorr(steps=100, ode_inter=0.01, cmf_step=10,
-                                  method='RK23', fast=True, split=True))
+    t2, a2 = zip(*
+        solver.autocorr(steps=1000, ode_inter=0.01, fast=True, split=False))
     end = time()
     print(end - start)
     np.save('./data/exp_t', t2)

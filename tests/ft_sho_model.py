@@ -23,8 +23,7 @@ def square(x): return 0.5 * (x ** 2)
 def linear(x, c=0.5): return c * x
 
 
-def test_2layers(lower, upper, n_dvr, n_spf, dofs, c):
-    assert(n_spf < n_dvr)
+def test_2layers(lower, upper, n_dvr, dofs, c):
 
     # Create a graph
     root = Tensor(name='S')
@@ -42,14 +41,14 @@ def test_2layers(lower, upper, n_dvr, n_spf, dofs, c):
     dvr = SineDVR(lower, upper, n_dvr)
     dvr.set_v_func(square)
     # SPFs
-    array_i = np.zeros((n_dvr, n_spf))
-    array_i[:, 0] = 1. / np.sqrt(n_dvr)
+    array_i = np.ones((n_dvr, 1))
+    array_i /= np.sqrt(n_dvr)
     for i in range(2 * dofs):
         basis[i].set_array(array_i)
     # Root state
     r_array = 1.0
     for i in range(2 * dofs):
-        one_dim = np.zeros(n_spf)
+        one_dim = np.zeros(1)
         one_dim[0] = 1.0
         r_array = np.tensordot(r_array, one_dim, axes=0)
     root.set_array(r_array)

@@ -240,7 +240,7 @@ class DavidsonAlgorithm(object):
         ]
         if self._debug:
             for _i, _norm in enumerate(self._residual_norms):
-                if self._convergence[i] and not self._last_convergence[i]:
+                if self._convergence[_i] and not self._last_convergence[_i]:
                     logging.debug(
                         __('Root {} converged, norm = {:.8f}', _i, _norm)
                     )
@@ -404,7 +404,9 @@ def compressed_svd(a, rank=None, err=None, **kwargs):
             if total_error > err:
                 rank = n + 1
                 break
-    if rank == 0:
+        if rank is None:
+            rank = 1
+    if rank is not None and rank <= 0 :
         raise RuntimeError('The matrix must have positive rank!')
     if rank is not None and rank <= len(s):
         s = s[:rank]

@@ -12,6 +12,7 @@ from __future__ import absolute_import, division
 
 import logging
 from builtins import filter, map, range, zip
+from contextlib import contextmanager
 
 import numpy as np
 from scipy import linalg
@@ -51,7 +52,9 @@ class Tensor(object):
             Assert `partial_trace(array, axis, array.conj(), axis)` is an
             identity matrix.
         """
-        self.name = str(name)
+        if name is not None:
+            name = str(name)
+        self.name = name
         self.axis = axis
 
         self.set_array(array)
@@ -65,8 +68,8 @@ class Tensor(object):
         return
 
     def __repr__(self):
-        string = self.name
-        return 'Tensor_' + string if self.name is not None else repr(self)
+        string = self.name if self.name is not None else str(hex(id(self)))
+        return 'Tensor_' + string
 
     @staticmethod
     def generate(graph, root):
@@ -349,7 +352,7 @@ class Tensor(object):
         return self.partial_env(None, use_aux=True)
 
     def global_norm(self):
-        """Return <array|array>
+        """Return <array|array>^{1/2}
         """
         for t in self.visitor(leaf=False):
             t.aux = np.conj(t.array)
@@ -428,7 +431,7 @@ class Tensor(object):
             start = end
         return
 
-    def split_unite(self, i, operator=None, err=None):
+    def split_unite(self, i, operator=None, rank=None, err=None):
         """
         Parameters
         ----------
@@ -438,20 +441,40 @@ class Tensor(object):
 
         Returns
         -------
-        mid : Tensor
-        end : Tensor
+        path : [Tensor]
         """
-        if __debug__:
-            linkage_old = set(self.linkage_visitor(axis=None))
         end, j = self._access[i]
-        mid, _ = self.split(i, err=err, child=self)
-        if operator is not None:
+        mid, _ = self.split(i, rank=rank, err=err, child=self)
+        if callable(operator):
             mid = operator(mid)
         end.unite(j, root=end)
+        return self, mid, end
+
+    def unite_split(self, i, operator=None, rank=None, err=None):
+        """
+        Parameters
+        ----------
+        i : int
+        operator : Tensor  ->  Tensor
+        err : err
+
+        Returns
+        -------
+        path : [Tensor]
+        """
         if __debug__:
-            linkage_new = set(self.linkage_visitor(axis=None))
+            linkage_old = list(self.linkage_visitor(axis=None))
+        end, j = self._access[i]
+        axes = [i for i in range(end.order) if i != j]
+        mid = end.unite(j)
+        if callable(operator):
+            mid = operator(mid)
+        mid.split(axes, indice=(j, i), root=end, child=self,
+                  rank=rank, err=err)
+        if __debug__:
+            linkage_new = list(self.linkage_visitor(axis=None))
             assert linkage_old == linkage_new
-        return mid
+        return self, mid, end
 
     def split(self, axis, indice=None, root=None, child=None,
               rank=None, err=None):

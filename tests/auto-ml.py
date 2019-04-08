@@ -13,21 +13,31 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from minitn.lib.tools import __, time_this, figure
-from sho_model import test_2layers, test_mctdh
+from sho_model import test_2layers, test_mps_dmrg, test_mctdh
 
 
 @time_this
 def main():
-    x0, x1, n_dvr, n_spf, c, dofs = -5., 5., 40, 10, 0.5, 4
-    exp = test_2layers(x0, x1, n_dvr, n_spf, dofs, c)
-    t1, a1 = zip(*exp.autocorr(steps=100, ode_inter=0.001, cmf_step=None,
-                               method='RK45', fast=False, split=True))
+    # x0, x1, n_dvr, n_spf, c, dofs = -5., 5., 40, 10, 0.5, 4
+    exp = test_2layers(dofs=3, n_spf=10)
+    exp.settings(cmf_steps=10,
+                 ode_method='RK23',
+                 ps_method='s',
+                 svd_rank=13)
+    t1, a1 = zip(*exp.autocorr(steps=30,
+                               ode_inter=0.1,
+                               fast=False,
+                               split=True))
     np.save('data/exp_t', t1)
     np.save('data/exp_a', a1)
-    x0, x1, n_dvr, n_spf, c, dofs = -5., 5., 40, 6, 0.5, 4
-    exp = test_2layers(x0, x1, n_dvr, n_spf, dofs, c)
-    t1, a1 = zip(*exp.autocorr(steps=100, ode_inter=0.001, cmf_step=None,
-                               method='RK45', fast=False, split=False))
+    # x0, x1, n_dvr, n_spf, c, dofs = -5., 5., 40, 6, 0.5, 4
+    exp = test_2layers(dofs=3, n_spf=10)
+    exp.settings(cmf_steps=10,
+                 ode_method='RK23')
+    t1, a1 = zip(*exp.autocorr(steps=30,
+                               ode_inter=0.1,
+                               fast=False,
+                               split=False))
     np.save('data/ref_t', t1)
     np.save('data/ref_a', a1)
     return
@@ -42,8 +52,10 @@ def refer():
     np.save('mctdh_a', a2)
     return
 
+
 logging.basicConfig(
-    format='%(levelname)s: (In %(funcName)s, %(module)s)  %(message)s', level=logging.DEBUG+1
+    format='%(levelname)s: (In %(funcName)s, %(module)s)  %(message)s',
+    level=logging.DEBUG
 )
 main()
 # refer()

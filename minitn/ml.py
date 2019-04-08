@@ -52,9 +52,46 @@ class MultiLayer(object):
     hbar = 1.
     regular_err = 1.e-12
     svd_err = None
+    svd_rank = None
     pinv = True
-    max_ode_steps = 1000
+    max_ode_steps = 10000
     cmf_steps = 1
+    ode_method = 'RK45'
+    snd_order = False
+    ps_method = 'split-unite'
+
+    @classmethod
+    def settings(cls, **kwargs):
+        """
+        Parameters
+        ----------
+        hbar : float
+            Default = 1.
+        regular_err : float
+            Default = 1.e-12
+        svd_err : float
+            Error allowed for SVD; default is None.
+        pinv : bool
+            Whether to use `scipy.linalg.pinv2` for inversion.
+            Default is True.
+        max_ode_steps : int 
+            Maximal steps allowed in one ODE solver; default = 1000.
+        cmf_steps : int
+            Upper bound for CMF steps; default = 1
+        ode_method : {'RK45', 'RK23', ...}
+            Name of `OdeSolver` in `scipy.intergate`.
+        snd_order : boot
+            Whether to use 2nd order method in projector splitting.
+            Note that 2nd order method should be more accurate, but its
+            complexity is :math:`2^d`, where `d` is the depth of tree.
+            Default is False.
+        """
+        for name, value in kwargs.items():
+            if not hasattr(cls, name):
+                raise AttributeError('{} has no attr \'{}\'!'
+                                     .format(cls, name))
+            setattr(cls, name, value)
+        return
 
     def __init__(self, root, h_list):
         """
@@ -79,12 +116,6 @@ class MultiLayer(object):
         # Some cached data
         self.inv_density = {}    # {Tensor: ndarray}
         self.env_ = {}    # {(int, Tensor, int): ndarray}
-        return
-
-    @classmethod
-    def settings(cls, **kwargs):
-        for name, value in kwargs.items():
-            setattr(cls, name, value)
         return
 
     def term_visitor(self, use_cache=False):
@@ -112,10 +143,12 @@ class MultiLayer(object):
             ans += self.root.matrix_element()
         return ans
 
-    def expection(self):
+    def expection(self, normalized=False):
         ans = 0.0
         for _ in self.term_visitor():
             ans += self.root.expection()
+        if normalized:
+            ans /= self.root.global_norm() ** 2
         return ans
 
     def _single_eom(self, tensor, n, cache=False):
@@ -173,21 +206,22 @@ class MultiLayer(object):
             axis = tensor.axis
             if axis is not None:
                 density = tensor.partial_env(axis, proper=True)
-                if type(self).pinv:
+                if self.pinv:
                     self.inv_density[tensor] = linalg.pinv2(density)
                 else:
                     self.inv_density[tensor] = linalg.inv(
                         density +
-                        type(self).regular_err *
-                        np.identity(tensor.shape[axis])
+                        self.regular_err * np.identity(tensor.shape[axis])
                     )
         return self.inv_density
 
-    def _form_env(self):
+    def _form_env(self, root=None):
         self.env_ = {}
-        visitor = self.root.visitor
+        if root is None:
+            root = self.root
+        network = root.visitor(axis=None, leaf=False)
         for n in self.term_visitor():
-            for tensor in visitor(axis=None, leaf=False):
+            for tensor in network:
                 for i in range(tensor.order):
                     env_ = tensor.partial_env(i, proper=True)
                     self.env_[(n, tensor, i)] = env_
@@ -225,12 +259,13 @@ class MultiLayer(object):
         return
 
     def coefficient(self, imaginary=False):
-        return -type(self).hbar if imaginary else 1.0j * type(self).hbar
+        return -self.hbar if imaginary else 1.0j * self.hbar
 
-    def _direct_step(self, ode_inter=0.01, method='RK45', imaginary=False):
+    def _direct_step(self, ode_inter=0.01, imaginary=False):
         visitor = self.root.visitor
         self._form_env()
         self._form_inv_density()
+        method = self.ode_method
         if method == 'Newton':
             self.eom(imaginary=imaginary)
             for t in visitor(leaf=False):
@@ -281,7 +316,7 @@ class MultiLayer(object):
                 return ans
 
             OdeSolver = getattr(integrate, method)
-            cmf_steps = type(self).cmf_steps
+            cmf_steps = self.cmf_steps
             root = self.root
             y0 = root.vectorize()
             ode_solver = OdeSolver(_vec_diff, 0, y0, ode_inter,
@@ -291,7 +326,7 @@ class MultiLayer(object):
                     logging.debug(__('CMF: #{}, ', n // cmf_steps))
                     break
                 if n % cmf_steps == 0:
-                    if n >= type(self).max_ode_steps:
+                    if n >= self.max_ode_steps:
                         raise RuntimeWarning('Reach ODE limit {}'.format(n))
                     self._form_env()
                     self._form_inv_density()
@@ -299,7 +334,7 @@ class MultiLayer(object):
                 root.tensorize(ode_solver.y)
         return
 
-    def _split_prop(self, tensor, tau=0.01, imaginary=False, method='RK45'):
+    def _split_prop(self, tensor, tau=0.01, imaginary=False, cache=False):
         def _vec_diff(t, y):
             """This function will not change the arrays in tensor network.
             """
@@ -307,21 +342,23 @@ class MultiLayer(object):
             tensor.set_array(np.reshape(y, tensor.shape))
             ans = np.zeros_like(y)
             for n in self.term_visitor(use_cache=True):
-                ans += np.reshape(self._single_eom(tensor, n, cache=True), -1)
+                ans += np.reshape(self._single_eom(tensor, n, cache=cache), -1)
             ans /= self.coefficient(imaginary=imaginary)
             tensor.set_array(origin)
             return np.reshape(ans, -1)
 
-        OdeSolver = getattr(integrate, method)
+        OdeSolver = getattr(integrate, self.ode_method)
         y0 = np.reshape(tensor.array, -1)
         ode_solver = OdeSolver(_vec_diff, 0, y0, tau, vectorized=False)
+        cmf_steps = self.cmf_steps
         for n in count(1):
             if ode_solver.status != 'running':
-                logging.debug(__('CMF@{}: #{}, ', tensor, n))
+                logging.debug(__('CMF@{}: #{}, ', tensor, n // cmf_steps))
                 break
-            if n >= type(self).max_ode_steps:
-                raise RuntimeWarning('Reach ODE limit {}'.format(n))
-                # self._form_env()
+            if n % cmf_steps == 0:
+                if n >= self.max_ode_steps:
+                    raise RuntimeWarning('Reach ODE limit {}'.format(n))
+                self._form_env(root=tensor)
             ode_solver.step()
             tensor.set_array(np.reshape(ode_solver.y, tensor.shape))
             tensor.normalize()
@@ -335,41 +372,54 @@ class MultiLayer(object):
                         del self.env_[(n, tensor, i)]
         return
 
-    def _split_step(self, ode_inter=0.01, method='RK45',
-                    imaginary=False, _root=None, _axis=None):
-        """
-        FIXME: Unstable.
-        """
-        err = type(self).svd_err
+    def move(self, t, i, op=None, unite_first=False, decorate=None):
+        if decorate is not None:
+            decorate(t)
+        self.remove_env(t)
+        if unite_first:
+            end = t.unite_split(i, operator=op,
+                                rank=self.svd_rank, err=self.svd_err)[-1]
+        else:
+            end = t.split_unite(i, operator=op)[-1]
+        self.remove_env(end)
+        if decorate is not None:
+            decorate(end)
+        return end
+
+    def _split_step(self, ode_inter=0.01, imaginary=False,
+                    _root=None, _axis=None):
         if _root is None:
             self._form_env()
             _root = self.root
-        propagate = partial(self._split_prop,
-                            method=method, imaginary=imaginary)
+        propagate = partial(self._split_prop, imaginary=imaginary)
+        move = self.move
+        unite_first = self.ps_method.startswith('u')
 
         def branch_prop(r, axis, tau, backward=False):
-            def move(t1, i, t2):
-                self.remove_env(t1, t2)
-                op = partial(propagate, tau=(-tau)) if backward else None
-                mid = t1.split_unite(i, operator=op, err=err)
-                self.remove_env(t1, mid, t2)
-                return
-
+            op1, op2, op3, op4 = (None, partial(propagate, tau=(-tau)),
+                                  None, None)
+            if unite_first:
+                op2, op4 = partial(propagate, tau=tau), op2
+            if backward:
+                op1, op2, op3, op4 = op2, op1, op4, op3
             for i, t, j in r.children(axis=axis, leaf=False):
-                move(r, i, t)
-                self._split_step(ode_inter=tau, method=method,
-                                 imaginary=imaginary,
+                move(r, i, op1, unite_first, op3)
+                self._split_step(ode_inter=tau, imaginary=imaginary,
                                  _root=t, _axis=j)
-                move(t, j, r)
+                move(t, j, op2, unite_first, op4)
             return
 
-        branch_prop(_root, _axis, 0.5 * ode_inter, backward=False)
-        propagate(_root, tau=ode_inter)
-        branch_prop(_root, _axis, 0.5 * ode_inter, backward=True)
+        if self.snd_order:
+            branch_prop(_root, _axis, 0.5 * ode_inter)
+            propagate(_root, tau=ode_inter, cache=True)
+            branch_prop(_root, _axis, 0.5 * ode_inter, backward=True)
+        else:
+            branch_prop(_root, _axis, ode_inter)
+            propagate(_root, tau=ode_inter, cache=True)
         return
 
-    def propagator(self, steps=None, ode_inter=0.01,
-                   method='RK45', split=False, imaginary=False):
+    def propagator(self, steps=None, ode_inter=0.01, split=False,
+                   imaginary=False):
         """Propagator generator
 
         Parameters
@@ -378,36 +428,32 @@ class MultiLayer(object):
         ode_inter : float
         method : {'Newton', 'RK4', 'RK45', ...}
         """
-        _i = 0
-        while steps is None or _i < steps:
+        for n in count():
+            if steps is not None and n > steps:
+                break
             logging.info(__(
                 "Propagating at t: {:.3f}, E: {:.8f}, |v|: {:.8f}",
-                _i * ode_inter, self.expection(),
-                (self.root.global_norm()) ** 2
+                n * ode_inter,
+                self.expection(normalized=True),
+                self.root.global_norm()
             ))
-            yield (_i * ode_inter, self.root)
+            yield (n * ode_inter, self.root)
             try:
                 if split:
-                    self._split_step(ode_inter=ode_inter, method=method,
-                                     imaginary=imaginary)
+                    self._split_step(ode_inter=ode_inter, imaginary=imaginary)
                 else:
-                    self._direct_step(ode_inter=ode_inter, method=method,
-                                      imaginary=imaginary)
+                    self._direct_step(ode_inter=ode_inter, imaginary=imaginary)
             except RuntimeWarning:
                 raise StopIteration
-            if imaginary:
-                self.root.normalize()
-            _i += 1
 
-    def autocorr(self, steps=None, ode_inter=0.01,
-                 method='RK45', split=False, fast=True, imaginary=False):
+    def autocorr(self, steps=None, ode_inter=0.01, split=False,
+                 imaginary=False, fast=False):
         if not fast:
             _init = {}
             for t in self.root.visitor(leaf=False):
                 _init[t] = t.array
         for time, r in self.propagator(steps=steps, ode_inter=ode_inter,
-                                       method=method, split=split,
-                                       imaginary=imaginary):
+                                       split=split, imaginary=imaginary):
             for t in r.visitor(leaf=False):
                 t.aux = t.array if fast else np.conj(_init[t])
             auto = r.global_inner_product()

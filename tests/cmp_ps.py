@@ -18,16 +18,20 @@ from sho_model import test_2layers, test_4layers, test_mctdh
 
 @time_this
 def main():
-    x0, x1, n_dvr, n_spf, c, dofs = -10., 10., 100, 6, 1., 3
+    x0, x1, n_dvr, n_spf, c, dofs = -10., 10., 50, 5, 0.5, 3
     exp1 = test_2layers(x0, x1, n_dvr, n_spf, dofs, c,
-                        random_seed=123)
-    g1 = exp1.autocorr(steps=100, ode_inter=0.01, fast=False,
-                       method='RK45', split=True)
+                        random_seed=None)
+    exp1 = test_4layers()
+    exp1.settings(cmf_steps=100)
+    g1 = exp1.autocorr(steps=100, ode_inter=0.01, split=True)
     exp2 = test_2layers(x0, x1, n_dvr, n_spf, dofs, c,
-                        random_seed=123)
-    g2 = exp2.autocorr(steps=100, ode_inter=0.01, fast=False,
-                       method='RK45', split=False)
-    assert np.allclose(exp1.root.vectorize(), exp2.root.vectorize())
+                        random_seed=None)
+    exp2 = test_4layers()
+    exp2.settings(cmf_steps=10)
+    g2 = exp2.autocorr(steps=100, ode_inter=0.01, split=False)
+    if __debug__:
+        v1, v2 = exp1.root.vectorize(), exp2.root.vectorize()
+        assert np.allclose(np.abs(v1), np.abs(v2))
     (t1, a1), (t2, a2) = zip(*g1), zip(*g2)
     with figure():
         plt.plot(t2, np.real(a2), '-')

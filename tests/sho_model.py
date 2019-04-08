@@ -24,7 +24,13 @@ def square(x): return 0.5 * (x ** 2)
 def linear(x, c=0.5): return c * x
 
 
-def test_2layers(lower, upper, n_dvr, n_spf, dofs, c,
+def triangular(n):
+    for i in range(2 * n):
+        for j in range(i + 1):
+            yield (i - j) * n + j
+
+
+def test_2layers(lower=-5., upper=5., n_dvr=100, n_spf=5, dofs=4, c=0.5,
                  random_seed=None):
     assert(n_spf < n_dvr)
 
@@ -126,11 +132,15 @@ def test_4layers(x0= -5., x1=5., n_1=5, n_2=5, n_3=5, n_4=40, c=0.5):
             array = np.zeros((n_1, n_1))
             array[0, 0] = 1.
         elif 1 <= int(t.name) <= 2:
-            array = np.eye(n_1, n_2 ** 2)
+            array = np.zeros(n_1, n_2 ** 2)
+            for n, v_i in zip(triangular(n_2), array):
+                v_i[n] = 1.
             array = np.reshape(array, (n_1, n_2, n_2))
         elif 3 <= int(t.name) <= 6:
-            array = np.eye(n_1, n_3 ** 2)
-            array = np.reshape(array, (n_1, n_2, n_2))
+            array = np.eye(n_2, n_3 ** 2)
+            for n, v_i in zip(triangular(n_3), array):
+                v_i[n] = 1.
+            array = np.reshape(array, (n_2, n_3, n_3))
         elif 7 <= int(t.name) <= 14:
             array = array_i
         else:
@@ -199,7 +209,7 @@ def test_mps_dmrg(x0=-5., x1=5., n_1=5, n_2=40, dofs=4, c=0.5):
     linear_ = partial(linear, c=0.5)
     dvr.set_v_func(linear_)
     l_h = dvr.v_mat()
-    for i in range(4 - 1):
+    for i in range(dofs - 1):
         term = [(leaves[i], l_h), (leaves[i + 1], l_h)]
         h_list.append(term)
 

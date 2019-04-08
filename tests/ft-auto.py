@@ -18,18 +18,20 @@ from ft_sho_model import test_2layers
 
 @time_this
 def main():
-    x0, x1, n_dvr, n_spf, c, dofs = -5., 5., 40, 10, 0.5, 2
-    exp = test_2layers(x0, x1, n_dvr, n_spf, dofs, c)
-    t1, a1 = zip(*exp.autocorr(steps=1000, ode_inter=0.01, cmf_step=10,
-                               method='RK45', fast=False, split=False,
+    x0, x1, n_dvr, c, dofs = -5., 5., 40, 0.5, 2
+    exp = test_2layers(x0, x1, n_dvr, dofs, c)
+    t1, a1 = zip(*exp.autocorr(steps=100, ode_inter=0.01,
+                               fast=False, split=True,
                                imaginary=True))
     np.save('ml_t', t1)
     np.save('ml_a', a1)
-    x0, x1, n_dvr, n_spf, c, dofs = -5., 5., 40, 6, 0.5, 2
-    exp = test_2layers(x0, x1, n_dvr, n_spf, dofs, c)
-    t1, a1 = zip(*exp.autocorr(steps=1000, ode_inter=0.01, cmf_step=10,
-                               method='RK45', fast=False, split=False,
+    x0, x1, n_dvr, c, dofs = -5., 5., 40, 0.5, 2
+    exp = test_2layers(x0, x1, n_dvr, dofs, c)
+    t1, a1 = zip(*exp.autocorr(steps=100, ode_inter=0.01,
+                               fast=False, split=False,
                                imaginary=True))
+    for t in exp.root.visitor():
+        print(t, np.linalg.matrix_rank(t.array))
     np.save('ml2_t', t1)
     np.save('ml2_a', a1)
     return
