@@ -12,9 +12,9 @@ import scipy
 
 from minitn.lib.tools import figure, BraceMessage as __
 
-root = 'data/'
-str2 = 'ref'
-str1 = 'exp'
+root = './'
+str2 = 'ml2'
+str1 = 'ml'
 
 t1 = np.load(root + str1 + '_t.npy')
 a1 = np.load(root + str1 + '_a.npy')

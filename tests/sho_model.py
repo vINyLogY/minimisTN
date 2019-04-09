@@ -56,12 +56,12 @@ def test_2layers(lower=-5., upper=5., n_dvr=100, n_spf=5, dofs=4, c=0.5,
         basis[i].set_array(array_i)
     # Root state
     r_array = 1.0
+    np.random.seed(random_seed)
     for i in range(dofs):
         if random_seed is None:
             one_dim = np.zeros(n_spf)
             one_dim[0] = 1.0
         else:
-            np.random.seed(random_seed)
             one_dim = np.random.random(size=(n_spf,))
             one_dim /= linalg.norm(one_dim)
         r_array = np.tensordot(r_array, one_dim, axes=0)

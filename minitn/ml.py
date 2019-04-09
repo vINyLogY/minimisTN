@@ -17,7 +17,7 @@ from copy import copy
 from collections import deque
 
 import numpy as np
-from scipy import linalg, integrate
+from scipy import linalg, integrate, sparse
 
 from minitn.lib.tools import __
 from minitn.tensor import Tensor, Leaf
@@ -332,6 +332,8 @@ class MultiLayer(object):
                     self._form_inv_density()
                 ode_solver.step()
                 root.tensorize(ode_solver.y)
+                for t in root.visitor(leaf=False):
+                    t.normalize()
         return
 
     def _split_prop(self, tensor, tau=0.01, imaginary=False, cache=False):
@@ -388,6 +390,8 @@ class MultiLayer(object):
 
     def _split_step(self, ode_inter=0.01, imaginary=False,
                     _root=None, _axis=None):
+        """Working projector-splitting method. 
+        """
         if _root is None:
             self._form_env()
             _root = self.root
@@ -409,13 +413,45 @@ class MultiLayer(object):
                 move(t, j, op2, unite_first, op4)
             return
 
+        def branch_prop2(r, axis, tau, backward=False):
+            """TODO: Test me. Why do I work?
+
+            This method has no clear physical picture, but it works.
+            But propagating directly (using `linkage_visitor`) does NOT
+            works.
+            """
+            op = partial(propagate, tau=(-tau)) if backward else None
+            move = partial(self.move, op=op)
+
+            for i, t, j in r.children(axis=axis, leaf=False):
+                move(r, i)
+                self._split_step(ode_inter=tau, imaginary=imaginary,
+                                 _root=t, _axis=j)
+                move(t, j)
+            return
+
         if self.snd_order:
-            branch_prop(_root, _axis, 0.5 * ode_inter)
+            branch_prop2(_root, _axis, 0.5 * ode_inter)
             propagate(_root, tau=ode_inter, cache=True)
-            branch_prop(_root, _axis, 0.5 * ode_inter, backward=True)
+            branch_prop2(_root, _axis, 0.5 * ode_inter, backward=True)
         else:
             branch_prop(_root, _axis, ode_inter)
             propagate(_root, tau=ode_inter, cache=True)
+        return
+
+    def _split_step2(self, ode_inter=0.01, imaginary=False):
+        """[NOT working] Using `linkage_visitor`
+        """
+        linkages = list(self.root.linkage_visitor(leaf=False, back=True))
+        orders = {t: len(list(t.children(axis=None, leaf=False))) * 3
+                  # should be `2`, but `3` works: why?
+                  for t in self.root.visitor(leaf=False)}
+        propagate = partial(self._split_prop, imaginary=imaginary)
+        move = self.move
+        for t1, i, t2, _ in linkages:
+            propagate(t1, tau=(ode_inter / orders[t1]))
+            move(t1, i, op=partial(propagate, tau=(-ode_inter / orders[t1])))
+            propagate(t2, tau=(ode_inter / orders[t2]))
         return
 
     def propagator(self, steps=None, ode_inter=0.01, split=False,
@@ -438,11 +474,15 @@ class MultiLayer(object):
                 self.root.global_norm()
             ))
             yield (n * ode_inter, self.root)
-            try:
-                if split:
-                    self._split_step(ode_inter=ode_inter, imaginary=imaginary)
+            if split:
+                if self.ps_method.startswith('t'):
+                    step = self._split_step2
                 else:
-                    self._direct_step(ode_inter=ode_inter, imaginary=imaginary)
+                    step = self._split_step
+            else:
+                    step = self._direct_step
+            try:
+                step(ode_inter=ode_inter, imaginary=imaginary)
             except RuntimeWarning:
                 raise StopIteration
 

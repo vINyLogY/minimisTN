@@ -199,7 +199,7 @@ class DavidsonAlgorithm(object):
         return
 
     @time_this
-    def kernel(self):
+    def kernel(self, search_mode=False):
         """Run Davidson algorithm.
 
         Returns
@@ -207,9 +207,11 @@ class DavidsonAlgorithm(object):
         eigvals : (self.n_vals,) ndarray
         eigvecs : [(n,) ndarray]
         """
-        for cycle in range(self.max_cycle):
-            self._orthonormalize(use_svd=True)
+        for _ in range(self.max_cycle):
+            self._orthonormalize(use_svd=(not search_mode))
             self._extend_space()
+            if search_mode and len(self._search_space) >= self._n_vals:
+                break
             self._calc_ritz_pairs()
             self._calc_residual_norms()
             if self._is_converged():
@@ -222,7 +224,10 @@ class DavidsonAlgorithm(object):
 
         self.eigvals = self._ritz_vals
         self.eigvecs = list(self._get_ritz_vecs())
-        return self.eigvals, self.eigvecs
+        if not search_mode:
+            return self.eigvals, self.eigvecs
+        else:
+            return self._search_space[:self._n_vals]
 
     def _is_converged(self):
         if (
@@ -320,9 +325,9 @@ class DavidsonAlgorithm(object):
             self._precondition = self.davidson_precondition(
                 dim, self._matvec
             )
-            ritz_vecs = [None] * dim
-        else:
-            ritz_vecs = list(self._get_ritz_vecs())
+        #     ritz_vecs = [None] * dim
+        # else:
+        #     ritz_vecs = list(self._get_ritz_vecs())
 
         self._trial_vecs = []
         precondition = self._precondition
@@ -381,7 +386,6 @@ def expection(op, vec):
     -------
     expection : float
     """
-    dim = len(vec)
     vec_h = np.conjugate(vec)
     e = np.dot(vec_h, op.dot(vec))
     return e

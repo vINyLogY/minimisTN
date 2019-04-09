@@ -65,6 +65,7 @@ class Tensor(object):
 
         # For some special methods
         self.aux = None
+        self.is_normalized = True
         return
 
     def __repr__(self):
@@ -318,10 +319,8 @@ class Tensor(object):
                     for i_, tensor, j in self.children(axis=i)
                 ]    # Recursively
                 # Make use of the normalization condition
-                if (
-                    i == self.axis and
-                    not (True for _, matrix in env_ if matrix is not None)
-                ):
+                if (self.is_normalized and not use_aux and i == self.axis and
+                    all(matrix is None for _, matrix in env_)):
                     ans = None
                 else:
                     temp = self.array
@@ -622,15 +621,25 @@ class Tensor(object):
 
     def normalize(self):
         array = self.array
-        norm = np.array(self.local_norm())
-        if norm.ndim == 0:
+        axis = self.axis
+        if axis is None:
+            norm = np.array(self.local_norm())
             self.set_array(array / norm)
-        elif norm.ndim == 2:
-            rank = np.linalg.matrix_rank(array)
-            mean_norm = np.trace(norm) / rank
-            self.set_array(array / mean_norm)
         else:
-            raise RuntimeError()
+            norm = linalg.norm
+            shape = self.shape
+            dim = shape.pop(axis)
+            array = np.reshape(np.moveaxis(array, axis, 0), (dim, -1))
+            vecs = []
+            for vec_i in array:
+                for vec_j in vecs:
+                    vec_i -= vec_j * np.dot(np.conj(vec_j), vec_i)
+                norm_ = norm(vec_i)
+                vecs.append(vec_i / norm_)
+            array = np.array(vecs)
+            array = np.moveaxis(np.reshape(array, [-1] + shape), 0, axis)
+            self.set_array(array)
+        return
 
     @staticmethod
     def hilbert_angle(r1, r2):

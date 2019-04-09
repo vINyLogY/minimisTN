@@ -17,23 +17,29 @@ from sho_model import test_2layers, test_mps_dmrg, test_mctdh
 
 
 @time_this
-def main():
+def main1():
     # x0, x1, n_dvr, n_spf, c, dofs = -5., 5., 40, 10, 0.5, 4
-    exp = test_2layers(dofs=3, n_spf=10)
+    exp = test_2layers(dofs=2, n_dvr=40, n_spf=5, random_seed=None)
     exp.settings(cmf_steps=10,
                  ode_method='RK23',
                  ps_method='s',
-                 svd_rank=13)
+                 snd_order=False)
     t1, a1 = zip(*exp.autocorr(steps=30,
                                ode_inter=0.1,
                                fast=False,
                                split=True))
     np.save('data/exp_t', t1)
     np.save('data/exp_a', a1)
+    return
+
+
+@time_this
+def main2():
     # x0, x1, n_dvr, n_spf, c, dofs = -5., 5., 40, 6, 0.5, 4
-    exp = test_2layers(dofs=3, n_spf=10)
+    exp = test_2layers(dofs=2, n_dvr=40, n_spf=5, random_seed=None)
     exp.settings(cmf_steps=10,
-                 ode_method='RK23')
+                 ode_method='RK23',
+                 ps_method='s')
     t1, a1 = zip(*exp.autocorr(steps=30,
                                ode_inter=0.1,
                                fast=False,
@@ -52,10 +58,11 @@ def refer():
     np.save('mctdh_a', a2)
     return
 
-
-logging.basicConfig(
-    format='%(levelname)s: (In %(funcName)s, %(module)s)  %(message)s',
-    level=logging.DEBUG
-)
-main()
-# refer()
+if __name__ == '__main__':
+    logging.basicConfig(
+        format='%(levelname)s: (In %(funcName)s, %(module)s)  %(message)s',
+        level=logging.INFO
+    )
+    # main1()
+    main2()
+    # refer()
