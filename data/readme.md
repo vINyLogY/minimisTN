@@ -15,7 +15,7 @@ $$
 使用 Sine DVR（[-5.0, 5.0]）。
 
 1. Case 1
-    * $c = 0.5, d=4$
+    * $c = 0.5, d=4​$
     * `cmf_steps=10, ode_method='RK23'`
     * `steps=1000, ode_inter=0.01, fast=True, split=False`
     * MCTDH：$n_1 = 10, n_2 = 40​$
@@ -40,7 +40,7 @@ $$
     * `steps=1000, ode_inter=0.01, fast=True, split=False`
     * MCTDH：$n_1 = 6, n_2 = 40​$
     * ML-MCTDH：$n_1 = 10, n_2 = 40​$，偏二叉树
-    * $|a|-t$ 图像：
+    * $|a|-t​$ 图像：
       ![case 3](.\figures\Figure_3.svg)
     * 数据文件：`data/SHO_3_*`
     * 测试参考：`tests/cmp_2_dmrg_style.py`
@@ -85,7 +85,7 @@ $$
 
     ![](C:\Users\XinxianChen\Documents\minimisTN\data\figures\Figure_6.svg)
 
-    - $c = 0.5, d=2$
+    - $c = 0.5, d=2​$
     - `cmf_steps=10, ode_method='RK23'`
     - `steps=300, ode_inter=0.1, fast=False, split=True/False`
     - MCTDH：$n_1 = 5, n_2 = 40$

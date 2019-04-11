@@ -305,7 +305,9 @@ class MultiLayer(object):
                 )
                 t.aux = None
         else:
-            def _vec_diff(t, y):
+            root = self.root
+
+            def diff(t, y):
                 """This function will not change the arrays in tensor network.
                 """
                 origin = root.vectorize()
@@ -315,29 +317,38 @@ class MultiLayer(object):
                 root.tensorize(origin)
                 return ans
 
-            OdeSolver = getattr(integrate, method)
-            cmf_steps = self.cmf_steps
-            root = self.root
-            y0 = root.vectorize()
-            ode_solver = OdeSolver(_vec_diff, 0, y0, ode_inter,
-                                   vectorized=False)
-            for n in count(1):
-                if ode_solver.status != 'running':
-                    logging.debug(__('CMF: #{}, ', n // cmf_steps))
-                    break
-                if n % cmf_steps == 0:
-                    if n >= self.max_ode_steps:
-                        raise RuntimeWarning('Reach ODE limit {}'.format(n))
-                    self._form_env()
-                    self._form_inv_density()
-                ode_solver.step()
-                root.tensorize(ode_solver.y)
+            def reformer():
+                self._form_env()
+                self._form_inv_density()
+                return
+            
+            def updater(y):
+                root.tensorize(y)
                 for t in root.visitor(leaf=False):
                     t.normalize()
+
+            y0 = root.vectorize()
+            self._solve_ode(diff, y0, ode_inter, reformer, updater)
+        return
+    
+    def _solve_ode(self, diff, y0, ode_inter, reformer, updater):
+        OdeSolver = getattr(integrate, self.ode_method)
+        ode_solver = OdeSolver(diff, 0, y0, ode_inter, vectorized=False)
+        cmf_steps = self.cmf_steps
+        for n in count(1):
+            if ode_solver.status != 'running':
+                logging.debug(__('CMF steps: #{}, ', n // cmf_steps))
+                break
+            if n % cmf_steps == 0:
+                if n >= self.max_ode_steps:
+                    raise RuntimeWarning('Reach ODE limit {}'.format(n))
+                reformer()
+            ode_solver.step()
+            updater(ode_solver.y)
         return
 
     def _split_prop(self, tensor, tau=0.01, imaginary=False, cache=False):
-        def _vec_diff(t, y):
+        def diff(t, y):
             """This function will not change the arrays in tensor network.
             """
             origin = tensor.array
@@ -349,21 +360,14 @@ class MultiLayer(object):
             tensor.set_array(origin)
             return np.reshape(ans, -1)
 
-        OdeSolver = getattr(integrate, self.ode_method)
-        y0 = np.reshape(tensor.array, -1)
-        ode_solver = OdeSolver(_vec_diff, 0, y0, tau, vectorized=False)
-        cmf_steps = self.cmf_steps
-        for n in count(1):
-            if ode_solver.status != 'running':
-                logging.debug(__('CMF@{}: #{}, ', tensor, n // cmf_steps))
-                break
-            if n % cmf_steps == 0:
-                if n >= self.max_ode_steps:
-                    raise RuntimeWarning('Reach ODE limit {}'.format(n))
-                self._form_env(root=tensor)
-            ode_solver.step()
-            tensor.set_array(np.reshape(ode_solver.y, tensor.shape))
+        def reformer(): self._form_env(root=tensor)
+
+        def updater(y):
+            tensor.set_array(np.reshape(y, tensor.shape))
             tensor.normalize()
+
+        y0 = np.reshape(tensor.array, -1)
+        self._solve_ode(diff, y0, tau, reformer, updater)
         return tensor
 
     def remove_env(self, *args):
@@ -375,15 +379,15 @@ class MultiLayer(object):
         return
 
     def move(self, t, i, op=None, unite_first=False, decorate=None):
+        end, _ = t[i]
         if decorate is not None:
             decorate(t)
-        self.remove_env(t)
+        self.remove_env(t, end)
         if unite_first:
-            end = t.unite_split(i, operator=op,
-                                rank=self.svd_rank, err=self.svd_err)[-1]
+            t.unite_split(i, operator=op, rank=self.svd_rank, err=self.svd_err)
         else:
-            end = t.split_unite(i, operator=op)[-1]
-        self.remove_env(end)
+            t.split_unite(i, operator=op)
+        self.remove_env(t, end)
         if decorate is not None:
             decorate(end)
         return end
@@ -406,11 +410,17 @@ class MultiLayer(object):
                 op2, op4 = partial(propagate, tau=tau), op2
             if backward:
                 op1, op2, op3, op4 = op2, op1, op4, op3
+            if logging.root.isEnabledFor(logging.INFO):
+                init = r.vectorize()
             for i, t, j in r.children(axis=axis, leaf=False):
                 move(r, i, op1, unite_first, op3)
                 self._split_step(ode_inter=tau, imaginary=imaginary,
                                  _root=t, _axis=j)
                 move(t, j, op2, unite_first, op4)
+                if logging.root.isEnabledFor(logging.INFO):
+                    r.tensorize(np.conj(init), use_aux=True)
+                    logging.info(__("r:{}, t:{}, <*>:{}",
+                                     r, t, r.global_inner_product()))
             return
 
         def branch_prop2(r, axis, tau, backward=False):
@@ -434,9 +444,26 @@ class MultiLayer(object):
             branch_prop2(_root, _axis, 0.5 * ode_inter)
             propagate(_root, tau=ode_inter, cache=True)
             branch_prop2(_root, _axis, 0.5 * ode_inter, backward=True)
-        else:
+        elif not unite_first:
             branch_prop(_root, _axis, ode_inter)
             propagate(_root, tau=ode_inter, cache=True)
+        else:
+            p1 = partial(propagate, tau=(-ode_inter))
+            p2 = partial(propagate, tau=ode_inter)
+            r, axis = _root, _axis
+            if logging.root.isEnabledFor(logging.INFO):
+                init = r.vectorize()
+            for i, t, j in r.children(axis=axis, leaf=False):
+                move(r, i, unite_first=True)
+                move(t, j, op=p2, unite_first=True)
+                p1(r)
+                if logging.root.isEnabledFor(logging.INFO):
+                    r.tensorize(np.conj(init), use_aux=True)
+                    logging.info(__("r:{}, t:{}, <*>:{}",
+                                     r, t, r.global_inner_product()))
+            p2(r)
+
+        print()
         return
 
     def _split_step2(self, ode_inter=0.01, imaginary=False):
@@ -499,5 +526,7 @@ class MultiLayer(object):
             auto = r.global_inner_product()
             ans = (2. * time, auto) if fast else (time, auto)
             yield ans
+            for t in r.visitor(leaf=False):
+                t.aux = None
 
 # EOF

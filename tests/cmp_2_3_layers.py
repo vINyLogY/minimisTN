@@ -16,14 +16,14 @@ from minitn.tensor import Tensor, Leaf
 from minitn.dvr import SineDVR
 from minitn.mctdh import MCTDH
 from minitn.ml import MultiLayer
-from sho_model import test_2layers, square, linear
+from sho_model import test_2layers, square, linear, triangular
 
 
 @time_this
 def ref():
     x0, x1, n_dvr, n_spf, c, dofs = -5., 5., 40, 6, 0.5, 4
     exp = test_2layers(x0, x1, n_dvr, n_spf, dofs, c)
-    exp.settings(cmf_steps=10)
+    exp.settings(cmf_steps=10, ode_method='RK23')
     t1, a1 = zip(
         *exp.autocorr(steps=1000, ode_inter=0.01, fast=True, split=False))
     np.save('./data/ref_t', t1)
@@ -42,7 +42,7 @@ def main():
         5: [9],
         6: [10]
     }
-    n_1, n_2, n_3 = 10, 20, 40
+    n_1, n_2, n_3 = 10, 10, 40
     dvr = SineDVR(-5., 5, n_3)
     dvr.set_v_func(square)
     _, array_i = dvr.solve(n_state=n_2)
@@ -54,7 +54,9 @@ def main():
             array = np.zeros((n_1, n_1))
             array[0, 0] = 1.
         elif 1 <= int(t.name) <= 2:
-            array = np.eye(n_1, n_2 ** 2)
+            array = np.zeros((n_1, n_2 ** 2))
+            for n, v_i in zip(triangular(n_2), array):
+                v_i[n] = 1.
             array = np.reshape(array, (n_1, n_2, n_2))
         elif 3 <= int(t.name) <= 6:
             array = array_i
@@ -81,7 +83,7 @@ def main():
         t.check_completness(strict=True)
 
     solver = MultiLayer(root, h_list)
-    solver.settings(cmf_steps=10)
+    solver.settings(cmf_steps=10, ode_method='RK23')
     start = time()
     t2, a2 = zip(*
         solver.autocorr(steps=1000, ode_inter=0.01, fast=True, split=False))

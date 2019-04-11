@@ -132,12 +132,12 @@ def test_4layers(x0= -5., x1=5., n_1=5, n_2=5, n_3=5, n_4=40, c=0.5):
             array = np.zeros((n_1, n_1))
             array[0, 0] = 1.
         elif 1 <= int(t.name) <= 2:
-            array = np.zeros(n_1, n_2 ** 2)
+            array = np.zeros((n_1, n_2 ** 2))
             for n, v_i in zip(triangular(n_2), array):
                 v_i[n] = 1.
             array = np.reshape(array, (n_1, n_2, n_2))
         elif 3 <= int(t.name) <= 6:
-            array = np.eye(n_2, n_3 ** 2)
+            array = np.zeros((n_2, n_3 ** 2))
             for n, v_i in zip(triangular(n_3), array):
                 v_i[n] = 1.
             array = np.reshape(array, (n_2, n_3, n_3))

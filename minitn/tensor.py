@@ -222,8 +222,15 @@ class Tensor(object):
             ))
             return
 
+    def __getitem__(self, key):
+        return self._access[key]
+
+    def __setitem__(self, key, value):
+        t, j = value
+        self.link_to(key, t, j)
+
     def link_to(self, i, b, j):
-        Tensor.link(self, i, b, j)
+        self.link(self, i, b, j)
         return
 
     def unlink_to(self, i, fast=False):
@@ -242,7 +249,7 @@ class Tensor(object):
             ))
         else:
             child, j = self._access[i]
-            Tensor.unlink(self, i, child, j)
+            self.unlink(self, i, child, j)
         return child, j
 
     def children(self, axis=_empty, leaf=True):
@@ -444,7 +451,7 @@ class Tensor(object):
         """
         end, j = self._access[i]
         mid, _ = self.split(i, rank=rank, err=err, child=self)
-        if callable(operator):
+        if operator is not None:
             mid = operator(mid)
         end.unite(j, root=end)
         return self, mid, end
@@ -466,7 +473,7 @@ class Tensor(object):
         end, j = self._access[i]
         axes = [i for i in range(end.order) if i != j]
         mid = end.unite(j)
-        if callable(operator):
+        if operator is not None:
             mid = operator(mid)
         mid.split(axes, indice=(j, i), root=end, child=self,
                   rank=rank, err=err)

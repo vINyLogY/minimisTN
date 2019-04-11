@@ -24,7 +24,7 @@ def main1():
                  ode_method='RK23',
                  ps_method='s',
                  snd_order=False)
-    t1, a1 = zip(*exp.autocorr(steps=30,
+    t1, a1 = zip(*exp.autocorr(steps=100,
                                ode_inter=0.1,
                                fast=False,
                                split=True))
@@ -39,11 +39,13 @@ def main2():
     exp = test_2layers(dofs=2, n_dvr=40, n_spf=5, random_seed=None)
     exp.settings(cmf_steps=10,
                  ode_method='RK23',
-                 ps_method='s')
-    t1, a1 = zip(*exp.autocorr(steps=30,
+                 ps_method='u',
+                 svd_err=1.e-8,
+                 snd_order=False)
+    t1, a1 = zip(*exp.autocorr(steps=10,
                                ode_inter=0.1,
                                fast=False,
-                               split=False))
+                               split=True))
     np.save('data/ref_t', t1)
     np.save('data/ref_a', a1)
     return
