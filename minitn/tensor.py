@@ -627,6 +627,8 @@ class Tensor(object):
         return root
 
     def normalize(self):
+        if not self.is_normalized:
+            return
         array = self.array
         axis = self.axis
         if axis is None:

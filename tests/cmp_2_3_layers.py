@@ -21,7 +21,7 @@ from sho_model import test_2layers, square, linear, triangular
 
 @time_this
 def ref():
-    x0, x1, n_dvr, n_spf, c, dofs = -5., 5., 40, 6, 0.5, 4
+    x0, x1, n_dvr, n_spf, c, dofs = -5., 5., 40, 10, 0.5, 4
     exp = test_2layers(x0, x1, n_dvr, n_spf, dofs, c)
     exp.settings(cmf_steps=10, ode_method='RK23')
     t1, a1 = zip(
@@ -50,6 +50,7 @@ def main():
     root = Tensor.generate(graph, 0)
     leaves = []
     for t in root.visitor():
+        t.is_normalized = False
         if int(t.name) == 0:
             array = np.zeros((n_1, n_1))
             array[0, 0] = 1.
