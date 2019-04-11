@@ -182,11 +182,10 @@ class MultiLayer(object):
                 if cache:
                     self.env_[(n, tensor, i)] = env_
             tmp = partial_product(tmp, i, env_)
-        # For non-root nodes...
-        axis = tensor.axis
-        if axis is not None:
+        # For non-root nodes... 
+        if tensor.axis is not None:
             # Inversion
-            inv = self.inv_density[tensor]
+            axis, inv = self.inv_density[tensor]
             tmp = partial_product(tmp, axis, inv)
             # Projection
             tmp_1 = np.array(tmp)
@@ -207,9 +206,9 @@ class MultiLayer(object):
             if axis is not None:
                 density = tensor.partial_env(axis, proper=True)
                 if self.pinv:
-                    self.inv_density[tensor] = linalg.pinv2(density)
+                    self.inv_density[tensor] = axis, linalg.pinv2(density)
                 else:
-                    self.inv_density[tensor] = linalg.inv(
+                    self.inv_density[tensor] = axis, linalg.inv(
                         density +
                         self.regular_err * np.identity(tensor.shape[axis])
                     )
@@ -451,19 +450,17 @@ class MultiLayer(object):
             p1 = partial(propagate, tau=(-ode_inter))
             p2 = partial(propagate, tau=ode_inter)
             r, axis = _root, _axis
-            if logging.root.isEnabledFor(logging.INFO):
+            if logging.root.isEnabledFor(logging.DEBUG):
                 init = r.vectorize()
             for i, t, j in r.children(axis=axis, leaf=False):
                 move(r, i, unite_first=True)
                 move(t, j, op=p2, unite_first=True)
                 p1(r)
-                if logging.root.isEnabledFor(logging.INFO):
+                if logging.root.isEnabledFor(logging.DEBUG):
                     r.tensorize(np.conj(init), use_aux=True)
-                    logging.info(__("r:{}, t:{}, <*>:{}",
+                    logging.debug(__("r:{}, t:{}, <0|1>:{}",
                                      r, t, r.global_inner_product()))
             p2(r)
-
-        print()
         return
 
     def _split_step2(self, ode_inter=0.01, imaginary=False):

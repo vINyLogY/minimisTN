@@ -87,13 +87,13 @@ def main():
     solver.settings(cmf_steps=10, ode_method='RK23')
     start = time()
     t2, a2 = zip(*
-        solver.autocorr(steps=1000, ode_inter=0.01, fast=True, split=False))
+        solver.autocorr(steps=1000, ode_inter=0.01, fast=True, split=True))
     end = time()
     print(end - start)
     np.save('./data/exp_t', t2)
     np.save('./data/exp_a', a2)
 
 
-logging.root.setLevel(logging.DEBUG)
+logging.root.setLevel(logging.INFO)
 main()
 ref()
