@@ -182,10 +182,10 @@ class MultiLayer(object):
                 if cache:
                     self.env_[(n, tensor, i)] = env_
             tmp = partial_product(tmp, i, env_)
-        # For non-root nodes... 
+        # For non-root nodes...
         if tensor.axis is not None:
             # Inversion
-            axis, inv = self.inv_density[tensor]
+            axis, inv = tensor.axis, self.inv_density[tensor]
             tmp = partial_product(tmp, axis, inv)
             # Projection
             tmp_1 = np.array(tmp)
@@ -206,12 +206,11 @@ class MultiLayer(object):
             if axis is not None:
                 density = tensor.partial_env(axis, proper=True)
                 if self.pinv:
-                    self.inv_density[tensor] = axis, linalg.pinv2(density)
+                    inv = linalg.pinv2(density)
                 else:
-                    self.inv_density[tensor] = axis, linalg.inv(
-                        density +
-                        self.regular_err * np.identity(tensor.shape[axis])
-                    )
+                    inv = linalg.inv(density + self.regular_err *
+                                           np.identity(tensor.shape[axis]))
+                self.inv_density[tensor] = inv
         return self.inv_density
 
     def _form_env(self, root=None):
@@ -320,7 +319,7 @@ class MultiLayer(object):
                 self._form_env()
                 self._form_inv_density()
                 return
-            
+
             def updater(y):
                 root.tensorize(y)
                 for t in root.visitor(leaf=False):
@@ -329,7 +328,7 @@ class MultiLayer(object):
             y0 = root.vectorize()
             self._solve_ode(diff, y0, ode_inter, reformer, updater)
         return
-    
+
     def _solve_ode(self, diff, y0, ode_inter, reformer, updater):
         OdeSolver = getattr(integrate, self.ode_method)
         ode_solver = OdeSolver(diff, 0, y0, ode_inter, vectorized=False)
@@ -359,7 +358,7 @@ class MultiLayer(object):
             tensor.set_array(origin)
             return np.reshape(ans, -1)
 
-        def reformer(): self._form_env(root=tensor)
+        def reformer(): return
 
         def updater(y):
             tensor.set_array(np.reshape(y, tensor.shape))
@@ -393,89 +392,50 @@ class MultiLayer(object):
 
     def _split_step(self, ode_inter=0.01, imaginary=False,
                     _root=None, _axis=None):
-        """Working projector-splitting method. 
+        """Working projector-splitting method.  The time of the coefficient of
+        a wfn matters most.
         """
         if _root is None:
             self._form_env()
             _root = self.root
         propagate = partial(self._split_prop, imaginary=imaginary)
         move = self.move
-        unite_first = self.ps_method.startswith('u')
 
         def branch_prop(r, axis, tau, backward=False):
-            op1, op2, op3, op4 = (None, partial(propagate, tau=(-tau)),
-                                  None, None)
+            unite_first = self.ps_method.startswith('u') and r is not self.root
+            op1, op2, op3, op4, u1, u2 = (None, partial(propagate, tau=(-tau)),
+                                          None, None, False, False)
+            linkages = list(r.children(axis=axis, leaf=False))
             if unite_first:
-                op2, op4 = partial(propagate, tau=tau), op2
+                op2, op4, u2 = partial(propagate, tau=tau), op2, True
             if backward:
-                op1, op2, op3, op4 = op2, op1, op4, op3
-            if logging.root.isEnabledFor(logging.INFO):
-                init = r.vectorize()
-            for i, t, j in r.children(axis=axis, leaf=False):
-                move(r, i, op1, unite_first, op3)
+                op1, op2, op3, op4, u1, u2 = op2, op1, op4, op3, u2, u1
+            if logging.root.isEnabledFor(logging.DEBUG):
+                shape_dict = {}
+                init = r.vectorize(shape_dict=shape_dict)
+            for i, t, j in linkages:
+                move(r, i, op1, u1, op3)
                 self._split_step(ode_inter=tau, imaginary=imaginary,
                                  _root=t, _axis=j)
-                move(t, j, op2, unite_first, op4)
-                if logging.root.isEnabledFor(logging.INFO):
-                    r.tensorize(np.conj(init), use_aux=True)
-                    logging.info(__("r:{}, t:{}, <*>:{}",
-                                     r, t, r.global_inner_product()))
-            return
-
-        def branch_prop2(r, axis, tau, backward=False):
-            """TODO: Test me. Why do I work?
-
-            This method has no clear physical picture, but it works.
-            But propagating directly (using `linkage_visitor`) does NOT
-            works.
-            """
-            op = partial(propagate, tau=(-tau)) if backward else None
-            move = partial(self.move, op=op)
-
-            for i, t, j in r.children(axis=axis, leaf=False):
-                move(r, i)
-                self._split_step(ode_inter=tau, imaginary=imaginary,
-                                 _root=t, _axis=j)
-                move(t, j)
+                move(t, j, op2, u2, op4)
+                if logging.root.isEnabledFor(logging.DEBUG):
+                    try:
+                        r.tensorize(np.conj(init), use_aux=True,
+                                    shape_dict=shape_dict)
+                        ip = r.global_inner_product()
+                    except:
+                        ip = 'N/A'
+                    logging.debug(__("r:{}({}); t:{}({}), <|>:{}",
+                                     r, r.shape, t, t.shape, ip))
             return
 
         if self.snd_order:
-            branch_prop2(_root, _axis, 0.5 * ode_inter)
+            branch_prop(_root, _axis, 0.5 * ode_inter)
             propagate(_root, tau=ode_inter, cache=True)
-            branch_prop2(_root, _axis, 0.5 * ode_inter, backward=True)
-        elif not unite_first:
+            branch_prop(_root, _axis, 0.5 * ode_inter, backward=True)
+        else:
             branch_prop(_root, _axis, ode_inter)
             propagate(_root, tau=ode_inter, cache=True)
-        else:
-            p1 = partial(propagate, tau=(-ode_inter))
-            p2 = partial(propagate, tau=ode_inter)
-            r, axis = _root, _axis
-            if logging.root.isEnabledFor(logging.DEBUG):
-                init = r.vectorize()
-            for i, t, j in r.children(axis=axis, leaf=False):
-                move(r, i, unite_first=True)
-                move(t, j, op=p2, unite_first=True)
-                p1(r)
-                if logging.root.isEnabledFor(logging.DEBUG):
-                    r.tensorize(np.conj(init), use_aux=True)
-                    logging.debug(__("r:{}, t:{}, <0|1>:{}",
-                                     r, t, r.global_inner_product()))
-            p2(r)
-        return
-
-    def _split_step2(self, ode_inter=0.01, imaginary=False):
-        """[NOT working] Using `linkage_visitor`
-        """
-        linkages = list(self.root.linkage_visitor(leaf=False, back=True))
-        orders = {t: len(list(t.children(axis=None, leaf=False))) * 3
-                  # should be `2`, but `3` works: why?
-                  for t in self.root.visitor(leaf=False)}
-        propagate = partial(self._split_prop, imaginary=imaginary)
-        move = self.move
-        for t1, i, t2, _ in linkages:
-            propagate(t1, tau=(ode_inter / orders[t1]))
-            move(t1, i, op=partial(propagate, tau=(-ode_inter / orders[t1])))
-            propagate(t2, tau=(ode_inter / orders[t2]))
         return
 
     def propagator(self, steps=None, ode_inter=0.01, split=False,
@@ -498,13 +458,7 @@ class MultiLayer(object):
                 self.root.global_norm()
             ))
             yield (n * ode_inter, self.root)
-            if split:
-                if self.ps_method.startswith('t'):
-                    step = self._split_step2
-                else:
-                    step = self._split_step
-            else:
-                    step = self._direct_step
+            step = self._split_step if split else self._direct_step
             try:
                 step(ode_inter=ode_inter, imaginary=imaginary)
             except RuntimeWarning:

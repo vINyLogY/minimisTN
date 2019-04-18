@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
-r"""ML type of 2d sho
+r"""ML type of nd sho
 """
 from __future__ import absolute_import, division
 

@@ -19,35 +19,38 @@ from sho_model import test_2layers, test_mps_dmrg, test_mctdh
 @time_this
 def main1():
     # x0, x1, n_dvr, n_spf, c, dofs = -5., 5., 40, 10, 0.5, 4
-    exp = test_2layers(dofs=2, n_dvr=40, n_spf=5, random_seed=None)
+    exp = test_2layers(lower=-10, upper=10, dofs=2, n_dvr=100, n_spf=5,
+                       random_seed=233)
     exp.settings(cmf_steps=10,
                  ode_method='RK23',
                  ps_method='s',
+                 svd_rank=5,
                  snd_order=False)
-    t1, a1 = zip(*exp.autocorr(steps=100,
-                               ode_inter=0.1,
-                               fast=False,
+    t1, a1 = zip(*exp.autocorr(steps=300,
+                               ode_inter=0.01,
+                               fast=True,
                                split=True))
-    np.save('data/exp_t', t1)
-    np.save('data/exp_a', a1)
+    np.save('./exp_t', t1)
+    np.save('./exp_a', a1)
     return
 
 
 @time_this
 def main2():
     # x0, x1, n_dvr, n_spf, c, dofs = -5., 5., 40, 6, 0.5, 4
-    exp = test_2layers(dofs=2, n_dvr=40, n_spf=5, random_seed=None)
+    exp = test_2layers(lower=-10, upper=10, dofs=2, n_dvr=100, n_spf=5,
+                       random_seed=233)
     exp.settings(cmf_steps=10,
                  ode_method='RK23',
                  ps_method='u',
-                 svd_err=1.e-8,
+                 svd_rank=5,
                  snd_order=False)
-    t1, a1 = zip(*exp.autocorr(steps=10,
-                               ode_inter=0.1,
-                               fast=False,
+    t1, a1 = zip(*exp.autocorr(steps=300,
+                               ode_inter=0.01,
+                               fast=True,
                                split=True))
-    np.save('data/ref_t', t1)
-    np.save('data/ref_a', a1)
+    np.save('./ref_t', t1)
+    np.save('./ref_a', a1)
     return
 
 
@@ -60,11 +63,12 @@ def refer():
     np.save('mctdh_a', a2)
     return
 
+
 if __name__ == '__main__':
     logging.basicConfig(
         format='%(levelname)s: (In %(funcName)s, %(module)s)  %(message)s',
-        level=logging.INFO
+        level=logging.DEBUG
     )
-    # main1()
+    main1()
     main2()
     # refer()

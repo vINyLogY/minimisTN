@@ -42,7 +42,7 @@ class Tensor(object):
     _partial_env : {int: 2-d ndarray}
     """
 
-    def __init__(self, name=None, array=None, axis=None):
+    def __init__(self, name=None, array=None, axis=None, normalized=False):
         r"""
         Parameters
         ----------
@@ -65,7 +65,7 @@ class Tensor(object):
 
         # For some special methods
         self.aux = None
-        self.is_normalized = True
+        self.is_normalized = normalized
         return
 
     def __repr__(self):
@@ -395,7 +395,7 @@ class Tensor(object):
                 ans.append(tensor)
         return ans
 
-    def vectorize(self, use_aux=False):
+    def vectorize(self, use_aux=False, shape_dict=None):
         """Return a vector from the arrays in the tensors in the network of
         self.
 
@@ -404,16 +404,24 @@ class Tensor(object):
         use_aux : bool
             `True` to vectorize the arrays in .aux, else to use arrays in 
             .array.
+        shape_dict: dict
+            Where to save the shape of each tensor.
+        
+        Return
+        ------
+        vec : (n,) ndarray
         """
         vec_list = []
         for t in self.visitor(leaf=False):
             array = t.aux if use_aux else t.array
             vec = np.reshape(array, -1)
             vec_list.append(vec)
+            if shape_dict is not None:
+                shape_dict[t] = t.shape
         ans = np.concatenate(vec_list, axis=None)
         return ans
 
-    def tensorize(self, vec, use_aux=False):
+    def tensorize(self, vec, use_aux=False, shape_dict=None):
         """Read a vector and set the arrays in the tensors in the network of
         self.
 
@@ -424,10 +432,12 @@ class Tensor(object):
         use_aux : bool
              `True` to write the arrays in .aux, else to write arrays in 
             .array.
+        shape_dict: dict
+            Where to load the shape of each tensor.
         """
         start = 0
         for t in self.visitor(leaf=False):
-            shape = t.shape
+            shape = t.shape if shape_dict is None else shape_dict[t]
             end = start + np.prod(shape)
             array = np.reshape(vec[start:end], shape)
             if use_aux:
@@ -471,7 +481,8 @@ class Tensor(object):
         if __debug__:
             linkage_old = list(self.linkage_visitor(axis=None))
         end, j = self._access[i]
-        axes = [i for i in range(end.order) if i != j]
+        axes = ([_i for _i in range(end.order) if _i < j] +
+                [self.order - 2 + _i for _i in range(end.order) if _i > j])
         mid = end.unite(j)
         if operator is not None:
             mid = operator(mid)
@@ -539,7 +550,7 @@ class Tensor(object):
         # Calculate arrays for new tensors
         for n, i in enumerate(axes1):
             a = np.moveaxis(a, i, n)
-        a = np.reshape(a, (np.prod(shape1), np.prod(shape2)))
+        a = np.reshape(a, (np.prod([1] + shape1), np.prod([1] + shape2)))
         u, s, vh = compressed_svd(a, rank=rank, err=err)
         root_array = np.reshape(np.dot(u, s), shape1 + [-1])
         root_array = np.moveaxis(root_array, -1, index1)
@@ -548,12 +559,14 @@ class Tensor(object):
         # Create/write new tensors.
         cls = type(self)
         if root is None:
-            root = cls(name=name1, array=root_array, axis=None)
+            root = cls(name=name1, array=root_array, axis=None,
+                       normalized=True)
         else:
             root.name, root.axis = name1, None
             root.set_array(root_array)
         if child is None:
-            child = cls(name=name2, array=child_array, axis=index2)
+            child = cls(name=name2, array=child_array, axis=index2,
+                        normalized=True)
         else:
             child.name, child.axis = name2, index2
             child.set_array(child_array)
@@ -561,8 +574,8 @@ class Tensor(object):
         # Fix linkage info
         axes1.insert(index1, None)
         axes2.insert(index2, None)
-        unlink = Tensor.unlink
-        link = Tensor.link
+        unlink = self.unlink
+        link = self.link
         link_info = [(root, index1, child, index2)]
         for i, t, j in children:
             is_1 = i in axes1
@@ -607,27 +620,28 @@ class Tensor(object):
         else:
             name = t1.name + '+' + t2.name
         if root is None:
-            root = cls(name=name, array=array, axis=None)
+            root = cls(name=name, array=array, axis=None,
+                       normalized=True)
         else:
             root.name, root.axis = name, None
             root.set_array(array)
 
         # Fix linkage info
-        link = Tensor.link
-        unlink = Tensor.unlink
+        link = self.link
+        unlink = self.unlink
         unlink(t1, index1, t2, index2)
-        link1 = [(t1,) + args for args in t1.children(axis=None)]
-        link2 = [(t2,) + args for args in t2.children(axis=None)]
+        l1 = [(t1,) + args for args in t1.children(axis=None)]
+        l2 = [(t2,) + args for args in t2.children(axis=None)]
         link_info = []
-        for s, i, t, j in link1[:axis] + link2 + link1[axis:]:
+        for s, i, t, j in l1[:axis] + l2 + l1[axis:]:
             unlink(s, i, t, j)
             link_info.append((root, len(link_info), t, j))
         for linkage in link_info:
             link(*linkage)
         return root
 
-    def normalize(self):
-        if not self.is_normalized:
+    def normalize(self, forced=False):
+        if not self.is_normalized and not forced:
             return
         array = self.array
         axis = self.axis
@@ -801,9 +815,9 @@ class Leaf(Tensor):
         self._partial_env = None
         return
 
-    def __str__(self):
-        string = self.name
-        return 'Leaf_' + string if self.name is not None else repr(self)
+    def __repr__(self):
+        string = self.name if self.name is not None else str(hex(id(self)))
+        return 'Leaf_' + string
 
     @property
     def array(self):

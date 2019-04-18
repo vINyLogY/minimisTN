@@ -28,6 +28,9 @@ def ref(n_spf=10):
 
 
 def main():
+    logging.root.setLevel(logging.INFO)
     for i in range(2, 20, 4):
         ref(n_spf=i)
     return
+
+main()
