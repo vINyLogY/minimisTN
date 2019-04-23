@@ -470,7 +470,7 @@ class MultiLayer(object):
             op1, op2 = None, partial(propagate, tau=(-tau))
             linkages = list(r.children(axis=axis, leaf=False))
             if backward:
-                op1, op2,  = op2, op1, op4, op3, u2, u1
+                op1, op2,  = op2, op1
             if logging.root.isEnabledFor(logging.DEBUG):
                 shape_dict = {}
                 init = r.vectorize(shape_dict=shape_dict)
