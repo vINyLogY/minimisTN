@@ -13,8 +13,7 @@ import logging
 from builtins import filter, map, range, zip
 from functools import partial
 from itertools import count
-from copy import copy
-from collections import deque
+from contextlib import contextmanager
 
 import numpy as np
 from scipy import linalg, integrate, sparse
@@ -138,17 +137,23 @@ class MultiLayer(object):
                 leaf.reset()
 
     def matrix_element(self):
+        """Return the matrix element with the states of the network which
+        `self.root` in.  Sum over `self.h_list`.
+        """
         ans = 0.0
         for _ in self.term_visitor():
             ans += self.root.matrix_element()
         return ans
 
     def expection(self, normalized=False):
+        """Return the expection value with the state of the network which
+        `self.root` in.  Sum over `self.h_list`.
+        """
         ans = 0.0
         for _ in self.term_visitor():
             ans += self.root.expection()
         if normalized:
-            ans /= self.root.global_norm() ** 2
+            ans /= self.root.global_norm()
         return ans
 
     def _single_eom(self, tensor, n, cache=False):
@@ -209,15 +214,13 @@ class MultiLayer(object):
                     inv = linalg.pinv2(density)
                 else:
                     inv = linalg.inv(density + self.regular_err *
-                                           np.identity(tensor.shape[axis]))
+                                     np.identity(tensor.shape[axis]))
                 self.inv_density[tensor] = inv
         return self.inv_density
 
-    def _form_env(self, root=None):
+    def _form_env(self):
         self.env_ = {}
-        if root is None:
-            root = self.root
-        network = root.visitor(axis=None, leaf=False)
+        network = self.root.visitor(axis=None, leaf=False)
         for n in self.term_visitor():
             for tensor in network:
                 for i in range(tensor.order):
@@ -259,7 +262,7 @@ class MultiLayer(object):
     def coefficient(self, imaginary=False):
         return -self.hbar if imaginary else 1.0j * self.hbar
 
-    def _direct_step(self, ode_inter=0.01, imaginary=False):
+    def direct_step(self, ode_inter=0.01, imaginary=False):
         visitor = self.root.visitor
         self._form_env()
         self._form_inv_density()
@@ -329,6 +332,23 @@ class MultiLayer(object):
             self._solve_ode(diff, y0, ode_inter, reformer, updater)
         return
 
+    @contextmanager
+    def log_inner_product(self, level=logging.DEBUG):
+        root = self.root
+        if logging.root.isEnabledFor(level):
+            shape_dict = {}
+            init = root.vectorize(shape_dict=shape_dict)
+        try:
+            yield self
+        except:
+            pass
+        else:
+            if logging.root.isEnabledFor(level):
+                root.tensorize(np.conj(init), use_aux=True,
+                               shape_dict=shape_dict)
+                ip = root.global_inner_product()
+                logging.log(level, __("<|>:{}", ip))
+
     def _solve_ode(self, diff, y0, ode_inter, reformer, updater):
         OdeSolver = getattr(integrate, self.ode_method)
         ode_solver = OdeSolver(diff, 0, y0, ode_inter, vectorized=False)
@@ -352,7 +372,7 @@ class MultiLayer(object):
             origin = tensor.array
             tensor.set_array(np.reshape(y, tensor.shape))
             ans = np.zeros_like(y)
-            for n in self.term_visitor(use_cache=True):
+            for n in self.term_visitor(use_cache=False):
                 ans += np.reshape(self._single_eom(tensor, n, cache=cache), -1)
             ans /= self.coefficient(imaginary=imaginary)
             tensor.set_array(origin)
@@ -364,8 +384,15 @@ class MultiLayer(object):
             tensor.set_array(np.reshape(y, tensor.shape))
             tensor.normalize()
 
+        if tensor.axis is None:
+            self.root = tensor
+        else:
+            raise RuntimeError("Cannot propagate on Tensor {}"
+                               "which is not a root node!".format(tensor))
+        logging.info(__("* Propagating at {} for {}", tensor, tau))
         y0 = np.reshape(tensor.array, -1)
-        self._solve_ode(diff, y0, tau, reformer, updater)
+        with self.log_inner_product(level=logging.DEBUG):
+            self._solve_ode(diff, y0, tau, reformer, updater)
         return tensor
 
     def remove_env(self, *args):
@@ -376,24 +403,62 @@ class MultiLayer(object):
                         del self.env_[(n, tensor, i)]
         return
 
-    def move(self, t, i, op=None, unite_first=False, decorate=None):
+    def move(self, t, i, op=None, unite_first=False):
         end, _ = t[i]
-        if decorate is not None:
-            decorate(t)
         self.remove_env(t, end)
         if unite_first:
-            t.unite_split(i, operator=op, rank=self.svd_rank, err=self.svd_err)
+            path = t.unite_split(i, operator=op, rank=self.svd_rank,
+                                 err=self.svd_err)
         else:
-            t.split_unite(i, operator=op)
-        self.remove_env(t, end)
-        if decorate is not None:
-            decorate(end)
+            path = t.split_unite(i, operator=op)
+        self.root = end
+        self.remove_env(*path)
         return end
+
+    def split_step(self, ode_inter=0.01, imaginary=False):
+        self._form_env()
+        prop = partial(self._split_prop, tau=ode_inter, imaginary=imaginary,
+                       cache=True)
+        inv_prop = partial(self._split_prop, tau=(-ode_inter),
+                           imaginary=imaginary, cache=True)
+        linkages = list(self.root.directed_linkage_visitor(leaf=False))
+        move = self.move
+        for rev, (t1, i, _, _) in linkages:
+            if not rev:
+                move(t1, i)
+            else:
+                prop(t1)
+                move(t1, i, op=inv_prop)
+        prop(self.root)
+        return
+
+    def unite_step(self, ode_inter=0.01, imaginary=False):
+        prop = partial(self._split_prop, tau=ode_inter, imaginary=imaginary,
+                       cache=True)
+        inv_prop = partial(self._split_prop, tau=(-ode_inter),
+                           imaginary=imaginary, cache=True)
+        linkages = list(self.root.directed_linkage_visitor(leaf=False))
+        move = self.move
+        origin = self.root
+        counter = {}
+        for t in self.root.visitor(leaf=False):
+            counter[t] = len(list(t.children(leaf=False)))
+        for rev, (t1, i, t2, _) in linkages:
+            if not rev:
+                if counter[t2] > 0:
+                    move(t1, i)
+            else:
+                move(t1, i, op=prop, unite_first=True)
+                counter[t2] -= 1
+                if t2 is not origin or counter[t2] > 0:
+                    inv_prop(t2)
+        assert not any(counter.values())
+        return
 
     def _split_step(self, ode_inter=0.01, imaginary=False,
                     _root=None, _axis=None):
-        """Working projector-splitting method.  The time of the coefficient of
-        a wfn matters most.
+        """[Deprecated] Recursive projector-splitting method.  The time of the
+        coefficient of a wfn matters most.
         """
         if _root is None:
             self._form_env()
@@ -402,22 +467,18 @@ class MultiLayer(object):
         move = self.move
 
         def branch_prop(r, axis, tau, backward=False):
-            unite_first = self.ps_method.startswith('u') and r is not self.root
-            op1, op2, op3, op4, u1, u2 = (None, partial(propagate, tau=(-tau)),
-                                          None, None, False, False)
+            op1, op2 = None, partial(propagate, tau=(-tau))
             linkages = list(r.children(axis=axis, leaf=False))
-            if unite_first:
-                op2, op4, u2 = partial(propagate, tau=tau), op2, True
             if backward:
-                op1, op2, op3, op4, u1, u2 = op2, op1, op4, op3, u2, u1
+                op1, op2,  = op2, op1, op4, op3, u2, u1
             if logging.root.isEnabledFor(logging.DEBUG):
                 shape_dict = {}
                 init = r.vectorize(shape_dict=shape_dict)
             for i, t, j in linkages:
-                move(r, i, op1, u1, op3)
+                move(r, i, op1)
                 self._split_step(ode_inter=tau, imaginary=imaginary,
                                  _root=t, _axis=j)
-                move(t, j, op2, u2, op4)
+                move(t, j, op2)
                 if logging.root.isEnabledFor(logging.DEBUG):
                     try:
                         r.tensorize(np.conj(init), use_aux=True,
@@ -458,7 +519,13 @@ class MultiLayer(object):
                 self.root.global_norm()
             ))
             yield (n * ode_inter, self.root)
-            step = self._split_step if split else self._direct_step
+            if split:
+                if self.ps_method.upper().startswith('U'):
+                    step = self.unite_step
+                else:
+                    step = self.split_step
+            else:
+                step = self.direct_step
             try:
                 step(ode_inter=ode_inter, imaginary=imaginary)
             except RuntimeWarning:

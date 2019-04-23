@@ -283,7 +283,7 @@ class Tensor(object):
             for tensor in child.visitor(axis=j, leaf=leaf):
                 yield tensor
 
-    def linkage_visitor(self, axis=_empty, leaf=True, back=False):
+    def linkage_visitor(self, axis=_empty, leaf=True):
         """
         Yield
         -----
@@ -291,10 +291,22 @@ class Tensor(object):
         """
         for i, child, j in self.children(axis=axis, leaf=leaf):
             yield (self, i, child, j)
-            for linkage in child.linkage_visitor(axis=j, leaf=leaf, back=back):
+            for linkage in child.linkage_visitor(axis=j, leaf=leaf):
                 yield linkage
-            if back:
-                yield (child, j, self, i)
+
+    def directed_linkage_visitor(self, axis=_empty, leaf=True):
+        """
+        Yield
+        -----
+        tuple : (bool, (Tensor, int, Tensor, int))
+            tuple[0]: direction of linkage.  False for from root to leaf and
+            True for the reversed.
+        """
+        for i, child, j in self.children(axis=axis, leaf=leaf):
+            yield (False, (self, i, child, j))
+            for linkage in child.directed_linkage_visitor(axis=j, leaf=leaf):
+                yield linkage
+            yield (True, (child, j, self, i))
 
     def partial_env(self, i, proper=False, use_aux=False):
         """
@@ -481,9 +493,8 @@ class Tensor(object):
         if __debug__:
             linkage_old = list(self.linkage_visitor(axis=None))
         end, j = self._access[i]
-        axes = ([_i for _i in range(end.order) if _i < j] +
-                [self.order - 2 + _i for _i in range(end.order) if _i > j])
-        mid = end.unite(j)
+        axes = [i + k for k in range(end.order - 1)]
+        mid = self.unite(i)
         if operator is not None:
             mid = operator(mid)
         mid.split(axes, indice=(j, i), root=end, child=self,
@@ -562,13 +573,13 @@ class Tensor(object):
             root = cls(name=name1, array=root_array, axis=None,
                        normalized=True)
         else:
-            root.name, root.axis = name1, None
+            root.axis = None
             root.set_array(root_array)
         if child is None:
             child = cls(name=name2, array=child_array, axis=index2,
                         normalized=True)
         else:
-            child.name, child.axis = name2, index2
+            child.axis = index2
             child.set_array(child_array)
 
         # Fix linkage info
@@ -623,7 +634,7 @@ class Tensor(object):
             root = cls(name=name, array=array, axis=None,
                        normalized=True)
         else:
-            root.name, root.axis = name, None
+            root.axis = None
             root.set_array(array)
 
         # Fix linkage info
@@ -641,6 +652,9 @@ class Tensor(object):
         return root
 
     def normalize(self, forced=False):
+        """Normalize the array of self. Only work when self.is_normalized.
+        Set `forced` to `True` to normalize any way.
+        """
         if not self.is_normalized and not forced:
             return
         array = self.array
@@ -666,6 +680,8 @@ class Tensor(object):
 
     @staticmethod
     def hilbert_angle(r1, r2):
+        r"""Return :math:`\frac{<2|1>}{\sqrt{<1|1><2|2>}}.
+        """
         for n1, n2 in zip(r1.visitor(leaf=False), r2.visitor(leaf=False)):
             n1.aux = np.conj(n2.array)
         angle = np.arccos(
