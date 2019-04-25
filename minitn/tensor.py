@@ -369,13 +369,16 @@ class Tensor(object):
             leaf.aux = leaf.array
         return self.partial_env(None, use_aux=True)
 
-    def global_norm(self):
+    def global_square(self):
         """Return <array|array>^{1/2}
         """
         for t in self.visitor(leaf=False):
             t.aux = np.conj(t.array)
         ans = self.global_inner_product()
-        return np.sqrt(ans)
+        return ans
+
+    def global_norm(self):
+        return np.sqrt(self.global_square())
 
     def expection(self):
         """Return <array|H|array>

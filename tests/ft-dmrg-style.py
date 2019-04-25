@@ -8,7 +8,6 @@ from __future__ import division
 import logging
 from builtins import filter, map, range, zip
 from functools import partial
-from itertools import count
 
 import numpy as np
 from scipy import linalg
@@ -22,38 +21,29 @@ from ft_sho_model import test_2layers
 def main():
     n_dvr = 50
     dofs = 2
-    ode_inter = 0.01
     exp = test_2layers(n_spf=10, n_dvr=n_dvr, dofs=dofs)
-    exp.settings(
-        cmf_steps=10,
-        ode_method='RK23',
-        ps_method='s'
-    )
-    p = exp.propagator(ode_inter=ode_inter, split=False, imaginary=True)
-    for (t1, r1), (t, z) in zip(p, ref(ode_inter=ode_inter,
-                                       n_dvr=n_dvr,
-                                       dofs=dofs)):
+    exp.settings(cmf_steps=10,
+                 ode_method='RK23',
+                 ps_method='s')
+    p = exp.propagator(ode_inter=0.1, split=True, imaginary=True)
+    for (t1, r1), (t, z) in zip(p, ref(n_dvr=n_dvr, dofs=dofs)):
         assert abs(2 * t1 - t) < 1.e-8
         z0 = n_dvr ** dofs
         z1 = (r1.global_square()) * z0
-        msg = "beta:{:.4f}    Z1:{:.8f}    Z:{:.8f}".format(
+        msg = "beta:{:.4f}   Z1:{:.8f}   Z:{:.8f}".format(
             t, z1, z
         )
         print(msg)
-        trace = {t: np.diag(r1.partial_trace(t.array, t.axis, t.array.conj(),
-                                             t.axis))
-                 for t in r1.visitor(leaf=False) if t is not r1}
-        print(trace)
     return
 
 
 def ref(ode_inter=0.1, c=0.5, n_dvr=40, dofs=2):
-    a = c ** 2
+    a = c ** 2 
     po = np.identity(dofs)
     po += a * np.eye(dofs, k=1)
     po += a * np.eye(dofs, k=(-1))
     w = np.sqrt(linalg.eigh(po, eigvals_only=True))
-    for n in count():
+    for n in range(100):
         beta = 2 * n * ode_inter
         exp = np.exp
 
@@ -71,6 +61,6 @@ def ref(ode_inter=0.1, c=0.5, n_dvr=40, dofs=2):
 
 logging.basicConfig(
     format='%(levelname)s: (In %(funcName)s, %(module)s)  %(message)s',
-    level=logging.DEBUG
+    level=logging.INFO
 )
 main()

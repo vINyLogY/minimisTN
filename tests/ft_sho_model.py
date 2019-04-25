@@ -40,7 +40,7 @@ def test_2layers(lower= -5., upper=5., n_dvr=40, n_spf=5, dofs=2, c=0.5):
         basis.append(bi)
         hi = Leaf(name='P' + str(i))
         ai = Leaf(name='Q' + str(i))
-        hamiltonian.extend((hi, ai))
+        hamiltonian.append((hi, ai))
         bi.link_to(0, root, i)
         bi.link_to(1, hi, 0)
         bi.link_to(2, ai, 0)
@@ -52,7 +52,8 @@ def test_2layers(lower= -5., upper=5., n_dvr=40, n_spf=5, dofs=2, c=0.5):
     # SPFs
     array_i = np.ones((n_dvr,))
     array_i /= np.sqrt(n_dvr)
-    da = DavidsonAlgorithm(matvec, init_vecs=[array_i], n_vals=n_spf)
+    array_i = [array_i]
+    da = DavidsonAlgorithm(matvec, init_vecs=array_i, n_vals=n_spf)
     array_i = np.array(da.kernel(search_mode=True))
     a_i = []
     for n in range(n_spf):
@@ -76,13 +77,13 @@ def test_2layers(lower= -5., upper=5., n_dvr=40, n_spf=5, dofs=2, c=0.5):
     # single
     s_h = dvr.h_mat()
     for leaf in hamiltonian[:dofs]:
-        h_list.append([(leaf, s_h)])
+        h_list.append([(leaf[0], s_h)])
     # couple
     linear_ = partial(linear, c=c)
     dvr.set_v_func(linear_)
     l_h = dvr.v_mat()
     for i in range(dofs - 1):
-        term = [(hamiltonian[i], l_h), (hamiltonian[i + 1], l_h)]
+        term = [(hamiltonian[i][0], l_h), (hamiltonian[i + 1][0], l_h)]
         h_list.append(term)
 
     # ML-MCTDH

@@ -153,7 +153,7 @@ class MultiLayer(object):
         for _ in self.term_visitor():
             ans += self.root.expection()
         if normalized:
-            ans /= self.root.global_norm() ** 2
+            ans /= self.root.global_square()
         return ans
 
     def _single_eom(self, tensor, n, cache=False):
@@ -509,23 +509,28 @@ class MultiLayer(object):
         ode_inter : float
         method : {'Newton', 'RK4', 'RK45', ...}
         """
+        if split:
+            if self.ps_method.upper().startswith('U'):
+                step = self.unite_step
+            elif self.ps_method.upper().startswith('S'):
+                step = self.split_step
+            else:
+                raise ValueError("No PS method '{}'!".format(self.ps_method))
+        else:
+            step = self.direct_step
+        root = self.root
+        expection = self.expection
+
         for n in count():
             if steps is not None and n > steps:
                 break
             logging.info(__(
-                "Propagating at t: {:.3f}, E: {:.8f}, |v|: {:.8f}",
+                "Propagating at t: {:.3f}, E: {:.8f}, |v|^2: {:.8f}",
                 n * ode_inter,
-                self.expection(normalized=True),
-                self.root.global_norm()
+                expection(normalized=True),
+                root.global_square()
             ))
-            yield (n * ode_inter, self.root)
-            if split:
-                if self.ps_method.upper().startswith('U'):
-                    step = self.unite_step
-                else:
-                    step = self.split_step
-            else:
-                step = self.direct_step
+            yield (n * ode_inter, root)
             try:
                 step(ode_inter=ode_inter, imaginary=imaginary)
             except RuntimeWarning:
