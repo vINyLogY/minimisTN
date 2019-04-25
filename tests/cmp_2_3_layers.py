@@ -28,7 +28,7 @@ def ref():
         t.is_normalized = False
     exp.settings(cmf_steps=10, ode_method='RK23')
     t1, a1 = zip(
-        *exp.autocorr(steps=10, ode_inter=0.1, fast=True, split=False))
+        *exp.autocorr(steps=100, ode_inter=0.1, fast=True, split=False))
     np.save('./data/ref_t', t1)
     np.save('./data/ref_a', a1)
     return
@@ -91,7 +91,7 @@ def main():
                     svd_rank=8)
     start = time()
     t2, a2 = zip(*
-        solver.autocorr(steps=10, ode_inter=0.1, fast=True, split=True))
+        solver.autocorr(steps=100, ode_inter=0.1, fast=True, split=True))
     end = time()
     print(end - start)
     np.save('./data/exp_t', t2)
@@ -154,16 +154,17 @@ def main2():
                     svd_rank=8)
     start = time()
     t2, a2 = zip(*
-        solver.autocorr(steps=300, ode_inter=0.1, fast=True, split=False))
+        solver.autocorr(steps=100, ode_inter=0.1, fast=True, split=True))
     end = time()
     print(end - start)
     np.save('./data/exp2_t', t2)
     np.save('./data/exp2_a', a2)
+
 
 logging.basicConfig(
     format='(In %(module)s)[%(funcName)s] %(message)s',
     stream=sys.stderr, level=logging.INFO
 )
 main()
-# main2()
-ref()
+main2()
+# ref()

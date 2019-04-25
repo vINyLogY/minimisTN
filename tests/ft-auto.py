@@ -20,48 +20,43 @@ from ft_sho_model import test_2layers
 @time_this
 def main():
     exp = test_2layers()
-    exp.settings(cmf_steps=10,
-                 ode_method='RK45',
+    exp.settings(ode_method='RK23',
                  ps_method='s')
-    t1, a1 = zip(*exp.autocorr(steps=100, ode_inter=0.1,
-                               fast=False, split=True,
-                               imaginary=True))
-    np.save('ml_t', t1)
-    np.save('ml_a', a1)
-    exp = test_2layers()
-    exp.settings(cmf_steps=10,
-                 ode_method='RK45')
-    t1, a1 = zip(*exp.autocorr(steps=100, ode_inter=0.1,
-                               fast=False, split=False,
-                               imaginary=True))
-    for t in exp.root.visitor():
-        print(t, np.linalg.matrix_rank(t.array))
-    np.save('ml2_t', t1)
-    np.save('ml2_a', a1)
+    p1 = exp.propagator(ode_inter=0.1, imaginary=True)
+    exp2 = test_2layers()
+    exp2.settings(cmf_steps=10,
+                  ode_method='RK23')
+    p2 = exp2.propagator(ode_inter=0.1, imaginary=True)
+    for (t1, r1), (t2, r2), (t, v) in zip(p1, p2, ref()):
+        v1, v2 = (r1.global_norm()) ** 2, (r2.global_norm()) ** 2
+        msg = "beta:{} v1:{} v2:{} v:{}".format(t, v1, v2, v)
+        print(msg)
     return
 
 
-def ref(c=0.5, n_dvr=40, dofs=2):
-    logging.info('Reference')
+def ref(ode_inter=0.1, c=0.5, n_dvr=40, dofs=2):
     po = np.identity(dofs)
     po += c * np.eye(dofs, k=1)
-    po += c * np.eye(dofs, k=-1)
+    po += c * np.eye(dofs, k=(-1))
     w = np.sqrt(linalg.eigh(po, eigvals_only=True))
     for n in range(100):
-        beta = n * 0.2
-        ex = beta * w
+        beta = 2 * n * ode_inter
         exp = np.exp
 
-        def _z(x): return (
-            (1. - exp(-n_dvr * x)) / (exp(0.5 * x) - exp(-0.5 * x))
-        )
-        z = np.prod(list(map(_z, ex)))
-        logging.info('beta: {:.3f}; Z: {}'.format(beta, z))
-    return
+        def _z(w):
+            ans = 0.0
+            for i in range(n_dvr):
+                ans += exp(-beta * (i + 0.5) * w)
+            return ans
+
+        z_i = list(map(_z, w))
+        z = np.prod(z_i)
+        logging.info('beta: {:.3f}; Z: {:.8f}'.format(beta, z))
+        yield (beta / 2, z / (n_dvr ** dofs))
 
 
 logging.basicConfig(
-    format='%(levelname)s: (In %(funcName)s, %(module)s)  %(message)s', level=logging.DEBUG+1
+    format='%(levelname)s: (In %(funcName)s, %(module)s)  %(message)s',
+    level=logging.DEBUG+1
 )
-ref()
 main()

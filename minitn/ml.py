@@ -153,7 +153,7 @@ class MultiLayer(object):
         for _ in self.term_visitor():
             ans += self.root.expection()
         if normalized:
-            ans /= self.root.global_norm()
+            ans /= self.root.global_norm() ** 2
         return ans
 
     def _single_eom(self, tensor, n, cache=False):
@@ -382,7 +382,7 @@ class MultiLayer(object):
 
         def updater(y):
             tensor.set_array(np.reshape(y, tensor.shape))
-            tensor.normalize()
+            tensor.normalize(forced=(not imaginary))
 
         if tensor.axis is None:
             self.root = tensor

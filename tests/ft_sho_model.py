@@ -55,12 +55,8 @@ def test_2layers(lower= -5., upper=5., n_dvr=40, n_spf=5, dofs=2, c=0.5):
     da = DavidsonAlgorithm(matvec, init_vecs=[array_i], n_vals=n_spf)
     array_i = np.array(da.kernel(search_mode=True))
     a_i = []
-    for n, i in enumerate(triangular(n_spf)):
-        if n >= n_spf:
-            break
-        ii = i // n_spf
-        jj = i % n_spf
-        a_i.append(np.tensordot(array_i[ii], array_i[jj], axes=0))
+    for n in range(n_spf):
+        a_i.append(np.diag(array_i[n]))
     for i in range(dofs):
         basis[i].set_array(a_i)
     # Root state
@@ -92,3 +88,9 @@ def test_2layers(lower= -5., upper=5., n_dvr=40, n_spf=5, dofs=2, c=0.5):
     # ML-MCTDH
     solver = MultiLayer(root, h_list)
     return solver
+
+
+if __name__ == '__main__':
+    solver = test_2layers()
+    for linkage in solver.root.linkage_visitor():
+        print(linkage)

@@ -338,7 +338,7 @@ class Tensor(object):
                     for i_, tensor, j in self.children(axis=i)
                 ]    # Recursively
                 # Make use of the normalization condition
-                if (self.is_normalized and not use_aux and i == self.axis and
+                if (not use_aux and i == self.axis and
                     all(matrix is None for _, matrix in env_)):
                     ans = None
                 else:
@@ -418,7 +418,7 @@ class Tensor(object):
             .array.
         shape_dict: dict
             Where to save the shape of each tensor.
-        
+
         Return
         ------
         vec : (n,) ndarray
@@ -459,7 +459,8 @@ class Tensor(object):
             start = end
         return
 
-    def split_unite(self, i, operator=None, rank=None, err=None):
+    def split_unite(self, i, operator=None, rank=None, err=None,
+                    normalized=None):
         """
         Parameters
         ----------
@@ -472,13 +473,17 @@ class Tensor(object):
         path : [Tensor]
         """
         end, j = self._access[i]
-        mid, _ = self.split(i, rank=rank, err=err, child=self)
+        if normalized is None:
+            normalized = self.is_normalized and end.is_normalized
+        mid, _ = self.split(i, rank=rank, err=err, child=self,
+                            normalized=normalized)
         if operator is not None:
             mid = operator(mid)
-        end.unite(j, root=end)
+        end.unite(j, root=end, normalized=normalized)
         return self, mid, end
 
-    def unite_split(self, i, operator=None, rank=None, err=None):
+    def unite_split(self, i, operator=None, rank=None, err=None,
+                    normalized=None):
         """
         Parameters
         ----------
@@ -493,19 +498,21 @@ class Tensor(object):
         if __debug__:
             linkage_old = list(self.linkage_visitor(axis=None))
         end, j = self._access[i]
+        if normalized is None:
+            normalized = self.is_normalized and end.is_normalized
         axes = [i + k for k in range(end.order - 1)]
-        mid = self.unite(i)
+        mid = self.unite(i, normalized=normalized)
         if operator is not None:
             mid = operator(mid)
         mid.split(axes, indice=(j, i), root=end, child=self,
-                  rank=rank, err=err)
+                  rank=rank, err=err, normalized=normalized)
         if __debug__:
             linkage_new = list(self.linkage_visitor(axis=None))
             assert linkage_old == linkage_new
         return self, mid, end
 
     def split(self, axis, indice=None, root=None, child=None,
-              rank=None, err=None):
+              rank=None, err=None, normalized=False):
         """Split the root Tensor to a certain axis/certain axes.
 
         Parameters
@@ -571,13 +578,13 @@ class Tensor(object):
         cls = type(self)
         if root is None:
             root = cls(name=name1, array=root_array, axis=None,
-                       normalized=True)
+                       normalized=normalized)
         else:
             root.axis = None
             root.set_array(root_array)
         if child is None:
             child = cls(name=name2, array=child_array, axis=index2,
-                        normalized=True)
+                        normalized=normalized)
         else:
             child.axis = index2
             child.set_array(child_array)
@@ -598,7 +605,7 @@ class Tensor(object):
             link(*linkage)
         return root, child
 
-    def unite(self, axis, root=None):
+    def unite(self, axis, root=None, normalized=False):
         """Unite a Tensor `t` on a certain axis with self.
 
         Parameters
@@ -632,7 +639,7 @@ class Tensor(object):
             name = t1.name + '+' + t2.name
         if root is None:
             root = cls(name=name, array=array, axis=None,
-                       normalized=True)
+                       normalized=normalized)
         else:
             root.axis = None
             root.set_array(array)

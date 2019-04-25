@@ -21,12 +21,12 @@ def plot():
     a1 = np.load(root + str1 + '_a.npy')
     t2 = np.load(root + str2 + '_t.npy')
     a2 = np.load(root + str2 + '_a.npy')
-#    t3 = np.load(root + str1 + '2_t.npy')
-#    a3 = np.load(root + str1 + '2_a.npy')
+    t3 = np.load(root + str1 + '2_t.npy')
+    a3 = np.load(root + str1 + '2_a.npy')
     with figure():
         plt.plot(t2, np.abs(a2), '-', label='MCTDH')
-        plt.plot(t1, np.abs(a1), '--', label='ML-MCTDH-PS')
-#        plt.plot(t3, np.abs(a3), '--', label='ML-MCTDH')
+        plt.plot(t1, np.abs(a1), '--', label='ML-MCTDH-PS-U')
+        plt.plot(t3, np.abs(a3), '--', label='ML-MCTDH-PS-S')
         plt.legend(loc='best')
         plt.show()
 
