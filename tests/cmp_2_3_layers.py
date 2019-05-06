@@ -34,6 +34,7 @@ def ref():
     return
 
 
+# split method 1: split-unite
 @time_this
 def main():
     graph = {
@@ -97,6 +98,8 @@ def main():
     np.save('./data/exp_t', t2)
     np.save('./data/exp_a', a2)
 
+
+# split method 2: unite-split
 @time_this
 def main2():
     graph = {
@@ -163,8 +166,8 @@ def main2():
 
 logging.basicConfig(
     format='(In %(module)s)[%(funcName)s] %(message)s',
-    stream=sys.stderr, level=logging.INFO
+    stream=sys.stderr, level=logging.DEBUG
 )
-main()
-main2()
-# ref()
+# main()
+# main2()
+ref()

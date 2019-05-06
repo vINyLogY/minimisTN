@@ -92,17 +92,22 @@ class MultiLayer(object):
             setattr(cls, name, value)
         return
 
-    def __init__(self, root, h_list):
+    def __init__(self, root, h_list, f_list=None):
         """
         Parameters
         ----------
         root : Tensor
         h_list : [[(Leaf, array)]]
             h_list is a list of `term`, where `term` is a list of tuple like
-            `(Leaf, array)`.
+            `(Leaf, array)`.  This is time independent part of Hamiltonian.
+        f_list : [[(Leaf, float  ->  array)]]
+            h_list is a list of `term`, where `term` is a list of tuple like
+            `(Leaf, array)`.  This is time dependent part of Hamiltonian.
         """
         self.root = root
         self.h_list = h_list
+        self.f_list = f_list
+        self.time = 0.0
         # Type check and initialize leaf._array with None
         for term in h_list:
             for leaf, array in term:
@@ -123,7 +128,11 @@ class MultiLayer(object):
         visitor = self.root.visitor
         for tensor in visitor(axis=None):
             tensor.reset()
-        for n, term in enumerate(self.h_list):
+        all_terms = self.h_list
+        if self.f_list is not None:
+            time = self.time
+            all_terms.extend(f(time) for f in self.f_list)
+        for n, term in enumerate(all_terms):
             for tensor in visitor(axis=None, leaf=False):
                 tensor.reset()
                 if use_cache:
@@ -351,7 +360,9 @@ class MultiLayer(object):
 
     def _solve_ode(self, diff, y0, ode_inter, reformer, updater):
         OdeSolver = getattr(integrate, self.ode_method)
-        ode_solver = OdeSolver(diff, 0, y0, ode_inter, vectorized=False)
+        t0 = self.time
+        t1 = t0 + ode_inter
+        ode_solver = OdeSolver(diff, t0, y0, t1, vectorized=False)
         cmf_steps = self.cmf_steps
         for n in count(1):
             if ode_solver.status != 'running':
@@ -372,6 +383,7 @@ class MultiLayer(object):
             origin = tensor.array
             tensor.set_array(np.reshape(y, tensor.shape))
             ans = np.zeros_like(y)
+            self.time = t
             for n in self.term_visitor(use_cache=False):
                 ans += np.reshape(self._single_eom(tensor, n, cache=cache), -1)
             ans /= self.coefficient(imaginary=imaginary)
@@ -524,13 +536,15 @@ class MultiLayer(object):
         for n in count():
             if steps is not None and n > steps:
                 break
+            time = n * ode_inter
             logging.info(__(
                 "Propagating at t: {:.3f}, E: {:.8f}, |v|^2: {:.8f}",
-                n * ode_inter,
+                time,
                 expection(normalized=True),
                 root.global_square()
             ))
-            yield (n * ode_inter, root)
+            self.time = time
+            yield (time, root)
             try:
                 step(ode_inter=ode_inter, imaginary=imaginary)
             except RuntimeWarning:
