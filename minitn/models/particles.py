@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
 r"""E-ph model and useful objects (operators, etc)
-
 """
 from __future__ import absolute_import, division
 
@@ -16,8 +15,14 @@ from minitn.lib.tools import __
 
 
 class Phonon(object):
-    def __init__(self, dim):
+    """Relevent operators for SHO with the basis diagonalizing the
+    hamiltionian.
+    """
+    def __init__(self, dim, omega, mass=1, hbar=1):
         self.dim = dim
+        self.omega = omega
+        self.mass = mass
+        self.hbar = hbar
         return
 
     def check_vec(self, vec):
@@ -41,52 +46,48 @@ class Phonon(object):
         ans[:-1] = vec[1:]
         return ans
 
-    @property
-    def creation_operator(self):
+    def operator(self, matvec, rmatvec=None):
+        if rmatvec is None:
+            rmatvec = matvec
         dim = self.dim
-        op = LinearOperator((dim, dim), matvec=self.raising,
-                             rmatvec=self.lowering)
+        op = LinearOperator((dim, dim), matvec=rmatvec, rmatvec=rmatvec)
         return op
 
     @property
+    def creation_operator(self):
+        return self.operator(matvec=self.raising, rmatvec=self.lowering)
+
+    @property
     def annihilation_operator(self):
-        dim = self.dim
-        op = LinearOperator((dim, dim), matvec=self.lowering,
-                             rmatvec=self.raising)
-        return op
+        return self.operator(matvec=self.lowering, rmatvec=self.raising)
 
     @property
     def coordinate_operator(self):
         def matvec(x):
-            return (self.raising(x) + self.lowering(x)) / np.sqrt(2)
+            coeff = np.sqrt(self.hbar / self.mass / self.omega / 2.)
+            return coeff * (self.raising(x) + self.lowering(x))
 
-        dim = self.dim
-        op = LinearOperator((dim, dim), matvec=matvec, rmatvec=matvec)
-        return op
+        return self.operator(matvec=matvec)
 
     @property
     def momentum_operator(self):
         def matvec(x):
-            return -1.j * (self.raising(x) + self.lowering(x)) / np.sqrt(2)
+            coeff = 1.0j * np.sqrt(self.hbar * self.mass * self.omega / 2.)
+            return coeff * (self.raising(x) - self.lowering(x))
 
-        dim = self.dim
-        op = LinearOperator((dim, dim), matvec=matvec, rmatvec=matvec)
-        return op
+        return self.operator(matvec=matvec)
 
     @property
     def number_operator(self):
         def matvec(x):
             return self.raising(self.lowering(x))
 
-        dim = self.dim
-        op = LinearOperator((dim, dim), matvec=matvec, rmatvec=matvec)
-        return op
+        return self.operator(matvec=matvec)
 
     @property
     def hamiltonian(self):
         def matvec(x):
-            return self.raising(self.lowering(x)) + 0.5 * x
+            coeff = self.hbar * self.omega
+            return coeff * (self.raising(self.lowering(x)) + 0.5 * x)
 
-        dim = self.dim
-        op = LinearOperator((dim, dim), matvec=matvec, rmatvec=matvec)
-        return op
+        return self.operator(matvec=matvec)

@@ -62,7 +62,16 @@ def time_this(func):
 
     return _time_this
 
+
 empty = object()
+
+
+class Parameters(object):
+    def __init__(self, **kwargs):
+        for name, value in kwargs.items():
+            setattr(self, name, value)
+        return
+
 
 def iter_visitor(start, r, method='DFS'):
     """Iterative visitor.
@@ -97,6 +106,5 @@ def figure(*args, **kwargs):
     fig = plt.figure(*args, **kwargs)
     # for Palatino and other serif fonts use:
     # rc('font',**{'family':'serif','serif':['Palatino']})
-
     yield fig
     plt.close(fig)

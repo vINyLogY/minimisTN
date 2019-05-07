@@ -78,7 +78,8 @@ class Tensor(object):
 
         Parameters
         ----------
-        graph : {string: [string]}
+        graph : {str: [str]}
+        root : str
         """
         name = root
         root = Tensor(name=name, axis=None)
