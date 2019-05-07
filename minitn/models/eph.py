@@ -30,7 +30,7 @@ class Phonon(object):
     def raising(self, vec):
         self.check_vec(vec)
         ans = np.zeros_like(vec)
-        ans[1:] = vec[:-1] * self.sqrt_sequence(dim)
+        ans[1:] = vec[:-1]
         ans *= np.array([np.sqrt(i) for i in range(self.dim)])
         return ans
 
@@ -44,16 +44,34 @@ class Phonon(object):
     @property
     def creation_operator(self):
         dim = self.dim
-        ans = LinearOperator((dim, dim), matvec=self.raising,
+        op = LinearOperator((dim, dim), matvec=self.raising,
                              rmatvec=self.lowering)
-        return ans
+        return op
 
     @property
     def annihilation_operator(self):
         dim = self.dim
-        ans = LinearOperator((dim, dim), matvec=self.lowering,
+        op = LinearOperator((dim, dim), matvec=self.lowering,
                              rmatvec=self.raising)
-        return ans
+        return op
+
+    @property
+    def coordinate_operator(self):
+        def matvec(x):
+            return (self.raising(x) + self.lowering(x)) / np.sqrt(2)
+
+        dim = self.dim
+        op = LinearOperator((dim, dim), matvec=matvec, rmatvec=matvec)
+        return op
+
+    @property
+    def momentum_operator(self):
+        def matvec(x):
+            return -1.j * (self.raising(x) + self.lowering(x)) / np.sqrt(2)
+
+        dim = self.dim
+        op = LinearOperator((dim, dim), matvec=matvec, rmatvec=matvec)
+        return op
 
     @property
     def number_operator(self):
@@ -61,14 +79,14 @@ class Phonon(object):
             return self.raising(self.lowering(x))
 
         dim = self.dim
-        ans = LinearOperator((dim, dim), matvec=matvec, rmatvec=matvec)
-        return ans
+        op = LinearOperator((dim, dim), matvec=matvec, rmatvec=matvec)
+        return op
 
     @property
-    def hami(self):
+    def hamiltonian(self):
         def matvec(x):
-            return self.raising(self.lowering(x))
+            return self.raising(self.lowering(x)) + 0.5 * x
 
         dim = self.dim
-        ans = LinearOperator((dim, dim), matvec=matvec, rmatvec=matvec)
-        return ans
+        op = LinearOperator((dim, dim), matvec=matvec, rmatvec=matvec)
+        return op
