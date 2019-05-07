@@ -16,6 +16,7 @@ from __future__ import absolute_import, division, print_function
 
 import logging
 from builtins import filter, map, range, zip
+from itertools import filterfalse
 
 import numpy as np
 from scipy.integrate import quad
@@ -51,10 +52,17 @@ class SpinBosonModel(object):
         self.leaves = []
         h_list = self.electron_hamiltonian()
         h_list.extend(self.inner_hamiltonian() + self.outer_hamiltonian())
-        self.h_list = h_list
+        self.h_list = self.collect_electric_terms(h_list)
         return
     
-    # TODO: 整理同类项
+    def collect_electric_terms(self, h_list):
+        def condition(term): return len(term) == 1 and term[0][0] == elec_leaf
+        elec_list = filter(condition, h_list)
+        elec_leaf = self.elec_leaf
+        elec_array = sum([term[0][1] for term in elec_list])
+        left_list = list(filterfalse(condition, h_list))
+        ans = [[(elec_leaf, elec_array)]] + left_list
+        return ans
 
     def electron_hamiltonian(self, name='ELEC'):
         """
@@ -85,11 +93,12 @@ class SpinBosonModel(object):
         for n, (dim, omega, c) in enumerate(zipped):
             ph = Phonon(dim, omega)
             leaf = prefix + str(n)
+            self.leaves.append(leaf)
             # ph part
             h_list.append([(leaf, ph.hamiltonian)])
             # e-ph part
-            h_list.append([(leaf, ph.coordinate_operator),
-                           (elec_leaf, -2. * c * projector)])
+            h_list.append([(leaf, -omega * ph.coordinate_operator),
+                           (elec_leaf, 2. * (c / omega) * projector)])
             # e part
             h_list.append([(elec_leaf, 2. * (c / omega) ** 2 * projector)])
         return h_list
@@ -135,3 +144,6 @@ if __name__ == '__main__':
         lambda_d=Quantity(1250, 'cm-1').value_in_au,
         omega_d=Quantity(50, 'cm-1').value_in_au,
     )
+    vec = np.arange(10, dtype='float64')
+    a = sbm.h_list[1][0][1].dot(vec)
+    assert len(sbm.h_list) == 2 * len(sbm.leaves) - 1

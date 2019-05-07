@@ -18,11 +18,12 @@ class Phonon(object):
     """Relevent operators for SHO with the basis diagonalizing the
     hamiltionian.
     """
-    def __init__(self, dim, omega, mass=1, hbar=1):
+    def __init__(self, dim, omega, mass=1, hbar=1, dense=True):
         self.dim = dim
         self.omega = omega
         self.mass = mass
         self.hbar = hbar
+        self.dense = dense
         return
 
     def check_vec(self, vec):
@@ -41,9 +42,9 @@ class Phonon(object):
 
     def lowering(self, vec):
         self.check_vec(vec)
-        vec *= np.array([np.sqrt(i) for i in range(self.dim)])
         ans = np.zeros_like(vec)
-        ans[:-1] = vec[1:]
+        tmp = np.array([np.sqrt(i) for i in range(self.dim)]) * vec
+        ans[:-1] = tmp[1:]
         return ans
 
     def operator(self, matvec, rmatvec=None):
@@ -55,39 +56,56 @@ class Phonon(object):
 
     @property
     def creation_operator(self):
-        return self.operator(matvec=self.raising, rmatvec=self.lowering)
+        if self.dense:
+            ans = np.diag(np.sqrt(np.arange(1, self.dim)), -1)
+        else:
+            ans = self.operator(matvec=self.raising, rmatvec=self.lowering)
+        return ans
 
     @property
     def annihilation_operator(self):
-        return self.operator(matvec=self.lowering, rmatvec=self.raising)
+        if self.dense:
+            ans = np.diag(np.sqrt(np.arange(1, self.dim)), 1)
+        else:
+            ans = self.operator(matvec=self.lowering, rmatvec=self.raising)
+        return ans
 
     @property
     def coordinate_operator(self):
-        def matvec(x):
-            coeff = np.sqrt(self.hbar / self.mass / self.omega / 2.)
-            return coeff * (self.raising(x) + self.lowering(x))
-
-        return self.operator(matvec=matvec)
+        coeff = np.sqrt(self.hbar / self.mass / self.omega / 2.)
+        if self.dense:
+            ans = coeff * (self.creation_operator + self.annihilation_operator)
+        else:
+            def matvec(x): return coeff * (self.raising(x) + self.lowering(x))
+            ans = self.operator(matvec=matvec)
+        return ans
 
     @property
     def momentum_operator(self):
-        def matvec(x):
-            coeff = 1.0j * np.sqrt(self.hbar * self.mass * self.omega / 2.)
-            return coeff * (self.raising(x) - self.lowering(x))
-
-        return self.operator(matvec=matvec)
+        coeff = 1.0j * np.sqrt(self.hbar * self.mass * self.omega / 2.)
+        if self.dense:
+            ans = coeff * (self.creation_operator - self.annihilation_operator)
+        else:
+            def matvec(x): return coeff * (self.raising(x) - self.lowering(x))
+            ans = self.operator(matvec=matvec)
+        return ans
 
     @property
     def number_operator(self):
-        def matvec(x):
-            return self.raising(self.lowering(x))
-
-        return self.operator(matvec=matvec)
+        if self.dense:
+            ans = np.diag(np.arange(self.dim))
+        else:
+            def matvec(x): return self.raising(self.lowering(x))
+            ans = self.operator(matvec=matvec)
+        return ans
 
     @property
     def hamiltonian(self):
-        def matvec(x):
-            coeff = self.hbar * self.omega
-            return coeff * (self.raising(self.lowering(x)) + 0.5 * x)
-
-        return self.operator(matvec=matvec)
+        coeff = self.hbar * self.omega
+        if self.dense:
+            ans = np.diag(coeff * (0.5 + np.arange(self.dim)))
+        else:
+            def matvec(x):
+                return coeff * (self.raising(self.lowering(x)) + 0.5 * x)
+            ans = self.operator(matvec=matvec)
+        return ans
