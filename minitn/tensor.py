@@ -851,7 +851,11 @@ class Leaf(Tensor):
         ans = self._array
         return ans if ans is None else np.array(ans, dtype='complex128')
 
-    order = 1    # Treat as an end point in a tensor tree
+    order = 1  # Treat as an end point in a tensor tree
+
+    @classmethod
+    def generate_leaves(cls, leaves):
+        return [cls(name=leaf) for leaf in leaves]
 
     def reset(self):
         self._array = None

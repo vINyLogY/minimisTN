@@ -92,7 +92,7 @@ class MultiLayer(object):
             setattr(cls, name, value)
         return
 
-    def __init__(self, root, h_list, f_list=None):
+    def __init__(self, root, h_list, f_list=None, use_str_name=False):
         """
         Parameters
         ----------
@@ -103,19 +103,40 @@ class MultiLayer(object):
         f_list : [[(Leaf, float  ->  array)]]
             h_list is a list of `term`, where `term` is a list of tuple like
             `(Leaf, array)`.  This is time dependent part of Hamiltonian.
+        use_str_name : bool
+            whether to use str to replace Leaf above. Default is False.
         """
         self.root = root
         self.h_list = h_list
         self.f_list = f_list
         self.time = 0.0
+
         # Type check and initialize leaf._array with None
+        if use_str_name:
+            leaves_dict = {leaf.name: leaf for leaf in root.leaves()}
         for term in h_list:
-            for leaf, array in term:
-                if not isinstance(leaf, Leaf):
-                    raise TypeError('0-th ary in tuple must be of type Leaf!')
-                if np.array(array).ndim != 2:
+            for pair in term:
+                if not isinstance(pair[0], Leaf):
+                    if not use_str_name:
+                        raise TypeError('0-th ary in tuple must be of type'
+                                        ' Leaf!')
+                    else:
+                        pair[0] = leaves_dict[str(pair[0])]
+                if np.array(pair[1]).ndim != 2:
                     raise TypeError('1-th ary in tuple must be 2-D ndarray!')
-                leaf.reset()
+                pair[0].reset()
+        if f_list is not None:
+            for term in h_list:
+                for pair in term:
+                    if not isinstance(pair[0], Leaf):
+                        if not use_str_name:
+                            raise TypeError('0-th ary in tuple must be of type'
+                                            ' Leaf!')
+                        else:
+                            pair[0] = leaves_dict[str(pair[0])]
+                    if not callable(pair[1]):
+                        raise TypeError('1-th ary in tuple must be callable!')
+                    pair[0].reset()
 
         # Some cached data
         self.inv_density = {}    # {Tensor: ndarray}

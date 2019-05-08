@@ -32,6 +32,7 @@ class SpinBosonModel(object):
     ELEC = ['e1', 'e2', 'v']
     INNER = ['omega_list', 'lambda_list', 'dim_list']
     OUTER = ['stop', 'n', 'dim', 'lambda_g', 'omega_g', 'lambda_d', 'omega_d']
+    FIELD = ['mu', 'tau', 't_d', 'omega']
 
     def __init__(self, **kwargs):
         """ Needed parameters:
@@ -42,27 +43,44 @@ class SpinBosonModel(object):
         - (for outer part)
             'stop', 'n', 'dim', 'lambda_g', 'omega_g', 'lambda_d', 'omega_d'
         """
-        valid_attributes = self.ELEC + self.INNER + self.OUTER
+        valid_attributes = self.ELEC + self.INNER + self.OUTER + self.FIELD
         for name, value in kwargs.items():
             if name in valid_attributes:
                 setattr(self, name, value)
             else:
                 logging.warning(__('Parameter {} unexpected, ignored.', name))
         self.elec_leaf = None
+        self.inner_prefix = None
+        self.outer_prefix = None
         self.leaves = []
         h_list = self.electron_hamiltonian()
         h_list.extend(self.inner_hamiltonian() + self.outer_hamiltonian())
         self.h_list = self.collect_electric_terms(h_list)
+        try:
+            self.f_list = self.td_electron_hamiltionian()
+        except AttributeError:
+            self.f_list = None
         return
-    
+
     def collect_electric_terms(self, h_list):
         def condition(term): return len(term) == 1 and term[0][0] == elec_leaf
         elec_list = filter(condition, h_list)
         elec_leaf = self.elec_leaf
         elec_array = sum([term[0][1] for term in elec_list])
         left_list = list(filterfalse(condition, h_list))
-        ans = [[(elec_leaf, elec_array)]] + left_list
+        ans = [[[elec_leaf, elec_array]]] + left_list
         return ans
+
+    def td_electron_hamiltionian(self):
+        def field(t):
+            mu, tau, t_d, omega = [getattr(self, name) for name in self.FIELD]
+            h = [[0., mu],
+                 [mu, 0.]]
+            delta = t - t_d
+            coeff = (np.exp(-4. * np.log(2. * delta ** 2 / tau ** 2)) *
+                     np.cos(omega * delta))
+            return coeff * np.array(h)
+        return [[[self.elec_leaf, field]]]
 
     def electron_hamiltonian(self, name='ELEC'):
         """
@@ -76,7 +94,7 @@ class SpinBosonModel(object):
              [v, e2]]
         self.elec_leaf = leaf
         self.leaves.append(leaf)
-        return [[(leaf, np.array(h))]]
+        return [[[leaf, np.array(h)]]]
 
     def vibration_hamiltonian(self, omega_list, coupling_list, dim_list,
                               prefix='V'):
@@ -95,12 +113,12 @@ class SpinBosonModel(object):
             leaf = prefix + str(n)
             self.leaves.append(leaf)
             # ph part
-            h_list.append([(leaf, ph.hamiltonian)])
+            h_list.append([[leaf, ph.hamiltonian]])
             # e-ph part
-            h_list.append([(leaf, -omega * ph.coordinate_operator),
-                           (elec_leaf, 2. * (c / omega) * projector)])
+            h_list.append([[leaf, -omega * ph.coordinate_operator],
+                           [elec_leaf, 2. * (c / omega) * projector]])
             # e part
-            h_list.append([(elec_leaf, 2. * (c / omega) ** 2 * projector)])
+            h_list.append([[elec_leaf, 2. * (c / omega) ** 2 * projector]])
         return h_list
 
     def inner_hamiltonian(self, prefix='I'):
@@ -108,6 +126,7 @@ class SpinBosonModel(object):
                                              for name in self.INNER]
         coupling_list = list(np.sqrt(np.array(lambda_list) / 2) *
                              np.array(omega_list))
+        self.inner_prefix = prefix
         return self.vibration_hamiltonian(omega_list, coupling_list, dim_list,
                                           prefix=prefix)
 
@@ -120,12 +139,47 @@ class SpinBosonModel(object):
         zipped = bath.linear_discretization(density, stop, n)
         omega_list, coupling_list = zip(*zipped)
         dim_list = n * [dim]
+        self.outer_prefix = prefix
         return self.vibration_hamiltonian(omega_list, coupling_list, dim_list,
                                           prefix=prefix)
+
+    @property
+    def inner_leaves(self):
+        return [leaf for leaf in self.leaves
+                if leaf.startswith(self.inner_prefix)]
+
+    @property
+    def outer_leaves(self):
+        return [leaf for leaf in self.leaves
+                if leaf.startswith(self.outer_prefix)]
+
+
+def huffman_tree(sources, importances=None, prefix='', n_branch=2):
+    def string(x): return x[0]
+    def key(x): return x[1]
+    if importances is None:
+        importances = [1] * len(sources)
+    sequence = list(zip(sources, importances))
+    graph = {}
+    counter = 0
+    while len(sequence) >= n_branch:
+        sequence.sort(key=key)
+        branch, sequence = sequence[:n_branch], sequence[n_branch:]
+        p = sum(map(key, branch))
+        new = prefix + '{:02d}'.format(counter)
+        graph[new] = list(map(string, branch))
+        sequence.insert(0, (new, p))
+        counter += 1
+    if n_branch > 2:
+        graph[prefix + '{:02d}'.format(counter)] = list(map(string, sequence))
+        counter += 1
+    return graph, (prefix + '{:02d}'.format(counter - 1))
 
 
 if __name__ == '__main__':
     from minitn.lib.units import Quantity
+    from minitn.tensor import Leaf, Tensor
+    from minitn.ml import MultiLayer
     sbm = SpinBosonModel(
         e1=0.,
         e2=Quantity(6500, 'cm-1').value_in_au,
@@ -136,14 +190,29 @@ if __name__ == '__main__':
                     Quantity(150, 'cm-1').value_in_au],
         lambda_list=([Quantity(750, 'cm-1').value_in_au] * 4),
         dim_list=[10, 14, 20, 30],
-        stop=Quantity(6500, 'cm-1').value_in_au,
-        n=30,
+        stop=Quantity(3 * 2250, 'cm-1').value_in_au,
+        n=32,
         dim=30,
         lambda_g=Quantity(2250, 'cm-1').value_in_au,
         omega_g=Quantity(500, 'cm-1').value_in_au,
         lambda_d=Quantity(1250, 'cm-1').value_in_au,
         omega_d=Quantity(50, 'cm-1').value_in_au,
+        mu=Quantity(250, 'cm-1').value_in_au,
+        tau=Quantity(30, 'fs').value_in_au,
+        t_d=Quantity(60, 'fs').value_in_au,
+        omega=Quantity(13000, 'cm-1').value_in_au,
     )
-    vec = np.arange(10, dtype='float64')
-    a = sbm.h_list[1][0][1].dot(vec)
+    graph = {
+        'ROOT': [sbm.elec_leaf, 'INNER', 'OUTER'],
+        'INNER': ['L2-I0', 'L2-I1'],
+        'L2-I0': sbm.inner_leaves[:2],
+        'L2-I1': sbm.inner_leaves[2:],
+    }
+    outer_part, root = huffman_tree(sbm.outer_leaves, prefix='AUTO')
+    outer_part['OUTER'] = outer_part.pop(root)
+    graph.update(outer_part)
+    root_node = Tensor.generate(graph, 'ROOT')
+    solver = MultiLayer(root_node, sbm.h_list, use_str_name=True)
+    assert set(l.name for l in root_node.leaves()) == set(sbm.leaves)
+    assert len(sbm.h_list) == len(solver.h_list)
     assert len(sbm.h_list) == 2 * len(sbm.leaves) - 1
