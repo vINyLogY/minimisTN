@@ -16,7 +16,7 @@ from __future__ import absolute_import, division, print_function
 
 import logging
 from builtins import filter, map, range, zip
-from itertools import filterfalse
+from itertools import filterfalse, count
 
 import numpy as np
 from scipy.integrate import quad
@@ -53,13 +53,10 @@ class SpinBosonModel(object):
         self.inner_prefix = None
         self.outer_prefix = None
         self.leaves = []
+        self.dimensions = {}
         h_list = self.electron_hamiltonian()
         h_list.extend(self.inner_hamiltonian() + self.outer_hamiltonian())
-        self.h_list = self.collect_electric_terms(h_list)
-        try:
-            self.f_list = self.td_electron_hamiltionian()
-        except AttributeError:
-            self.f_list = None
+        self.h_list, self.f_list = self.collect_electric_terms(h_list)
         return
 
     def collect_electric_terms(self, h_list):
@@ -68,10 +65,16 @@ class SpinBosonModel(object):
         elec_leaf = self.elec_leaf
         elec_array = sum([term[0][1] for term in elec_list])
         left_list = list(filterfalse(condition, h_list))
-        ans = [[[elec_leaf, elec_array]]] + left_list
-        return ans
+        try:
+            field = self.td_electron_hamiltionian(elec_array)
+            h_list = left_list
+            f_list = [[[elec_leaf, field]]]
+        except AttributeError:
+            h_list = [[[elec_leaf, elec_array]]] + left_list
+            f_list = None
+        return h_list, f_list
 
-    def td_electron_hamiltionian(self):
+    def td_electron_hamiltionian(self, ti_array):
         def field(t):
             mu, tau, t_d, omega = [getattr(self, name) for name in self.FIELD]
             h = [[0., mu],
@@ -79,8 +82,8 @@ class SpinBosonModel(object):
             delta = t - t_d
             coeff = (np.exp(-4. * np.log(2. * delta ** 2 / tau ** 2)) *
                      np.cos(omega * delta))
-            return coeff * np.array(h)
-        return [[[self.elec_leaf, field]]]
+            return coeff * np.array(h) + ti_array
+        return field
 
     def electron_hamiltonian(self, name='ELEC'):
         """
@@ -94,6 +97,7 @@ class SpinBosonModel(object):
              [v, e2]]
         self.elec_leaf = leaf
         self.leaves.append(leaf)
+        self.dimensions[leaf] = 2
         return [[[leaf, np.array(h)]]]
 
     def vibration_hamiltonian(self, omega_list, coupling_list, dim_list,
@@ -112,6 +116,7 @@ class SpinBosonModel(object):
             ph = Phonon(dim, omega)
             leaf = prefix + str(n)
             self.leaves.append(leaf)
+            self.dimensions[leaf] = dim
             # ph part
             h_list.append([[leaf, ph.hamiltonian]])
             # e-ph part
@@ -180,6 +185,10 @@ if __name__ == '__main__':
     from minitn.lib.units import Quantity
     from minitn.tensor import Leaf, Tensor
     from minitn.ml import MultiLayer
+    logging.basicConfig(
+        format='(In %(module)s)[%(funcName)s] %(message)s',
+        level=logging.INFO
+    )
     sbm = SpinBosonModel(
         e1=0.,
         e2=Quantity(6500, 'cm-1').value_in_au,
@@ -191,7 +200,7 @@ if __name__ == '__main__':
         lambda_list=([Quantity(750, 'cm-1').value_in_au] * 4),
         dim_list=[10, 14, 20, 30],
         stop=Quantity(3 * 2250, 'cm-1').value_in_au,
-        n=32,
+        n=16,
         dim=30,
         lambda_g=Quantity(2250, 'cm-1').value_in_au,
         omega_g=Quantity(500, 'cm-1').value_in_au,
@@ -212,7 +221,34 @@ if __name__ == '__main__':
     outer_part['OUTER'] = outer_part.pop(root)
     graph.update(outer_part)
     root_node = Tensor.generate(graph, 'ROOT')
-    solver = MultiLayer(root_node, sbm.h_list, use_str_name=True)
-    assert set(l.name for l in root_node.leaves()) == set(sbm.leaves)
-    assert len(sbm.h_list) == len(solver.h_list)
-    assert len(sbm.h_list) == 2 * len(sbm.leaves) - 1
+    root_node.is_normalized = True
+    solver = MultiLayer(root_node, sbm.h_list, f_list=sbm.f_list,
+                        use_str_name=True)
+    bond_dict = {}
+    for s, i, t, j in root_node.linkage_visitor():
+        if isinstance(t, Leaf):
+            bond_dict[(s, i, t, j)] = sbm.dimensions[t.name]
+        else:
+            bond_dict[(s, i, t, j)] = 10
+    solver.autocomplete(bond_dict)
+    solver.settings(
+        cmf_steps=10,
+        ode_method='RK23',
+        ps_method='split-unite'
+    )
+    projector = np.array([[0., 0.],
+                          [0., 1.]])
+    op = [[[root_node[0][0], projector]]]
+    li = []
+    for time, _ in solver.propagator(
+        steps=100,
+        ode_inter=1.,
+        split=False
+    ):
+        li.append((Quantity(time).convert_to(unit='fs'),
+                   solver.expection(op=op)))
+        msg = "Time: {}, P2: {}".format(*li[-1])
+        print(msg)
+    np.save('spin-boson', np.array(li))
+
+# EOF

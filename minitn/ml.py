@@ -12,7 +12,7 @@ from __future__ import absolute_import, division
 import logging
 from builtins import filter, map, range, zip
 from functools import partial
-from itertools import count
+from itertools import count, combinations_with_replacement
 from contextlib import contextmanager
 
 import numpy as np
@@ -126,7 +126,7 @@ class MultiLayer(object):
                     raise TypeError('1-th ary in tuple must be 2-D ndarray!')
                 pair[0].reset()
         if f_list is not None:
-            for term in h_list:
+            for term in f_list:
                 for pair in term:
                     if not isinstance(pair[0], Leaf):
                         if not use_str_name:
@@ -143,16 +143,64 @@ class MultiLayer(object):
         self.env_ = {}    # {(int, Tensor, int): ndarray}
         return
 
-    def term_visitor(self, use_cache=False):
+    @staticmethod
+    def triangular(n_list):
+        length = len(n_list)
+        prod_list = [1]
+        for n in n_list:
+            prod_list.append(prod_list[-1] * n)
+        prod_list = prod_list[:-1]
+        yield 0
+        for n in count(1):
+            if n >= min(n_list):
+                break
+            cases = combinations_with_replacement(list(range(length)), n)
+            for indice in list(cases):
+                code = sum((prod_list[i] for i in indice))
+                yield code
+
+    def autocomplete(self, n_bond_dict):
+        for t in self.root.visitor(leaf=False):
+            try:
+                t.array
+            except AttributeError:
+                axis = t.axis
+                n_children = []
+                for i, child, j in t.children():
+                    n_children.append(n_bond_dict[(t, i, child, j)])
+                if axis is not None:
+                    p, p_i = t[axis]
+                    n_parent = n_bond_dict[(p, p_i, t, axis)]
+                    shape = [n_parent] + n_children
+                else:
+                    n_parent = 1
+                    shape = n_children
+                array = np.zeros((n_parent, np.prod(n_children)))
+                for n, v_i in zip(self.triangular(n_children), array):
+                    v_i[n] = 1.
+                array = np.reshape(array, shape)
+                if axis is not None:
+                    array = np.moveaxis(array, 0, axis)
+                t.set_array(array)
+        if __debug__:
+            for t in self.root.visitor():
+                t.check_completness(strict=True)
+        return
+
+    def term_visitor(self, use_cache=False, op=None):
         """Visit all terms in self.h_list.
         """
+        time = self.time
         visitor = self.root.visitor
         for tensor in visitor(axis=None):
             tensor.reset()
-        all_terms = self.h_list
-        if self.f_list is not None:
-            time = self.time
-            all_terms.extend(f(time) for f in self.f_list)
+        if op is None:
+            if self.f_list is not None:
+                all_terms = self.h_list + self.f_list
+            else:
+                all_terms = self.h_list
+        else:
+            all_terms = op
         for n, term in enumerate(all_terms):
             for tensor in visitor(axis=None, leaf=False):
                 tensor.reset()
@@ -161,6 +209,8 @@ class MultiLayer(object):
                         if (n, t, j) in self.env_:
                             tensor.load_cache(i, self.env_[(n, t, j)])
             for leaf, array in term:
+                if callable(array):
+                    array = array(time)
                 leaf.set_array(array)
             yield n
             for leaf, _ in term:
@@ -175,12 +225,12 @@ class MultiLayer(object):
             ans += self.root.matrix_element()
         return ans
 
-    def expection(self, normalized=False):
+    def expection(self, normalized=False, op=None):
         """Return the expection value with the state of the network which
         `self.root` in.  Sum over `self.h_list`.
         """
         ans = 0.0
-        for _ in self.term_visitor():
+        for _ in self.term_visitor(op=op):
             ans += self.root.expection()
         if normalized:
             ans /= self.root.global_square()
@@ -586,5 +636,12 @@ class MultiLayer(object):
             yield ans
             for t in r.visitor(leaf=False):
                 t.aux = None
+
+
+if __name__ == '__main__':
+    for n, i in enumerate(MultiLayer.triangular([10, 10, 10])):
+        print('{:03d}'.format(i))
+        if n > 20:
+            break
 
 # EOF

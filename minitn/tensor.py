@@ -115,7 +115,7 @@ class Tensor(object):
     @property
     def array(self):
         if self._array is None:
-            raise RuntimeError('No specific array set at {0}!'.format(self))
+            raise AttributeError('No specific array set at {0}!'.format(self))
         else:
             return np.array(self._array, dtype='complex128')    # Return a copy
 
