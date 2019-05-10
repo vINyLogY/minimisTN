@@ -19,8 +19,8 @@ import numpy as np
 from scipy import linalg, integrate, sparse
 
 from minitn.lib.tools import __
+from minitn.lib.numerical import DavidsonAlgorithm
 from minitn.tensor import Tensor, Leaf
-from minitn.dvr import SineDVR
 
 
 class MultiLayer(object):
@@ -111,32 +111,28 @@ class MultiLayer(object):
         self.f_list = f_list
         self.time = 0.0
 
-        # Type check and initialize leaf._array with None
-        if use_str_name:
-            leaves_dict = {leaf.name: leaf for leaf in root.leaves()}
+        # Type check
         for term in h_list:
             for pair in term:
-                if not isinstance(pair[0], Leaf):
-                    if not use_str_name:
-                        raise TypeError('0-th ary in tuple must be of type'
-                                        ' Leaf!')
-                    else:
-                        pair[0] = leaves_dict[str(pair[0])]
+                if not isinstance(pair[0], Leaf) and not use_str_name:
+                    raise TypeError('0-th ary in tuple must be of type Leaf!')
                 if np.array(pair[1]).ndim != 2:
                     raise TypeError('1-th ary in tuple must be 2-D ndarray!')
-                pair[0].reset()
         if f_list is not None:
             for term in f_list:
                 for pair in term:
-                    if not isinstance(pair[0], Leaf):
-                        if not use_str_name:
-                            raise TypeError('0-th ary in tuple must be of type'
-                                            ' Leaf!')
-                        else:
-                            pair[0] = leaves_dict[str(pair[0])]
+                    if not isinstance(pair[0], Leaf) and not use_str_name:
+                        raise TypeError('0-th ary in tuple must be of type '
+                                        'Leaf!')
                     if not callable(pair[1]):
                         raise TypeError('1-th ary in tuple must be callable!')
-                    pair[0].reset()
+        if use_str_name:
+            all_terms = h_list if f_list is None else h_list + f_list
+            leaves_dict = {leaf.name: leaf for leaf in root.leaves()}
+            for term in all_terms:
+                for _ in range(len(term)):
+                    fst, snd = term.pop(0)
+                    term.append((leaves_dict[str(fst)], snd))
 
         # Some cached data
         self.inv_density = {}    # {Tensor: ndarray}
@@ -159,28 +155,56 @@ class MultiLayer(object):
                 code = sum((prod_list[i] for i in indice))
                 yield code
 
-    def autocomplete(self, n_bond_dict):
+    def _local_matvec(self, leaf):
+        for term in self.h_list:
+            if len(term) == 1 and term[0][0] is leaf:
+                h = term[0][1]
+                break
+
+        def matvec(vec, mat=h): return np.dot(mat, vec)
+        return matvec
+
+    def autocomplete(self, n_bond_dict, max_entangled=False):
         for t in self.root.visitor(leaf=False):
             try:
                 t.array
             except AttributeError:
                 axis = t.axis
-                n_children = []
-                for i, child, j in t.children():
-                    n_children.append(n_bond_dict[(t, i, child, j)])
-                if axis is not None:
+                if max_entangled and not any(t.children(leaf=False)):
+                    if len(list(t.children(leaf=True))) != 2 or axis is None:
+                        raise RuntimeError('Not correct tensor graph for FT.')
+                    for i, leaf, j in t.children():
+                        if not leaf.name.endswith("'"):
+                            n_leaf = n_bond_dict[(t, i, leaf, j)]
+                            break
                     p, p_i = t[axis]
                     n_parent = n_bond_dict[(p, p_i, t, axis)]
-                    shape = [n_parent] + n_children
+                    vec_i = np.ones((n_leaf,)) / np.sqrt(n_leaf)
+                    da = DavidsonAlgorithm(self._local_matvec(leaf),
+                                           init_vecs=[vec_i],
+                                           n_vals=n_parent)
+                    array_i = np.array(da.kernel(search_mode=True))
+                    array = []
+                    for n in range(n_parent):
+                        array.append(np.diag(array_i[n]))
+                    array = np.array(array)
                 else:
-                    n_parent = 1
-                    shape = n_children
-                array = np.zeros((n_parent, np.prod(n_children)))
-                for n, v_i in zip(self.triangular(n_children), array):
-                    v_i[n] = 1.
-                array = np.reshape(array, shape)
-                if axis is not None:
-                    array = np.moveaxis(array, 0, axis)
+                    n_children = []
+                    for i, child, j in t.children():
+                        n_children.append(n_bond_dict[(t, i, child, j)])
+                    if axis is not None:
+                        p, p_i = t[axis]
+                        n_parent = n_bond_dict[(p, p_i, t, axis)]
+                        shape = [n_parent] + n_children
+                    else:
+                        n_parent = 1
+                        shape = n_children
+                    array = np.zeros((n_parent, np.prod(n_children)))
+                    for n, v_i in zip(self.triangular(n_children), array):
+                        v_i[n] = 1.
+                    array = np.reshape(array, shape)
+                    if axis is not None:
+                        array = np.moveaxis(array, 0, axis)
                 t.set_array(array)
         if __debug__:
             for t in self.root.visitor():
@@ -619,7 +643,7 @@ class MultiLayer(object):
             try:
                 step(ode_inter=ode_inter, imaginary=imaginary)
             except RuntimeWarning:
-                raise StopIteration
+                break
 
     def autocorr(self, steps=None, ode_inter=0.01, split=False,
                  imaginary=False, fast=False):

@@ -28,6 +28,28 @@ from minitn.tensor import Tensor, Leaf
 from minitn.ml import MultiLayer
 
 
+def huffman_tree(sources, importances=None, prefix='', n_branch=2):
+    def string(x): return x[0]
+    def key(x): return x[1]
+    if importances is None:
+        importances = [1] * len(sources)
+    sequence = list(zip(sources, importances))
+    graph = {}
+    counter = 0
+    while len(sequence) >= n_branch:
+        sequence.sort(key=key)
+        branch, sequence = sequence[:n_branch], sequence[n_branch:]
+        p = sum(map(key, branch))
+        new = prefix + '{:02d}'.format(counter)
+        graph[new] = list(map(string, branch))
+        sequence.insert(0, (new, p))
+        counter += 1
+    if n_branch > 2:
+        graph[prefix + '{:02d}'.format(counter)] = list(map(string, sequence))
+        counter += 1
+    return graph, (prefix + '{:02d}'.format(counter - 1))
+
+
 class SpinBosonModel(object):
     ELEC = ['e1', 'e2', 'v']
     INNER = ['omega_list', 'lambda_list', 'dim_list']
@@ -57,6 +79,34 @@ class SpinBosonModel(object):
         h_list = self.electron_hamiltonian()
         h_list.extend(self.inner_hamiltonian() + self.outer_hamiltonian())
         self.h_list, self.f_list = self.collect_electric_terms(h_list)
+        return
+
+    def autograph(self, n_branch=2):
+        graph = {'ROOT': [self.elec_leaf, 'INNER', 'OUTER']}
+        self._update(graph, self.inner_leaves, 'INNER', n_branch, prefix='AI')
+        self._update(graph, self.outer_leaves, 'OUTER', n_branch, prefix='AO')
+        return graph, 'ROOT'
+
+    def autograph_with_aux(self, n_branch=2):
+        graph = {'ROOT': [self.elec_leaf, 'INNER', 'OUTER']}
+        inner_spfs = [name + 's' for name in self.inner_leaves]
+        outer_spfs = [name + 's' for name in self.outer_leaves]
+        self._update(graph, inner_spfs, 'INNER', n_branch, prefix='AI')
+        self._update(graph, outer_spfs, 'OUTER', n_branch, prefix='AO')
+        leaves = self.leaves
+        spfs = [name + 's' for name in leaves]
+        aux_leaves = [name + "'" for name in leaves]
+        aux = {s: [p, q] for s, p, q in zip(spfs, leaves, aux_leaves)}
+        graph.update(aux)
+        self.dimensions.update({name: self.dimensions[name[:-1]]
+                                for name in aux_leaves})
+        return graph, 'ROOT'
+
+    @staticmethod
+    def _update(graph, leaves, root, n_branch, prefix='A'):
+        subtree, r = huffman_tree(leaves, prefix=prefix)
+        subtree[root] = subtree.pop(r)
+        graph.update(subtree)
         return
 
     def collect_electric_terms(self, h_list):
@@ -159,29 +209,9 @@ class SpinBosonModel(object):
                 if leaf.startswith(self.outer_prefix)]
 
 
-def huffman_tree(sources, importances=None, prefix='', n_branch=2):
-    def string(x): return x[0]
-    def key(x): return x[1]
-    if importances is None:
-        importances = [1] * len(sources)
-    sequence = list(zip(sources, importances))
-    graph = {}
-    counter = 0
-    while len(sequence) >= n_branch:
-        sequence.sort(key=key)
-        branch, sequence = sequence[:n_branch], sequence[n_branch:]
-        p = sum(map(key, branch))
-        new = prefix + '{:02d}'.format(counter)
-        graph[new] = list(map(string, branch))
-        sequence.insert(0, (new, p))
-        counter += 1
-    if n_branch > 2:
-        graph[prefix + '{:02d}'.format(counter)] = list(map(string, sequence))
-        counter += 1
-    return graph, (prefix + '{:02d}'.format(counter - 1))
-
-
 if __name__ == '__main__':
+    # A spin-boson model for photoinduced ET reactions in mixed-valence
+    # systems in solution at zero/finite temperature.
     from minitn.lib.units import Quantity
     from minitn.tensor import Leaf, Tensor
     from minitn.ml import MultiLayer
@@ -211,41 +241,38 @@ if __name__ == '__main__':
         t_d=Quantity(60, 'fs').value_in_au,
         omega=Quantity(13000, 'cm-1').value_in_au,
     )
-    graph = {
-        'ROOT': [sbm.elec_leaf, 'INNER', 'OUTER'],
-        'INNER': ['L2-I0', 'L2-I1'],
-        'L2-I0': sbm.inner_leaves[:2],
-        'L2-I1': sbm.inner_leaves[2:],
-    }
-    outer_part, root = huffman_tree(sbm.outer_leaves, prefix='AUTO')
-    outer_part['OUTER'] = outer_part.pop(root)
-    graph.update(outer_part)
-    root_node = Tensor.generate(graph, 'ROOT')
-    root_node.is_normalized = True
-    solver = MultiLayer(root_node, sbm.h_list, f_list=sbm.f_list,
+    finite_temperature = False
+    graph, root = (
+        sbm.autograph_with_aux(n_branch=2) if finite_temperature else
+        sbm.autograph(n_branch=2) 
+    )
+    root = Tensor.generate(graph, root)
+    root.is_normalized = not finite_temperature
+    solver = MultiLayer(root, sbm.h_list, f_list=sbm.f_list,
                         use_str_name=True)
     bond_dict = {}
-    for s, i, t, j in root_node.linkage_visitor():
+    for s, i, t, j in root.linkage_visitor():
         if isinstance(t, Leaf):
             bond_dict[(s, i, t, j)] = sbm.dimensions[t.name]
         else:
-            bond_dict[(s, i, t, j)] = 10
-    solver.autocomplete(bond_dict)
+            bond_dict[(s, i, t, j)] = 30
+    solver.autocomplete(bond_dict, max_entangled=finite_temperature)
     solver.settings(
-        cmf_steps=10,
-        ode_method='RK23',
+        cmf_steps=50,
+        ode_method='RK45',
         ps_method='split-unite'
     )
     projector = np.array([[0., 0.],
                           [0., 1.]])
-    op = [[[root_node[0][0], projector]]]
+    op = [[[root[0][0], projector]]]
     li = []
     for time, _ in solver.propagator(
         steps=100,
-        ode_inter=1.,
-        split=False
+        ode_inter=10.,
+        split=True,
+        imaginary=finite_temperature
     ):
-        li.append((Quantity(time).convert_to(unit='fs'),
+        li.append((Quantity(time).convert_to(unit='fs').value,
                    solver.expection(op=op)))
         msg = "Time: {}, P2: {}".format(*li[-1])
         print(msg)
