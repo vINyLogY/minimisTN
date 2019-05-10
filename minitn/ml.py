@@ -7,7 +7,7 @@ References
 .. [1] arXiv:1603.03039v4
 .. [2] My slides
 """
-from __future__ import absolute_import, division
+from __future__ import absolute_import, division, print_function
 
 import logging
 from builtins import filter, map, range, zip
@@ -109,7 +109,10 @@ class MultiLayer(object):
         self.root = root
         self.h_list = h_list
         self.f_list = f_list
+
+        # For propogation purpose
         self.time = 0.0
+        self.overall_norm = 1
 
         # Type check
         for term in h_list:
@@ -139,6 +142,16 @@ class MultiLayer(object):
         self.env_ = {}    # {(int, Tensor, int): ndarray}
         return
 
+    def print_hamiltonian(self, verbose=False):
+        for n, term in enumerate(self.h_list):
+            print('Term {:d}'.format(n))
+            for leaf, array in term:
+                msg = "- At Leaf {}: {}".format(leaf.name, array.shape)
+                print(msg)
+                if verbose:
+                    print(array)
+        return
+
     @staticmethod
     def triangular(n_list):
         length = len(n_list)
@@ -156,10 +169,20 @@ class MultiLayer(object):
                 yield code
 
     def _local_matvec(self, leaf):
+        h = None
         for term in self.h_list:
             if len(term) == 1 and term[0][0] is leaf:
                 h = term[0][1]
                 break
+        if h is None and self.f_list is not None:
+            for term in self.f_list:
+                if len(term) == 1 and term[0][0] is leaf:
+                    h = term[0][1]
+                    h = h(0.0)
+                    break
+        if h is None:
+            raise RuntimeError('Cannot found a local hamiltonian for {}'
+                                .format(leaf))
 
         def matvec(vec, mat=h): return np.dot(mat, vec)
         return matvec
@@ -211,10 +234,10 @@ class MultiLayer(object):
                 t.check_completness(strict=True)
         return
 
-    def term_visitor(self, use_cache=False, op=None):
+    def term_visitor(self, use_cache=False, op=None, imaginary=False):
         """Visit all terms in self.h_list.
         """
-        time = self.time
+        time = 0.0 if imaginary else self.time 
         visitor = self.root.visitor
         for tensor in visitor(axis=None):
             tensor.reset()
@@ -240,12 +263,12 @@ class MultiLayer(object):
             for leaf, _ in term:
                 leaf.reset()
 
-    def matrix_element(self):
+    def matrix_element(self, op=None):
         """Return the matrix element with the states of the network which
         `self.root` in.  Sum over `self.h_list`.
         """
         ans = 0.0
-        for _ in self.term_visitor():
+        for _ in self.term_visitor(op=op):
             ans += self.root.matrix_element()
         return ans
 
@@ -353,7 +376,7 @@ class MultiLayer(object):
         for t in visitor():
             t.aux = None
         # Term by term...
-        for n in self.term_visitor():
+        for n in self.term_visitor(imaginary=imaginary):
             for tensor in visitor(leaf=False):
                 tmp = self._single_eom(tensor, n)
                 prev = tensor.aux
@@ -461,7 +484,8 @@ class MultiLayer(object):
         cmf_steps = self.cmf_steps
         for n in count(1):
             if ode_solver.status != 'running':
-                logging.debug(__('CMF steps: #{}, ', n // cmf_steps))
+                logging.info(__('* Propagation done.  Average CMF steps: {}',
+                                n // cmf_steps))
                 break
             if n % cmf_steps == 0:
                 if n >= self.max_ode_steps:
@@ -479,7 +503,7 @@ class MultiLayer(object):
             tensor.set_array(np.reshape(y, tensor.shape))
             ans = np.zeros_like(y)
             self.time = t
-            for n in self.term_visitor(use_cache=False):
+            for n in self.term_visitor(use_cache=False, imaginary=imaginary):
                 ans += np.reshape(self._single_eom(tensor, n, cache=cache), -1)
             ans /= self.coefficient(imaginary=imaginary)
             tensor.set_array(origin)
@@ -496,7 +520,8 @@ class MultiLayer(object):
         else:
             raise RuntimeError("Cannot propagate on Tensor {}"
                                "which is not a root node!".format(tensor))
-        logging.info(__("* Propagating at {} for {}", tensor, tau))
+        logging.info(__("* Propagating at {} ({}) for {}",
+                        tensor, tensor.shape, tau))
         y0 = np.reshape(tensor.array, -1)
         with self.log_inner_product(level=logging.DEBUG):
             self._solve_ode(diff, y0, tau, reformer, updater)
@@ -607,7 +632,7 @@ class MultiLayer(object):
         return
 
     def propagator(self, steps=None, ode_inter=0.01, split=False,
-                   imaginary=False):
+                   imaginary=False, start=0):
         """Propagator generator
 
         Parameters
@@ -631,7 +656,7 @@ class MultiLayer(object):
         for n in count():
             if steps is not None and n > steps:
                 break
-            time = n * ode_inter
+            time = start + n * ode_inter
             logging.info(__(
                 "Propagating at t: {:.3f}, E: {:.8f}, |v|^2: {:.8f}",
                 time,
@@ -642,17 +667,20 @@ class MultiLayer(object):
             yield (time, root)
             try:
                 step(ode_inter=ode_inter, imaginary=imaginary)
+                if imaginary:
+                    self.overall_norm *= self.root.normalize(forced=True)
             except RuntimeWarning:
                 break
 
     def autocorr(self, steps=None, ode_inter=0.01, split=False,
-                 imaginary=False, fast=False):
+                 imaginary=False, fast=False, start=0):
         if not fast:
             _init = {}
             for t in self.root.visitor(leaf=False):
                 _init[t] = t.array
         for time, r in self.propagator(steps=steps, ode_inter=ode_inter,
-                                       split=split, imaginary=imaginary):
+                                       split=split, imaginary=imaginary,
+                                       start=start):
             for t in r.visitor(leaf=False):
                 t.aux = t.array if fast else np.conj(_init[t])
             auto = r.global_inner_product()
@@ -660,6 +688,12 @@ class MultiLayer(object):
             yield ans
             for t in r.visitor(leaf=False):
                 t.aux = None
+
+    @property
+    def relative_partition_function(self):
+        """Return Z(beta) / Z(0).
+        """
+        return self.overall_norm ** 2
 
 
 if __name__ == '__main__':

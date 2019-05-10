@@ -261,6 +261,8 @@ class Tensor(object):
         """
         if axis is _empty:
             axis = self.axis
+        if axis is None and isinstance(self, Leaf):
+            return
         for i, tensor, j in self.linkages:
             if axis is None or i != axis:
                 if leaf or not isinstance(tensor, Leaf):
@@ -371,7 +373,7 @@ class Tensor(object):
         return self.partial_env(None, use_aux=True)
 
     def global_square(self):
-        """Return <array|array>^{1/2}
+        """Return <array|array>
         """
         for t in self.visitor(leaf=False):
             t.aux = np.conj(t.array)
@@ -673,21 +675,25 @@ class Tensor(object):
         if axis is None:
             norm = np.array(self.local_norm())
             self.set_array(array / norm)
+            ans = norm
         else:
             norm = linalg.norm
             shape = self.shape
             dim = shape.pop(axis)
             array = np.reshape(np.moveaxis(array, axis, 0), (dim, -1))
             vecs = []
+            norm_list = []
             for vec_i in array:
                 for vec_j in vecs:
                     vec_i -= vec_j * np.dot(np.conj(vec_j), vec_i)
                 norm_ = norm(vec_i)
                 vecs.append(vec_i / norm_)
+                norm_list.append(norm_)
             array = np.array(vecs)
             array = np.moveaxis(np.reshape(array, [-1] + shape), 0, axis)
             self.set_array(array)
-        return
+            ans = norm_list
+        return ans
 
     @staticmethod
     def hilbert_angle(r1, r2):

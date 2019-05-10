@@ -88,7 +88,9 @@ class SpinBosonModel(object):
         return graph, 'ROOT'
 
     def autograph_with_aux(self, n_branch=2):
-        graph = {'ROOT': [self.elec_leaf, 'INNER', 'OUTER']}
+        graph = {
+            'ROOT': ['ELECs', 'INNER', 'OUTER'],
+        }
         inner_spfs = [name + 's' for name in self.inner_leaves]
         outer_spfs = [name + 's' for name in self.outer_leaves]
         self._update(graph, inner_spfs, 'INNER', n_branch, prefix='AI')
@@ -109,22 +111,27 @@ class SpinBosonModel(object):
         graph.update(subtree)
         return
 
-    def collect_electric_terms(self, h_list):
+    def collect_electric_terms(self, h_list, absorbed=False):
         def condition(term): return len(term) == 1 and term[0][0] == elec_leaf
         elec_list = filter(condition, h_list)
         elec_leaf = self.elec_leaf
         elec_array = sum([term[0][1] for term in elec_list])
         left_list = list(filterfalse(condition, h_list))
         try:
-            field = self.td_electron_hamiltionian(elec_array)
-            h_list = left_list
-            f_list = [[[elec_leaf, field]]]
+            field = self.td_electron_hamiltionian(elec_array,
+                                                  absorbed=absorbed)
+            if absorbed:
+                h_list = left_list
+                f_list = [[[elec_leaf, field]]]
+            else:
+                h_list = [[[elec_leaf, elec_array]]] + left_list
+                f_list = [[[elec_leaf, field]]]
         except AttributeError:
             h_list = [[[elec_leaf, elec_array]]] + left_list
             f_list = None
         return h_list, f_list
 
-    def td_electron_hamiltionian(self, ti_array):
+    def td_electron_hamiltionian(self, ti_array, absorbed=False):
         def field(t):
             mu, tau, t_d, omega = [getattr(self, name) for name in self.FIELD]
             h = [[0., mu],
@@ -230,7 +237,7 @@ if __name__ == '__main__':
         lambda_list=([Quantity(750, 'cm-1').value_in_au] * 4),
         dim_list=[10, 14, 20, 30],
         stop=Quantity(3 * 2250, 'cm-1').value_in_au,
-        n=16,
+        n=32,
         dim=30,
         lambda_g=Quantity(2250, 'cm-1').value_in_au,
         omega_g=Quantity(500, 'cm-1').value_in_au,
@@ -251,11 +258,25 @@ if __name__ == '__main__':
     solver = MultiLayer(root, sbm.h_list, f_list=sbm.f_list,
                         use_str_name=True)
     bond_dict = {}
+    # Leaves
     for s, i, t, j in root.linkage_visitor():
         if isinstance(t, Leaf):
             bond_dict[(s, i, t, j)] = sbm.dimensions[t.name]
-        else:
-            bond_dict[(s, i, t, j)] = 30
+    # ELEC part
+    elec_r = root[0][0]
+    for s, i, t, j in elec_r.linkage_visitor(leaf=False):
+        raise NotImplementedError()
+    # INNER part
+    inner_r = root[1][0]
+    bond_dict[(root, 1, inner_r, 0)] = 60
+    for s, i, t, j in inner_r.linkage_visitor(leaf=False):
+        bond_dict[(s, i, t, j)] = 50
+    # OUTER part
+    outer_r = root[2][0]
+    bond_dict[(root, 2, outer_r, 0)] = 20
+    for s, i, t, j in root[2][0].linkage_visitor(leaf=False):
+        bond_dict[(s, i, t, j)] = 10
+
     solver.autocomplete(bond_dict, max_entangled=finite_temperature)
     solver.settings(
         cmf_steps=50,
@@ -264,18 +285,16 @@ if __name__ == '__main__':
     )
     projector = np.array([[0., 0.],
                           [0., 1.]])
-    op = [[[root[0][0], projector]]]
-    li = []
+    op=[[[elec_r, projector]]]
+    print("Size of a wfn: {} complexes".format(len(root.vectorize())))
     for time, _ in solver.propagator(
-        steps=100,
+        steps=3,
         ode_inter=10.,
         split=True,
         imaginary=finite_temperature
     ):
-        li.append((Quantity(time).convert_to(unit='fs').value,
-                   solver.expection(op=op)))
-        msg = "Time: {}, P2: {}".format(*li[-1])
-        print(msg)
-    np.save('spin-boson', np.array(li))
+        t, p = (Quantity(time).convert_to(unit='fs').value,
+                solver.expection(op=op))
+        print('Time: {}, P2: {}'.format(t, p))
 
 # EOF
