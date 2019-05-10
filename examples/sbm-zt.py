@@ -21,6 +21,7 @@ import logging
 from builtins import filter, map, range, zip
 
 import numpy as np
+from scipy import linalg
 
 from minitn.lib.units import Quantity
 from minitn.ml import MultiLayer
@@ -83,6 +84,12 @@ bond_dict[(root, 2, outer_r, 0)] = 20
 for s, i, t, j in root[2][0].linkage_visitor(leaf=False):
     bond_dict[(s, i, t, j)] = 10
 solver.autocomplete(bond_dict, max_entangled=False)
+# Make the electron at the eigenstate of its local hamiltonian
+leaf, h = solver.h_list[0][0]
+assert leaf.name == 'ELEC'
+_, v = linalg.eigh(h)
+array = Tensor.partial_product(root.array, 0, np.transpose(v))
+root.set_array(array)
 
 # Define the computation details
 solver.settings(
@@ -107,7 +114,7 @@ for time, _ in solver.propagator(
 ):
     t, p = (Quantity(time).convert_to(unit='fs').value,
             solver.expection(op=op))
-    print('Time: {} fs; P2: {}'.format(t, p))
+    logging.warning('Time: {} fs; P2: {}'.format(t, p))
     t_list.append(t)
     p_list.append(p)
 

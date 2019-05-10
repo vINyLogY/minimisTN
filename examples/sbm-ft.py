@@ -109,7 +109,8 @@ for time, _ in solver.propagator(
     t = Quantity(time).convert_to(unit='K-1').value
     z = solver.relative_partition_function
     kelvin = 'inf' if abs(t) < 1.e-14 else 1.0 / t
-    print('Temperatue: {} K; relative Z: {}'.format(kelvin, z))
+    logging.warning('Temperatue: {} K; relative Z: {}'
+                    .format(kelvin, z))
 
 # Define the obersevable of interest
 projector = np.array([[0., 0.],
@@ -127,7 +128,7 @@ for time, _ in solver.propagator(
 ):
     t = Quantity(time).convert_to(unit='fs').value,
     p = solver.expection(op=op)
-    print('Time: {} fs; P2: {}'.format(t, p))
+    logging.warning('Time: {} fs; P2: {}'.format(t, p))
     t_list.append(t)
     p_list.append(p)
 
