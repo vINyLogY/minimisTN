@@ -29,7 +29,7 @@ from minitn.tensor import Leaf, Tensor
 
 logging.basicConfig(
     format='(In %(module)s)[%(funcName)s] %(message)s',
-    level=logging.INFO
+    level=logging.WARNING
 )
 
 # Define parameters of the model.
@@ -96,6 +96,8 @@ projector = np.array([[0., 0.],
 op=[[[elec_r, projector]]]
 
 # Do the propogation
+t_list = []
+p_list = []
 print("Size of a wfn: {} complexes".format(len(root.vectorize())))
 for time, _ in solver.propagator(
     steps=400,
@@ -106,3 +108,10 @@ for time, _ in solver.propagator(
     t, p = (Quantity(time).convert_to(unit='fs').value,
             solver.expection(op=op))
     print('Time: {} fs; P2: {}'.format(t, p))
+    t_list.append(t)
+    p_list.append(p)
+
+# Save the results
+np.save('sbm-zt-t', t_list)
+np.save('sbm-zt-p', p_list)
+
