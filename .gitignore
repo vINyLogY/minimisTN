@@ -6,6 +6,7 @@ tst.*
 !/requirements.txt
 *.pdf
 *.npy
+*.log
 
 # Optimized
 *.py[cod]

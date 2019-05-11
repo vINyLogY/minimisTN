@@ -29,8 +29,8 @@ from minitn.models.spinboson import SpinBosonModel
 from minitn.tensor import Leaf, Tensor
 
 logging.basicConfig(
-    format='(In %(module)s)[%(funcName)s] %(message)s',
-    level=logging.WARNING
+    format='%(levelname)s: (In %(module)s)[%(funcName)s] %(message)s',
+    level=logging.INFO
 )
 
 # Define parameters of the model.
@@ -44,7 +44,7 @@ sbm = SpinBosonModel(
                 Quantity(150, 'cm-1').value_in_au],
     lambda_list=([Quantity(750, 'cm-1').value_in_au] * 4),
     dim_list=[10, 14, 20, 30],
-    stop=Quantity(3 * 2250, 'cm-1').value_in_au,
+    stop=Quantity(10000, 'cm-1').value_in_au,
     n=32,
     dim=30,
     lambda_g=Quantity(2250, 'cm-1').value_in_au,
@@ -84,12 +84,14 @@ bond_dict[(root, 2, outer_r, 0)] = 20
 for s, i, t, j in root[2][0].linkage_visitor(leaf=False):
     bond_dict[(s, i, t, j)] = 10
 solver.autocomplete(bond_dict, max_entangled=False)
+## Following steps are not needed: phi_1 is defined as electronic
+# groundstate
 # Make the electron at the eigenstate of its local hamiltonian
-leaf, h = solver.h_list[0][0]
-assert leaf.name == 'ELEC'
-_, v = linalg.eigh(h)
-array = Tensor.partial_product(root.array, 0, np.transpose(v))
-root.set_array(array)
+# leaf, h = solver.h_list[0][0]
+# assert leaf.name == 'ELEC'
+# _, v = linalg.eigh(h)
+# array = Tensor.partial_product(root.array, 0, np.transpose(v))
+# root.set_array(array)
 
 # Define the computation details
 solver.settings(
@@ -103,8 +105,7 @@ projector = np.array([[0., 0.],
 op=[[[elec_r, projector]]]
 
 # Do the propogation
-t_list = []
-p_list = []
+tp_list = []
 print("Size of a wfn: {} complexes".format(len(root.vectorize())))
 for time, _ in solver.propagator(
     steps=400,
@@ -115,10 +116,7 @@ for time, _ in solver.propagator(
     t, p = (Quantity(time).convert_to(unit='fs').value,
             solver.expection(op=op))
     logging.warning('Time: {} fs; P2: {}'.format(t, p))
-    t_list.append(t)
-    p_list.append(p)
+    tp_list.append((t, p))
 
 # Save the results
-np.save('sbm-zt-t', t_list)
-np.save('sbm-zt-p', p_list)
-
+np.save('sbm-zt', tp_list)

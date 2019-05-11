@@ -548,7 +548,6 @@ class MultiLayer(object):
         return end
 
     def split_step(self, ode_inter=0.01, imaginary=False):
-        self._form_env()
         prop = partial(self._split_prop, tau=ode_inter, imaginary=imaginary,
                        cache=True)
         inv_prop = partial(self._split_prop, tau=(-ode_inter),

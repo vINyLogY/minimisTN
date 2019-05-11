@@ -19,6 +19,7 @@ from builtins import filter, map, range, zip
 from itertools import filterfalse, count
 
 import numpy as np
+from scipy import linalg
 from scipy.integrate import quad
 
 from minitn.lib.tools import __
@@ -56,7 +57,7 @@ class SpinBosonModel(object):
     OUTER = ['stop', 'n', 'dim', 'lambda_g', 'omega_g', 'lambda_d', 'omega_d']
     FIELD = ['mu', 'tau', 't_d', 'omega']
 
-    def __init__(self, **kwargs):
+    def __init__(self, including_bath=True, **kwargs):
         """ Needed parameters:
         - (for electronic part)
             'e1', 'e2', 'v',
@@ -76,23 +77,40 @@ class SpinBosonModel(object):
         self.outer_prefix = None
         self.leaves = []
         self.dimensions = {}
+        self.including_bath = including_bath
         h_list = self.electron_hamiltonian()
-        h_list.extend(self.inner_hamiltonian() + self.outer_hamiltonian())
+        all_vibriations = (self.inner_hamiltonian() + self.outer_hamiltonian()
+                           if including_bath else self.inner_hamiltonian())
+        h_list.extend(all_vibriations)
         self.h_list, self.f_list = self.collect_electric_terms(h_list)
         return
 
     def autograph(self, n_branch=2):
         graph = {'ROOT': [self.elec_leaf, 'INNER', 'OUTER']}
-        self._update(graph, self.inner_leaves, 'INNER', n_branch, prefix='AI')
-        self._update(graph, self.outer_leaves, 'OUTER', n_branch, prefix='AO')
+        if self.including_bath:
+            self._update(graph, self.inner_leaves, 'INNER', n_branch,
+            prefix='AI')
+            self._update(graph, self.outer_leaves, 'OUTER', n_branch,
+            prefix='AO')
+        else:
+            mid = len(self.inner_leaves) // 2
+            self._update(graph, self.inner_leaves[:mid], 'INNER', n_branch,
+             prefix='AI1')
+            self._update(graph, self.inner_leaves[mid:], 'OUTER', n_branch,
+            prefix='AI2')
         return graph, 'ROOT'
 
     def autograph_with_aux(self, n_branch=2):
         graph = {
             'ROOT': ['ELECs', 'INNER', 'OUTER'],
         }
-        inner_spfs = [name + 's' for name in self.inner_leaves]
-        outer_spfs = [name + 's' for name in self.outer_leaves]
+        if self.including_bath:
+            inner_spfs = [name + 's' for name in self.inner_leaves]
+            outer_spfs = [name + 's' for name in self.outer_leaves]
+        else:
+            mid = len(self.inner_leaves) // 2
+            inner_spfs = [name + 's' for name in self.inner_leaves[:mid]]
+            outer_spfs = [name + 's' for name in self.inner_leaves[mid:]]
         self._update(graph, inner_spfs, 'INNER', n_branch, prefix='AI')
         self._update(graph, outer_spfs, 'OUTER', n_branch, prefix='AO')
         leaves = self.leaves
@@ -118,12 +136,12 @@ class SpinBosonModel(object):
         elec_array = sum([term[0][1] for term in elec_list])
         left_list = list(filterfalse(condition, h_list))
         try:
-            field = self.td_electron_hamiltionian(elec_array,
-                                                  absorbed=absorbed)
             if absorbed:
+                field = self.td_electron_hamiltionian(ti_array=elec_array)
                 h_list = left_list
                 f_list = [[[elec_leaf, field]]]
             else:
+                field = self.td_electron_hamiltionian()
                 h_list = [[[elec_leaf, elec_array]]] + left_list
                 f_list = [[[elec_leaf, field]]]
         except AttributeError:
@@ -131,15 +149,18 @@ class SpinBosonModel(object):
             f_list = None
         return h_list, f_list
 
-    def td_electron_hamiltionian(self, ti_array, absorbed=False):
+    def td_electron_hamiltionian(self, ti_array=None):
         def field(t):
             mu, tau, t_d, omega = [getattr(self, name) for name in self.FIELD]
             h = [[0., mu],
                  [mu, 0.]]
             delta = t - t_d
-            coeff = (np.exp(-4. * np.log(2. * delta ** 2 / tau ** 2)) *
+            coeff = (np.exp(-4. * np.log(2.) * (delta / tau) ** 2) *
                      np.cos(omega * delta))
-            return coeff * np.array(h) + ti_array
+            ans =  coeff * np.array(h) 
+            if ti_array is not None:
+                ans += ti_array
+            return ans
         return field
 
     def electron_hamiltonian(self, name='ELEC'):
@@ -222,11 +243,16 @@ if __name__ == '__main__':
     from minitn.lib.units import Quantity
     from minitn.tensor import Leaf, Tensor
     from minitn.ml import MultiLayer
+    from minitn.lib.tools import plt, figure
     logging.basicConfig(
         format='(In %(module)s)[%(funcName)s] %(message)s',
         level=logging.INFO
     )
+    finite_temperature = False
+    including_bath = False
+
     sbm = SpinBosonModel(
+        including_bath=including_bath,
         e1=0.,
         e2=Quantity(6500, 'cm-1').value_in_au,
         v=Quantity(500, 'cm-1').value_in_au,
@@ -248,13 +274,12 @@ if __name__ == '__main__':
         t_d=Quantity(60, 'fs').value_in_au,
         omega=Quantity(13000, 'cm-1').value_in_au,
     )
-    finite_temperature = False
+
     graph, root = (
         sbm.autograph_with_aux(n_branch=2) if finite_temperature else
-        sbm.autograph(n_branch=2) 
+        sbm.autograph(n_branch=2)
     )
     root = Tensor.generate(graph, root)
-    root.is_normalized = not finite_temperature
     solver = MultiLayer(root, sbm.h_list, f_list=sbm.f_list,
                         use_str_name=True)
     bond_dict = {}
@@ -267,34 +292,44 @@ if __name__ == '__main__':
     for s, i, t, j in elec_r.linkage_visitor(leaf=False):
         raise NotImplementedError()
     # INNER part
-    inner_r = root[1][0]
-    bond_dict[(root, 1, inner_r, 0)] = 60
+    inner_r = root[1][0] if including_bath else root
+    if including_bath:
+        bond_dict[(root, 1, inner_r, 0)] = 60
     for s, i, t, j in inner_r.linkage_visitor(leaf=False):
         bond_dict[(s, i, t, j)] = 50
     # OUTER part
-    outer_r = root[2][0]
-    bond_dict[(root, 2, outer_r, 0)] = 20
-    for s, i, t, j in root[2][0].linkage_visitor(leaf=False):
-        bond_dict[(s, i, t, j)] = 10
-
+    if including_bath:
+        outer_r = root[2][0]
+        bond_dict[(root, 2, outer_r, 0)] = 20
+        for s, i, t, j in root[2][0].linkage_visitor(leaf=False):
+            bond_dict[(s, i, t, j)] = 10
     solver.autocomplete(bond_dict, max_entangled=finite_temperature)
     solver.settings(
-        cmf_steps=50,
+        cmf_steps=1,
         ode_method='RK45',
         ps_method='split-unite'
     )
     projector = np.array([[0., 0.],
                           [0., 1.]])
-    op=[[[elec_r, projector]]]
+    op = [[[elec_r, projector]]]
     print("Size of a wfn: {} complexes".format(len(root.vectorize())))
+    t_p = []
     for time, _ in solver.propagator(
-        steps=3,
-        ode_inter=10.,
+        steps=400,
+        ode_inter=Quantity(0.25, 'fs').value_in_au,
         split=True,
         imaginary=finite_temperature
     ):
         t, p = (Quantity(time).convert_to(unit='fs').value,
                 solver.expection(op=op))
-        print('Time: {}, P2: {}'.format(t, p))
+        t_p.append((t, p))
+        print('Time: {:.2f} fs, P2: {}'.format(t, p))
+    
+    # Check SBM
+    t, p = zip(*t_p)
+    with figure():
+        plt.plot(t, p, '-')
+        plt.show()
+    np.save('spin-boson-zt2', t_p)
 
 # EOF

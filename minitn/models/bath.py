@@ -71,8 +71,8 @@ if __name__ == '__main__':
     from minitn.lib.tools import figure, plt
     from minitn.lib.units import Quantity
     j_w = bimodal_spectral_density(Quantity(2250, 'cm-1').value_in_au,
-                                   Quantity(1250, 'cm-1').value_in_au,
                                    Quantity(500, 'cm-1').value_in_au,
+                                   Quantity(1250, 'cm-1').value_in_au,
                                    Quantity(50, 'cm-1').value_in_au)
     ans = linear_discretization(j_w, Quantity(10000, 'cm-1').value_in_au, 50)
     x, y = zip(*ans)

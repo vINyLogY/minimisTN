@@ -28,8 +28,8 @@ from minitn.models.spinboson import SpinBosonModel
 from minitn.tensor import Leaf, Tensor
 
 logging.basicConfig(
-    format='(In %(module)s)[%(funcName)s] %(message)s',
-    level=logging.WARNING
+    format='%(levelname)s: (In %(module)s)[%(funcName)s] %(message)s',
+    level=logging.INFO
 )
 
 # Define parameters of the model.
@@ -43,8 +43,8 @@ sbm = SpinBosonModel(
                 Quantity(150, 'cm-1').value_in_au],
     lambda_list=([Quantity(750, 'cm-1').value_in_au] * 4),
     dim_list=[10, 14, 20, 30],
-    stop=Quantity(3 * 2250, 'cm-1').value_in_au,
-    n=32,
+    stop=Quantity(10000, 'cm-1').value_in_au,
+    n=27,
     dim=30,
     lambda_g=Quantity(2250, 'cm-1').value_in_au,
     omega_g=Quantity(500, 'cm-1').value_in_au,
@@ -57,14 +57,14 @@ sbm = SpinBosonModel(
 )
 
 # Define the topological structure of the ML-MCTDH tree
-graph, root = sbm.autograph_with_aux(n_branch=2) 
+graph, root = sbm.autograph_with_aux(n_branch=3)
 root = Tensor.generate(graph, root)
 
 # Define the detailed parameters for the MC-MCTDH tree
 solver = MultiLayer(root, sbm.h_list, f_list=sbm.f_list,
                     use_str_name=True)
 bond_dict = {}
-## Leaves
+# Leaves
 for s, i, t, j in root.linkage_visitor():
     if isinstance(t, Leaf):
         dim = sbm.dimensions[t.name]
@@ -72,18 +72,18 @@ for s, i, t, j in root.linkage_visitor():
         s_ax = s.axis
         p, p_ax = s[s_ax]
         bond_dict[(p, p_ax, s, s_ax)] = dim
-## ELEC part
+# ELEC part
 elec_r = root[0][0]
 for s, i, t, j in elec_r.linkage_visitor(leaf=False):
     if (s, i, t, j) not in bond_dict:
         raise NotImplementedError()
-## INNER part
+# INNER part
 inner_r = root[1][0]
 bond_dict[(root, 1, inner_r, 0)] = 30
 for s, i, t, j in inner_r.linkage_visitor(leaf=False):
     if (s, i, t, j) not in bond_dict:
         bond_dict[(s, i, t, j)] = 20
-## OUTER part
+# OUTER part
 outer_r = root[2][0]
 bond_dict[(root, 2, outer_r, 0)] = 20
 for s, i, t, j in root[2][0].linkage_visitor(leaf=False):
@@ -115,11 +115,10 @@ for time, _ in solver.propagator(
 # Define the obersevable of interest
 projector = np.array([[0., 0.],
                       [0., 1.]])
-op=[[[elec_r, projector]]]
+op = [[[elec_r, projector]]]
 
 # Do the real time propogation
-t_list = []
-p_list = []
+tp_list = []
 for time, _ in solver.propagator(
     steps=400,
     ode_inter=Quantity(0.25, 'fs').value_in_au,
@@ -129,9 +128,7 @@ for time, _ in solver.propagator(
     t = Quantity(time).convert_to(unit='fs').value,
     p = solver.expection(op=op)
     logging.warning('Time: {} fs; P2: {}'.format(t, p))
-    t_list.append(t)
-    p_list.append(p)
+    tp_list.append((t, p))
 
 # Save the results
-np.save('sbm-ft-t', t_list)
-np.save('sbm-ft-p', p_list)
+np.save('sbm-ft', tp_list)
