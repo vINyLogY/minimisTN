@@ -107,12 +107,14 @@ class SpinBosonModel(object):
         if self.including_bath:
             inner_spfs = [name + 's' for name in self.inner_leaves]
             outer_spfs = [name + 's' for name in self.outer_leaves]
+            self._update(graph, inner_spfs, 'INNER', n_branch, prefix='AI1')
+            self._update(graph, outer_spfs, 'OUTER', n_branch, prefix='AI2')
         else:
             mid = len(self.inner_leaves) // 2
             inner_spfs = [name + 's' for name in self.inner_leaves[:mid]]
             outer_spfs = [name + 's' for name in self.inner_leaves[mid:]]
-        self._update(graph, inner_spfs, 'INNER', n_branch, prefix='AI')
-        self._update(graph, outer_spfs, 'OUTER', n_branch, prefix='AO')
+            self._update(graph, inner_spfs, 'INNER', n_branch, prefix='AI')
+            self._update(graph, outer_spfs, 'OUTER', n_branch, prefix='AO')
         leaves = self.leaves
         spfs = [name + 's' for name in leaves]
         aux_leaves = [name + "'" for name in leaves]

@@ -76,9 +76,10 @@ for s, i, t, j in root.linkage_visitor():
     if isinstance(t, Leaf):
         dim = sbm.dimensions[t.name]
         bond_dict[(s, i, t, j)] = dim
-        s_ax = s.axis
-        p, p_ax = s[s_ax]
-        bond_dict[(p, p_ax, s, s_ax)] = dim
+        if finite_temperature:
+            s_ax = s.axis
+            p, p_ax = s[s_ax]
+        bond_dict[(p, p_ax, s, s_ax)] = dim if dim > 9 else dim ** 2
 # ELEC part
 elec_r = root[0][0]
 for s, i, t, j in elec_r.linkage_visitor(leaf=False):
@@ -109,7 +110,7 @@ print("Size of a wfn: {} complexes".format(len(root.vectorize())))
 # Do the imaginary time propogation
 if finite_temperature:
     inv_tem = 1 / 500
-    steps = 200
+    steps = 100
     for time, _ in solver.propagator(
         steps=steps,
         ode_inter=Quantity(inv_tem / steps, unit='K-1').value_in_au,
@@ -133,7 +134,7 @@ op = [[[elec_leaf, projector]]]
 
 # Do the real time propogation
 tp_list = []
-steps = 200
+steps = 100
 for time, _ in solver.propagator(
     steps=steps,
     ode_inter=Quantity(100 / steps, 'fs').value_in_au,

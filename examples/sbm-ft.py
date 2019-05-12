@@ -75,9 +75,10 @@ for s, i, t, j in root.linkage_visitor():
     if isinstance(t, Leaf):
         dim = sbm.dimensions[t.name]
         bond_dict[(s, i, t, j)] = dim
-        s_ax = s.axis
-        p, p_ax = s[s_ax]
-        bond_dict[(p, p_ax, s, s_ax)] = dim
+        if finite_temperature:
+            s_ax = s.axis
+            p, p_ax = s[s_ax]
+        bond_dict[(p, p_ax, s, s_ax)] = dim if dim > 9 else dim ** 2
 # ELEC part
 elec_r = root[0][0]
 for s, i, t, j in elec_r.linkage_visitor(leaf=False):
