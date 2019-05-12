@@ -248,7 +248,7 @@ if __name__ == '__main__':
         format='(In %(module)s)[%(funcName)s] %(message)s',
         level=logging.INFO
     )
-    finite_temperature = False
+    finite_temperature = True
     including_bath = False
 
     sbm = SpinBosonModel(
@@ -286,33 +286,62 @@ if __name__ == '__main__':
     # Leaves
     for s, i, t, j in root.linkage_visitor():
         if isinstance(t, Leaf):
-            bond_dict[(s, i, t, j)] = sbm.dimensions[t.name]
+            dim = sbm.dimensions[t.name]
+            bond_dict[(s, i, t, j)] = dim
+            if finite_temperature:
+                s_ax = s.axis
+                p, p_ax = s[s_ax]
+                bond_dict[(p, p_ax, s, s_ax)] = dim if dim > 9 else dim ** 2
     # ELEC part
     elec_r = root[0][0]
     for s, i, t, j in elec_r.linkage_visitor(leaf=False):
-        raise NotImplementedError()
+        if (s, i, t, j) not in bond_dict:
+            raise NotImplementedError()
     # INNER part
     inner_r = root[1][0] if including_bath else root
     if including_bath:
         bond_dict[(root, 1, inner_r, 0)] = 60
     for s, i, t, j in inner_r.linkage_visitor(leaf=False):
-        bond_dict[(s, i, t, j)] = 50
+        if (s, i, t, j) not in bond_dict:
+            bond_dict[(s, i, t, j)] = 50
     # OUTER part
     if including_bath:
         outer_r = root[2][0]
         bond_dict[(root, 2, outer_r, 0)] = 20
         for s, i, t, j in root[2][0].linkage_visitor(leaf=False):
-            bond_dict[(s, i, t, j)] = 10
+            if (s, i, t, j) not in bond_dict:
+                bond_dict[(s, i, t, j)] = 10
     solver.autocomplete(bond_dict, max_entangled=finite_temperature)
     solver.settings(
         cmf_steps=1,
         ode_method='RK45',
         ps_method='split-unite'
     )
+    print("Size of a wfn: {} complexes".format(len(root.vectorize())))
+
+    if finite_temperature:
+        # Do the imaginary time propogation
+        inv_tem = 1 / 500
+        for time, _ in solver.propagator(
+            steps=200,
+            ode_inter=Quantity(inv_tem / 200, unit='K-1').value_in_au,
+            split=True,
+            imaginary=True
+        ):
+            t = Quantity(time).convert_to(unit='K-1').value
+            z = solver.relative_partition_function
+            kelvin = 'inf' if abs(t) < 1.e-14 else 1.0 / t
+            logging.warning('Temperatue: {} K; relative Z: {}'
+                            .format(kelvin, z))
+
     projector = np.array([[0., 0.],
                           [0., 1.]])
-    op = [[[elec_r, projector]]]
-    print("Size of a wfn: {} complexes".format(len(root.vectorize())))
+    for l in root.leaves():
+        if l.name == sbm.elec_leaf:
+            elec_leaf = l
+            break
+    op = [[[elec_leaf, projector]]]
+
     t_p = []
     for time, _ in solver.propagator(
         steps=400,
@@ -330,6 +359,6 @@ if __name__ == '__main__':
     with figure():
         plt.plot(t, p, '-')
         plt.show()
-    np.save('spin-boson-zt2', t_p)
+    np.save('spin-boson-ft2', t_p)
 
 # EOF

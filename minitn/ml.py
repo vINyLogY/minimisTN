@@ -184,7 +184,10 @@ class MultiLayer(object):
             raise RuntimeError('Cannot found a local hamiltonian for {}'
                                 .format(leaf))
 
-        def matvec(vec, mat=h): return np.dot(mat, vec)
+        def matvec(vec, mat=h):
+            vec = np.reshape(vec,  h.shape)
+            ans = np.dot(mat, vec)
+            return np.reshape(ans, -1)
         return matvec
 
     def autocomplete(self, n_bond_dict, max_entangled=False):
@@ -202,15 +205,13 @@ class MultiLayer(object):
                             break
                     p, p_i = t[axis]
                     n_parent = n_bond_dict[(p, p_i, t, axis)]
-                    vec_i = np.ones((n_leaf,)) / np.sqrt(n_leaf)
+                    vec_i = np.diag(np.ones((n_leaf,)) / np.sqrt(n_leaf))
+                    vec_i = np.reshape(vec_i, -1)
                     da = DavidsonAlgorithm(self._local_matvec(leaf),
                                            init_vecs=[vec_i],
                                            n_vals=n_parent)
-                    array_i = np.array(da.kernel(search_mode=True))
-                    array = []
-                    for n in range(n_parent):
-                        array.append(np.diag(array_i[n]))
-                    array = np.array(array)
+                    array = np.array(da.kernel(search_mode=True))
+                    array = np.reshape(array, (n_parent, n_leaf, n_leaf))
                 else:
                     n_children = []
                     for i, child, j in t.children():
@@ -232,6 +233,9 @@ class MultiLayer(object):
         if __debug__:
             for t in self.root.visitor():
                 t.check_completness(strict=True)
+                assert (isinstance(t, Leaf) or t.axis is None or
+                        np.linalg.matrix_rank(t.local_norm()) ==
+                        t.shape[t.axis])
         return
 
     def term_visitor(self, use_cache=False, op=None, imaginary=False):

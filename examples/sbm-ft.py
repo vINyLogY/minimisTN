@@ -31,9 +31,12 @@ logging.basicConfig(
     format='%(levelname)s: (In %(module)s)[%(funcName)s] %(message)s',
     level=logging.INFO
 )
+finite_temperature = True
+including_bath = False
 
 # Define parameters of the model.
 sbm = SpinBosonModel(
+    including_bath=including_bath,
     e1=0.,
     e2=Quantity(6500, 'cm-1').value_in_au,
     v=Quantity(500, 'cm-1').value_in_au,
@@ -44,7 +47,7 @@ sbm = SpinBosonModel(
     lambda_list=([Quantity(750, 'cm-1').value_in_au] * 4),
     dim_list=[10, 14, 20, 30],
     stop=Quantity(10000, 'cm-1').value_in_au,
-    n=27,
+    n=32,
     dim=30,
     lambda_g=Quantity(2250, 'cm-1').value_in_au,
     omega_g=Quantity(500, 'cm-1').value_in_au,
@@ -57,7 +60,10 @@ sbm = SpinBosonModel(
 )
 
 # Define the topological structure of the ML-MCTDH tree
-graph, root = sbm.autograph_with_aux(n_branch=3)
+graph, root = (
+    sbm.autograph_with_aux(n_branch=2) if finite_temperature else
+    sbm.autograph(n_branch=2)
+)
 root = Tensor.generate(graph, root)
 
 # Define the detailed parameters for the MC-MCTDH tree
@@ -78,50 +84,58 @@ for s, i, t, j in elec_r.linkage_visitor(leaf=False):
     if (s, i, t, j) not in bond_dict:
         raise NotImplementedError()
 # INNER part
-inner_r = root[1][0]
-bond_dict[(root, 1, inner_r, 0)] = 30
+inner_r = root[1][0] if including_bath else root
+if including_bath:
+    bond_dict[(root, 1, inner_r, 0)] = 60
 for s, i, t, j in inner_r.linkage_visitor(leaf=False):
     if (s, i, t, j) not in bond_dict:
-        bond_dict[(s, i, t, j)] = 20
+        bond_dict[(s, i, t, j)] = 50
 # OUTER part
 outer_r = root[2][0]
 bond_dict[(root, 2, outer_r, 0)] = 20
 for s, i, t, j in root[2][0].linkage_visitor(leaf=False):
     if (s, i, t, j) not in bond_dict:
         bond_dict[(s, i, t, j)] = 10
-solver.autocomplete(bond_dict, max_entangled=True)
+solver.autocomplete(bond_dict, max_entangled=finite_temperature)
 
 # Define the computation details
 solver.settings(
     ode_method='RK45',
     ps_method='split-unite'
 )
+print("Size of a wfn: {} complexes".format(len(root.vectorize())))
 
 # Do the imaginary time propogation
-print("Size of a wfn: {} complexes".format(len(root.vectorize())))
-inv_tem = 1 / 500
-for time, _ in solver.propagator(
-    steps=1000,
-    ode_inter=Quantity(inv_tem / 1000, unit='K-1').value_in_au,
-    split=True,
-    imaginary=True
-):
-    t = Quantity(time).convert_to(unit='K-1').value
-    z = solver.relative_partition_function
-    kelvin = 'inf' if abs(t) < 1.e-14 else 1.0 / t
-    logging.warning('Temperatue: {} K; relative Z: {}'
-                    .format(kelvin, z))
+if finite_temperature:
+    inv_tem = 1 / 500
+    steps = 100
+    for time, _ in solver.propagator(
+        steps=steps,
+        ode_inter=Quantity(inv_tem / steps, unit='K-1').value_in_au,
+        split=True,
+        imaginary=True
+    ):
+        t = Quantity(time).convert_to(unit='K-1').value
+        z = solver.relative_partition_function
+        kelvin = 'inf' if abs(t) < 1.e-14 else 1.0 / t
+        logging.warning('Temperatue: {} K; relative Z: {}'
+                        .format(kelvin, z))
 
 # Define the obersevable of interest
 projector = np.array([[0., 0.],
                       [0., 1.]])
-op = [[[elec_r, projector]]]
+for l in root.leaves():
+    if l.name == sbm.elec_leaf:
+        elec_leaf = l
+        break
+op = [[[elec_leaf, projector]]]
 
 # Do the real time propogation
 tp_list = []
+steps = 100
 for time, _ in solver.propagator(
-    steps=400,
-    ode_inter=Quantity(0.25, 'fs').value_in_au,
+    steps=steps,
+    ode_inter=Quantity(100 / steps, 'fs').value_in_au,
     split=True,
     imaginary=False
 ):
