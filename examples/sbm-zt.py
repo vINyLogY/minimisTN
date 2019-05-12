@@ -59,8 +59,11 @@ sbm = SpinBosonModel(
     omega=Quantity(13000, 'cm-1').value_in_au,
 )
 
+# Define the topological structure of the ML-MCTDH tree
 graph, root = sbm.autograph(n_branch=2)
 root = Tensor.generate(graph, root)
+
+# Define the detailed parameters for the MC-MCTDH tree
 solver = MultiLayer(root, sbm.h_list, f_list=sbm.f_list,
                     use_str_name=True)
 bond_dict = {}
@@ -85,15 +88,19 @@ if including_bath:
     for s, i, t, j in root[2][0].linkage_visitor(leaf=False):
         bond_dict[(s, i, t, j)] = 10
 solver.autocomplete(bond_dict, max_entangled=False)
+
+# Define the computation details
 solver.settings(
     cmf_steps=1,
     ode_method='RK45',
     ps_method='split-unite'
 )
-projector = np.array([[0., 0.],
-                        [0., 1.]])
-op = [[[elec_r, projector]]]
 print("Size of a wfn: {} complexes".format(len(root.vectorize())))
+
+# Define the obersevable of interest
+projector = np.array([[0., 0.],
+                      [0., 1.]])
+op = [[[root[0][0], projector]]]
 t_p = []
 for time, _ in solver.propagator(
     steps=400,
@@ -103,8 +110,7 @@ for time, _ in solver.propagator(
     t, p = (Quantity(time).convert_to(unit='fs').value,
             solver.expection(op=op))
     t_p.append((t, p))
-    print('Time: {:.2f} fs, P2: {}'.format(t, p))
+    logging.warning('Time: {:.2f} fs, P2: {}'.format(t, p))
 
-# Check SBM
-t, p = zip(*t_p)
+# Save the results
 np.save('sbm-zt', t_p)

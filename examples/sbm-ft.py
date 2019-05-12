@@ -31,6 +31,7 @@ logging.basicConfig(
     format='%(levelname)s: (In %(module)s)[%(funcName)s] %(message)s',
     level=logging.INFO
 )
+
 including_bath = False
 
 # Define parameters of the model.
@@ -73,7 +74,7 @@ for s, i, t, j in root.linkage_visitor():
         bond_dict[(s, i, t, j)] = dim
         s_ax = s.axis
         p, p_ax = s[s_ax]
-        bond_dict[(p, p_ax, s, s_ax)] = (dim ** 2 / 2 if dim > 9 else
+        bond_dict[(p, p_ax, s, s_ax)] = (dim if dim > 9 else
                                          dim ** 2)
 # ELEC part
 elec_r = root[0][0]
@@ -98,7 +99,8 @@ solver.autocomplete(bond_dict, max_entangled=True)
 
 # Define the computation details
 solver.settings(
-    ode_method='RK23',
+    cmf_steps=1,
+    ode_method='RK45',
     ps_method='split-unite'
 )
 print("Size of a wfn: {} complexes".format(len(root.vectorize())))
@@ -115,17 +117,13 @@ for time, _ in solver.propagator(
     t = Quantity(time).convert_to(unit='K-1').value
     z = solver.relative_partition_function
     kelvin = 'inf' if abs(t) < 1.e-14 else 1.0 / t
-    logging.warning('Temperatue: {} K; relative Z: {}'
+    logging.warning('Temperatue: {:.2f} K; relative Z: {}'
                     .format(kelvin, z))
 
 # Define the obersevable of interest
 projector = np.array([[0., 0.],
                       [0., 1.]])
-for l in root.leaves():
-    if l.name == sbm.elec_leaf:
-        elec_leaf = l
-        break
-op = [[[elec_leaf, projector]]]
+op = [[[root[0][0][0][0], projector]]]
 
 # Do the real time propogation
 tp_list = []
@@ -138,7 +136,7 @@ for time, _ in solver.propagator(
 ):
     t = Quantity(time).convert_to(unit='fs').value
     p = solver.expection(op=op)
-    logging.warning('Time: {} fs; P2: {}'.format(t, p))
+    logging.warning('Time: {:.2f} fs; P2: {}'.format(t, p))
     tp_list.append((t, p))
 
 # Save the results
