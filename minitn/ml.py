@@ -158,15 +158,25 @@ class MultiLayer(object):
         prod_list = [1]
         for n in n_list:
             prod_list.append(prod_list[-1] * n)
-        prod_list = prod_list[:-1]
-        yield 0
-        for n in count(1):
-            if n >= min(n_list):
-                break
-            cases = combinations_with_replacement(list(range(length)), n)
-            for indice in list(cases):
-                code = sum((prod_list[i] for i in indice))
-                yield code
+        prod_list = prod_list
+
+        def key(case):
+            return sum(n * i for n, i in zip(prod_list, case))
+ 
+        combinations = {0: [[0] * length]}
+        for m in range(prod_list[-1]):
+            if m not in combinations:
+                permutation = [
+                    case[:j] + [case[j] + 1] + case[j + 1:]
+                    for case in combinations[m - 1] for j in range(length)
+                    if case[j] + 1 < n_list[j]
+                ]
+                combinations[m] = []
+                for case in permutation:
+                    if case not in combinations[m]:
+                        combinations[m].append(case)
+            for case in combinations[m]:
+                yield key(case)
 
     def _local_matvec(self, leaf):
         h = None
@@ -230,12 +240,12 @@ class MultiLayer(object):
                     if axis is not None:
                         array = np.moveaxis(array, 0, axis)
                 t.set_array(array)
+                assert (t.axis is None or
+                        np.linalg.matrix_rank(t.local_norm()) ==
+                        t.shape[t.axis])
         if __debug__:
             for t in self.root.visitor():
                 t.check_completness(strict=True)
-                assert (isinstance(t, Leaf) or t.axis is None or
-                        np.linalg.matrix_rank(t.local_norm()) ==
-                        t.shape[t.axis])
         return
 
     def term_visitor(self, use_cache=False, op=None, imaginary=False):
@@ -706,7 +716,7 @@ class MultiLayer(object):
 if __name__ == '__main__':
     for n, i in enumerate(MultiLayer.triangular([10, 10, 10])):
         print('{:03d}'.format(i))
-        if n > 20:
+        if n > 30:
             break
 
 # EOF

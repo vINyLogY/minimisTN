@@ -95,7 +95,7 @@ if including_bath:
     for s, i, t, j in root[2][0].linkage_visitor(leaf=False):
         if (s, i, t, j) not in bond_dict:
             bond_dict[(s, i, t, j)] = 10
-solver.autocomplete(bond_dict, max_entangled=True)
+solver.autocomplete(bond_dict, max_entangled=False)
 
 # Define the computation details
 solver.settings(
@@ -106,28 +106,28 @@ solver.settings(
 print("Size of a wfn: {} complexes".format(len(root.vectorize())))
 
 # Do the imaginary time propogation
-inv_tem = 1 / 500
-steps = 500
-for time, _ in solver.propagator(
-    steps=steps,
-    ode_inter=Quantity(inv_tem / steps, unit='K-1').value_in_au,
-    split=True,
-    imaginary=True
-):
-    t = Quantity(time).convert_to(unit='K-1').value
-    z = solver.relative_partition_function
-    kelvin = 'inf' if abs(t) < 1.e-14 else 1.0 / t
-    logging.warning('Temperatue: {:.2f} K; relative Z: {}'
-                    .format(kelvin, z))
+# inv_tem = 1 / 500
+# steps = 1000
+# for time, _ in solver.propagator(
+#     steps=steps,
+#     ode_inter=Quantity(inv_tem / steps, unit='K-1').value_in_au,
+#     split=True,
+#     imaginary=True
+# ):
+#     t = Quantity(time).convert_to(unit='K-1').value
+#     z = solver.relative_partition_function
+#     kelvin = 'inf' if abs(t) < 1.e-14 else 1.0 / t
+#     logging.warning('Temperatue: {} K; ln(Z/Z_0): {}'
+#                     .format(kelvin, np.log(z)))
 
 # Define the obersevable of interest
 projector = np.array([[0., 0.],
                       [0., 1.]])
-op = [[[root[0][0][0][0], projector]]]
+op = [[[root[0][0][1][0], projector]]]
 
 # Do the real time propogation
 tp_list = []
-steps = 500
+steps = 250
 for time, _ in solver.propagator(
     steps=steps,
     ode_inter=Quantity(100 / steps, 'fs').value_in_au,
