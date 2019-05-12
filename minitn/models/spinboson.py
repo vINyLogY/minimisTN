@@ -107,14 +107,12 @@ class SpinBosonModel(object):
         if self.including_bath:
             inner_spfs = [name + 's' for name in self.inner_leaves]
             outer_spfs = [name + 's' for name in self.outer_leaves]
-            self._update(graph, inner_spfs, 'INNER', n_branch, prefix='AI1')
-            self._update(graph, outer_spfs, 'OUTER', n_branch, prefix='AI2')
         else:
             mid = len(self.inner_leaves) // 2
             inner_spfs = [name + 's' for name in self.inner_leaves[:mid]]
             outer_spfs = [name + 's' for name in self.inner_leaves[mid:]]
-            self._update(graph, inner_spfs, 'INNER', n_branch, prefix='AI')
-            self._update(graph, outer_spfs, 'OUTER', n_branch, prefix='AO')
+        self._update(graph, inner_spfs, 'INNER', n_branch, prefix='AI')
+        self._update(graph, outer_spfs, 'OUTER', n_branch, prefix='AO')
         leaves = self.leaves
         spfs = [name + 's' for name in leaves]
         aux_leaves = [name + "'" for name in leaves]
@@ -241,7 +239,7 @@ class SpinBosonModel(object):
 
 if __name__ == '__main__':
     # A spin-boson model for photoinduced ET reactions in mixed-valence
-    # systems in solution at zero/finite temperature.
+    # systems in solution at zero temperature.
     from minitn.lib.units import Quantity
     from minitn.tensor import Leaf, Tensor
     from minitn.ml import MultiLayer
@@ -250,7 +248,6 @@ if __name__ == '__main__':
         format='(In %(module)s)[%(funcName)s] %(message)s',
         level=logging.INFO
     )
-    finite_temperature = True
     including_bath = False
 
     sbm = SpinBosonModel(
@@ -277,10 +274,7 @@ if __name__ == '__main__':
         omega=Quantity(13000, 'cm-1').value_in_au,
     )
 
-    graph, root = (
-        sbm.autograph_with_aux(n_branch=2) if finite_temperature else
-        sbm.autograph(n_branch=2)
-    )
+    graph, root = sbm.autograph(n_branch=2)
     root = Tensor.generate(graph, root)
     solver = MultiLayer(root, sbm.h_list, f_list=sbm.f_list,
                         use_str_name=True)
@@ -288,68 +282,38 @@ if __name__ == '__main__':
     # Leaves
     for s, i, t, j in root.linkage_visitor():
         if isinstance(t, Leaf):
-            dim = sbm.dimensions[t.name]
-            bond_dict[(s, i, t, j)] = dim
-            if finite_temperature:
-                s_ax = s.axis
-                p, p_ax = s[s_ax]
-                bond_dict[(p, p_ax, s, s_ax)] = dim if dim > 9 else dim ** 2
+            bond_dict[(s, i, t, j)] = sbm.dimensions[t.name]
     # ELEC part
     elec_r = root[0][0]
     for s, i, t, j in elec_r.linkage_visitor(leaf=False):
-        if (s, i, t, j) not in bond_dict:
-            raise NotImplementedError()
+        raise NotImplementedError()
     # INNER part
     inner_r = root[1][0] if including_bath else root
     if including_bath:
         bond_dict[(root, 1, inner_r, 0)] = 60
     for s, i, t, j in inner_r.linkage_visitor(leaf=False):
-        if (s, i, t, j) not in bond_dict:
-            bond_dict[(s, i, t, j)] = 50
+        bond_dict[(s, i, t, j)] = 50
     # OUTER part
     if including_bath:
         outer_r = root[2][0]
         bond_dict[(root, 2, outer_r, 0)] = 20
         for s, i, t, j in root[2][0].linkage_visitor(leaf=False):
-            if (s, i, t, j) not in bond_dict:
-                bond_dict[(s, i, t, j)] = 10
-    solver.autocomplete(bond_dict, max_entangled=finite_temperature)
+            bond_dict[(s, i, t, j)] = 10
+    solver.autocomplete(bond_dict, max_entangled=False)
     solver.settings(
         cmf_steps=1,
         ode_method='RK45',
         ps_method='split-unite'
     )
-    print("Size of a wfn: {} complexes".format(len(root.vectorize())))
-
-    if finite_temperature:
-        # Do the imaginary time propogation
-        inv_tem = 1 / 500
-        for time, _ in solver.propagator(
-            steps=200,
-            ode_inter=Quantity(inv_tem / 200, unit='K-1').value_in_au,
-            split=True,
-            imaginary=True
-        ):
-            t = Quantity(time).convert_to(unit='K-1').value
-            z = solver.relative_partition_function
-            kelvin = 'inf' if abs(t) < 1.e-14 else 1.0 / t
-            logging.warning('Temperatue: {} K; relative Z: {}'
-                            .format(kelvin, z))
-
     projector = np.array([[0., 0.],
                           [0., 1.]])
-    for l in root.leaves():
-        if l.name == sbm.elec_leaf:
-            elec_leaf = l
-            break
-    op = [[[elec_leaf, projector]]]
-
+    op = [[[elec_r, projector]]]
+    print("Size of a wfn: {} complexes".format(len(root.vectorize())))
     t_p = []
     for time, _ in solver.propagator(
         steps=400,
         ode_inter=Quantity(0.25, 'fs').value_in_au,
         split=True,
-        imaginary=finite_temperature
     ):
         t, p = (Quantity(time).convert_to(unit='fs').value,
                 solver.expection(op=op))
@@ -361,6 +325,6 @@ if __name__ == '__main__':
     with figure():
         plt.plot(t, p, '-')
         plt.show()
-    np.save('spin-boson-ft2', t_p)
+    np.save('sbm-zt', t_p)
 
 # EOF

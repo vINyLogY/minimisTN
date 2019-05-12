@@ -262,7 +262,11 @@ class MultiLayer(object):
             for leaf, array in term:
                 if callable(array):
                     array = array(time)
-                leaf.set_array(array)
+                if isinstance(leaf, Leaf):
+                    leaf.set_array(array)
+                else:
+                    raise RuntimeError('{} is not leaf in term {}'
+                                       .format(leaf, term))
             yield n
             for leaf, _ in term:
                 leaf.reset()

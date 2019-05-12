@@ -31,7 +31,6 @@ logging.basicConfig(
     format='%(levelname)s: (In %(module)s)[%(funcName)s] %(message)s',
     level=logging.INFO
 )
-finite_temperature = True
 including_bath = False
 
 # Define parameters of the model.
@@ -60,10 +59,7 @@ sbm = SpinBosonModel(
 )
 
 # Define the topological structure of the ML-MCTDH tree
-graph, root = (
-    sbm.autograph_with_aux(n_branch=2) if finite_temperature else
-    sbm.autograph(n_branch=2)
-)
+graph, root = sbm.autograph_with_aux(n_branch=2) 
 root = Tensor.generate(graph, root)
 
 # Define the detailed parameters for the MC-MCTDH tree
@@ -75,10 +71,10 @@ for s, i, t, j in root.linkage_visitor():
     if isinstance(t, Leaf):
         dim = sbm.dimensions[t.name]
         bond_dict[(s, i, t, j)] = dim
-        if finite_temperature:
-            s_ax = s.axis
-            p, p_ax = s[s_ax]
-            bond_dict[(p, p_ax, s, s_ax)] = dim if dim > 9 else dim ** 2
+        s_ax = s.axis
+        p, p_ax = s[s_ax]
+        bond_dict[(p, p_ax, s, s_ax)] = (dim ** 2 / 2 if dim > 9 else
+                                         dim ** 2)
 # ELEC part
 elec_r = root[0][0]
 for s, i, t, j in elec_r.linkage_visitor(leaf=False):
@@ -92,35 +88,35 @@ for s, i, t, j in inner_r.linkage_visitor(leaf=False):
     if (s, i, t, j) not in bond_dict:
         bond_dict[(s, i, t, j)] = 50
 # OUTER part
-outer_r = root[2][0]
-bond_dict[(root, 2, outer_r, 0)] = 20
-for s, i, t, j in root[2][0].linkage_visitor(leaf=False):
-    if (s, i, t, j) not in bond_dict:
-        bond_dict[(s, i, t, j)] = 10
-solver.autocomplete(bond_dict, max_entangled=finite_temperature)
+if including_bath:
+    outer_r = root[2][0]
+    bond_dict[(root, 2, outer_r, 0)] = 20
+    for s, i, t, j in root[2][0].linkage_visitor(leaf=False):
+        if (s, i, t, j) not in bond_dict:
+            bond_dict[(s, i, t, j)] = 10
+solver.autocomplete(bond_dict, max_entangled=True)
 
 # Define the computation details
 solver.settings(
-    ode_method='RK45',
+    ode_method='RK23',
     ps_method='split-unite'
 )
 print("Size of a wfn: {} complexes".format(len(root.vectorize())))
 
 # Do the imaginary time propogation
-if finite_temperature:
-    inv_tem = 1 / 500
-    steps = 100
-    for time, _ in solver.propagator(
-        steps=steps,
-        ode_inter=Quantity(inv_tem / steps, unit='K-1').value_in_au,
-        split=True,
-        imaginary=True
-    ):
-        t = Quantity(time).convert_to(unit='K-1').value
-        z = solver.relative_partition_function
-        kelvin = 'inf' if abs(t) < 1.e-14 else 1.0 / t
-        logging.warning('Temperatue: {} K; relative Z: {}'
-                        .format(kelvin, z))
+inv_tem = 1 / 500
+steps = 500
+for time, _ in solver.propagator(
+    steps=steps,
+    ode_inter=Quantity(inv_tem / steps, unit='K-1').value_in_au,
+    split=True,
+    imaginary=True
+):
+    t = Quantity(time).convert_to(unit='K-1').value
+    z = solver.relative_partition_function
+    kelvin = 'inf' if abs(t) < 1.e-14 else 1.0 / t
+    logging.warning('Temperatue: {} K; relative Z: {}'
+                    .format(kelvin, z))
 
 # Define the obersevable of interest
 projector = np.array([[0., 0.],
@@ -133,14 +129,14 @@ op = [[[elec_leaf, projector]]]
 
 # Do the real time propogation
 tp_list = []
-steps = 100
+steps = 500
 for time, _ in solver.propagator(
     steps=steps,
     ode_inter=Quantity(100 / steps, 'fs').value_in_au,
     split=True,
     imaginary=False
 ):
-    t = Quantity(time).convert_to(unit='fs').value,
+    t = Quantity(time).convert_to(unit='fs').value
     p = solver.expection(op=op)
     logging.warning('Time: {} fs; P2: {}'.format(t, p))
     tp_list.append((t, p))
