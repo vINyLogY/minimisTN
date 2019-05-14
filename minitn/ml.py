@@ -53,7 +53,7 @@ class MultiLayer(object):
     svd_err = None
     svd_rank = None
     pinv = True
-    max_ode_steps = 10000
+    max_ode_steps = 1000
     cmf_steps = 1
     ode_method = 'RK45'
     snd_order = False
@@ -221,6 +221,7 @@ class MultiLayer(object):
                                            init_vecs=[vec_i],
                                            n_vals=n_parent)
                     array = np.array(da.kernel(search_mode=True))
+                    assert len(array) == n_parent
                     array = np.reshape(array, (n_parent, n_leaf, n_leaf))
                 else:
                     n_children = []

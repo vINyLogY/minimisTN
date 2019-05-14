@@ -14,7 +14,7 @@ from minitn.lib.tools import figure, BraceMessage as __
 
 def plot():
     root = 'data/'
-    str1 = 'sbm-ft'
+    str1 = 'sbm-ft-no-coupling'
 
     tp1 = np.load(root + str1 + '.npy')
     t1, p1 = zip(*tp1)
