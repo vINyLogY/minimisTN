@@ -89,7 +89,7 @@ def sbm_zt(including_bath=False, split=False):
     # Define the computation details
     solver.settings(
         max_ode_steps=100,
-        cmf_steps=1,
+        cmf_steps=(1 if split else 10),
         ode_method='RK23',
         ps_method='split-unite'
     )

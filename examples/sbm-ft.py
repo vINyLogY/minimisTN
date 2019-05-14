@@ -96,7 +96,7 @@ def sbm_ft(including_bath=False, split=False):
     # Define the computation details
     solver.settings(
         max_ode_steps=100,
-        cmf_steps=1,
+        cmf_steps=(1 if split else 10),
         ode_method='RK23',
         ps_method='split-unite'
     )
@@ -146,5 +146,5 @@ logging.basicConfig(
     format='%(levelname)s: (In %(module)s)[%(funcName)s] %(message)s',
     level=logging.INFO
 )
-sbm_ft(including_bath=True, split=False)
-sbm_ft(including_bath=True, split=True)
+sbm_ft(including_bath=False, split=False)
+sbm_ft(including_bath=False, split=True)
