@@ -8,13 +8,13 @@ from __future__ import division
 import logging
 from builtins import filter, map, range, zip
 from functools import partial
-from itertools import count
+from itertools import count, product
 
 import numpy as np
 from scipy import linalg
 import matplotlib.pyplot as plt
 
-from minitn.lib.tools import __, time_this, figure
+from minitn.lib.tools import __, time_this, figure, plt
 from ft_sho_model import test_2layers
 
 
@@ -22,18 +22,39 @@ from ft_sho_model import test_2layers
 def main():
     n_dvr = 50
     dofs = 2
-    exp = test_2layers(n_spf=10, n_dvr=n_dvr, dofs=dofs)
-    exp.settings(cmf_steps=1,
-                 ode_method='RK23',
-                 ps_method='s')
-    p = exp.propagator(ode_inter=0.01, split=True, imaginary=True)
-    for (t1, _), (t, z) in zip(p, ref(n_dvr=n_dvr, dofs=dofs)):
-        assert abs(2 * t1 - t) < 1.e-8
-        z1 = exp.relative_partition_function * (n_dvr ** dofs)
-        msg = "beta:{:.4f}   Z1:{:.8f}   Z:{:.8f}".format(
-            t, z1, z
+    ode_inter = 0.01
+    zipped_dict = {}
+    for m, ode_inter in product(range(2, 6), [0.005, 0.01, 0.02]):
+        exp = test_2layers(n_spf=m, n_dvr=n_dvr, dofs=dofs)
+        exp.settings(
+            cmf_steps=1,
+            ode_method='RK45',
+            ps_method='s'
         )
-        print(msg)
+        p = exp.propagator(ode_inter=ode_inter, split=True, imaginary=True)
+        zipped = []
+        for t1, _ in p:
+            z1 = exp.relative_partition_function * (n_dvr ** dofs)
+            zipped.append((2 * t1, np.log(np.real(z1))))
+            print(m, 2 * t1, np.log(np.real(z1)))
+            if 2 * t1 > 1:
+                break
+        zipped_dict[(m, ode_inter)] = zipped
+    ref_zipped = []
+    for t, z in ref(ode_inter=0.005, n_dvr=n_dvr, dofs=dofs):
+        ref_zipped.append((t, np.log(z)))
+        if t > 1:
+            break
+    with figure():
+        for (m, ode_inter), zipped in zipped_dict.items():
+            t, z = zip(*zipped)
+            label = "M={}, tau={}".format(m, ode_inter)
+            plt.plot(t, z, '.', label=label)
+        t, z = zip(*ref_zipped)
+        plt.plot(t, z, '-', label='Ref')
+        plt.legend(loc='best')
+        plt.show()
+    print()
     return
 
 
@@ -61,6 +82,6 @@ def ref(ode_inter=0.01, c=0.5, n_dvr=40, dofs=2):
 
 logging.basicConfig(
     format='%(levelname)s: (In %(funcName)s, %(module)s)  %(message)s',
-    level=logging.WARNING
+    level=logging.WARN
 )
 main()
