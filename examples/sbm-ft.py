@@ -71,7 +71,7 @@ def sbm_ft(including_bath=False, split=False):
             bond_dict[(s, i, t, j)] = dim
             s_ax = s.axis
             p, p_ax = s[s_ax]
-            bond_dict[(p, p_ax, s, s_ax)] = dim
+            bond_dict[(p, p_ax, s, s_ax)] = dim ** 2 if dim < 9 else 50
     # ELEC part
     elec_r = root[0][0]
     for s, i, t, j in elec_r.linkage_visitor(leaf=False):
@@ -97,7 +97,7 @@ def sbm_ft(including_bath=False, split=False):
     solver.settings(
         max_ode_steps=100,
         cmf_steps=(1 if split else 10),
-        ode_method='RK23',
+        ode_method='RK45',
         ps_method='split-unite'
     )
     print("Size of a wfn: {} complexes".format(len(root.vectorize())))
@@ -124,7 +124,7 @@ def sbm_ft(including_bath=False, split=False):
 
     # Do the real time propogation
     tp_list = []
-    steps=1000
+    steps=2000
     root.is_normalized=True
     for time, _ in solver.propagator(
         steps=steps,
@@ -147,4 +147,3 @@ logging.basicConfig(
     level=logging.INFO
 )
 sbm_ft(including_bath=False, split=False)
-sbm_ft(including_bath=False, split=True)
