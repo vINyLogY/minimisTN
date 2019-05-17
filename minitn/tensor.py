@@ -311,6 +311,7 @@ class Tensor(object):
                 yield linkage
             yield (True, (child, j, self, i))
 
+    # @profile
     def partial_env(self, i, proper=False, use_aux=False):
         """
         Parameters
@@ -759,7 +760,17 @@ class Tensor(object):
             return Tensor._partial_product(array1, i, array2, j)
 
     @staticmethod
+    # @profile
     def _partial_product(array1, i, array2, j):
+        l1, l2 = array1.ndim, array2.ndim
+        ans = np.tensordot(array1, array2, axes=([i], [j]))
+        ans = np.moveaxis(ans, list(range(l1 - 1, l1 + l2 - 2)),
+                          list(range(i, i + l2 - 1)))
+        return ans
+
+    @staticmethod
+    # @profile
+    def __partial_product(array1, i, array2, j):
         r"""Times a matrix to a tensor.
 
                |
@@ -791,6 +802,7 @@ class Tensor(object):
         return ans
 
     @staticmethod
+    # @profile
     def partial_trace(array1, i, array2, j):
         r"""Partial trace of 2 tensors, return a matrix. 
 

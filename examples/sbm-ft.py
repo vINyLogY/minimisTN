@@ -51,8 +51,8 @@ def sbm_ft(including_bath=False, split=False):
         lambda_d=Quantity(1250, 'cm-1').value_in_au,
         omega_d=Quantity(50, 'cm-1').value_in_au,
         mu=Quantity(250, 'cm-1').value_in_au,
-        tau=Quantity(1, 'fs').value_in_au,
-        t_d=Quantity(2, 'fs').value_in_au,
+        tau=Quantity(30, 'fs').value_in_au,
+        t_d=Quantity(60, 'fs').value_in_au,
         omega=Quantity(13000, 'cm-1').value_in_au,
     )
 

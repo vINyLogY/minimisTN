@@ -15,8 +15,8 @@ from minitn.lib.tools import figure, BraceMessage as __
 def plot():
     root = 'data/'
     str_list = [
-        'sbm-ft-origin',
         'sbm-ft-split',
+        'sbm-ft-split-case1',
     ]
     with figure():
         tp_list = []
@@ -27,7 +27,6 @@ def plot():
             tp_list.append(tmp)
         plt.legend(loc='best')
         plt.xlim(0, 100)
-        plt.ylim(0, 1)
         plt.show()
 
 

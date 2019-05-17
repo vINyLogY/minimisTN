@@ -222,12 +222,12 @@ class DavidsonAlgorithm(object):
             else:
                 self._calc_trial_vecs()
 
-        self.eigvals = self._ritz_vals
-        self.eigvecs = list(self._get_ritz_vecs())
         if not search_mode:
+            self.eigvals = self._ritz_vals
+            self.eigvecs = list(self._get_ritz_vecs())
             return self.eigvals, self.eigvecs
         else:
-            return self._search_space[:self._n_vals]
+            return self._search_space
 
     def _is_converged(self):
         if (

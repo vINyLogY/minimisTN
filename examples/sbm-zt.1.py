@@ -101,7 +101,7 @@ def sbm_zt(including_bath=False, split=False):
     op = [[[root[0][0], projector]]]
     t_p = []
     for time, _ in solver.propagator(
-        steps=1,
+        steps=1000,
         ode_inter=Quantity(0.1, 'fs').value_in_au,
         split=split,
     ):
@@ -121,4 +121,4 @@ logging.basicConfig(
     format='%(levelname)s: (In %(module)s)[%(funcName)s] %(message)s',
     level=logging.INFO
 )
-sbm_zt(including_bath=False, split=False)
+sbm_zt(including_bath=True, split=True)

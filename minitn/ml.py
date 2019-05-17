@@ -217,11 +217,21 @@ class MultiLayer(object):
                     n_parent = n_bond_dict[(p, p_i, t, axis)]
                     vec_i = np.diag(np.ones((n_leaf,)) / np.sqrt(n_leaf))
                     vec_i = np.reshape(vec_i, -1)
+                    init_vecs = [vec_i]
+                    for j in range(n_parent - 1):
+                        v = np.zeros((n_leaf ** 2,))
+                        v[j] = 1.0
+                        init_vecs.append(v)
                     da = DavidsonAlgorithm(self._local_matvec(leaf),
-                                           init_vecs=[vec_i],
+                                           init_vecs=init_vecs,
                                            n_vals=n_parent)
                     array = np.array(da.kernel(search_mode=True))
+                    if len(array) >= n_parent:
+                        array = array[:n_parent]
+                    else:
+                        raise RuntimeError()
                     assert len(array) == n_parent
+                    assert np.allclose(array[0], vec_i)
                     array = np.reshape(array, (n_parent, n_leaf, n_leaf))
                 else:
                     n_children = []
@@ -302,6 +312,7 @@ class MultiLayer(object):
             ans /= self.root.global_square()
         return ans
 
+    # @profile
     def _single_eom(self, tensor, n, cache=False):
         """C.f. `Multi-Configuration Time Dependent Hartree Theory: a Tensor
         Network Perspective`, p38. This method does not contain the `i hbar`
@@ -364,6 +375,7 @@ class MultiLayer(object):
                 self.inv_density[tensor] = inv
         return self.inv_density
 
+    # @profile
     def _form_env(self):
         self.env_ = {}
         network = self.root.visitor(axis=None, leaf=False)
