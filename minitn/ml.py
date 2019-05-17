@@ -218,18 +218,17 @@ class MultiLayer(object):
                     vec_i = np.diag(np.ones((n_leaf,)) / np.sqrt(n_leaf))
                     vec_i = np.reshape(vec_i, -1)
                     init_vecs = [vec_i]
-                    for j in range(n_parent - 1):
-                        v = np.zeros((n_leaf ** 2,))
-                        v[j] = 1.0
-                        init_vecs.append(v)
                     da = DavidsonAlgorithm(self._local_matvec(leaf),
                                            init_vecs=init_vecs,
                                            n_vals=n_parent)
-                    array = np.array(da.kernel(search_mode=True))
+                    array = da.kernel(search_mode=True)
                     if len(array) >= n_parent:
                         array = array[:n_parent]
                     else:
-                        raise RuntimeError()
+                        for j in range(n_parent - len(array)):
+                            v = np.zeros((n_leaf ** 2,))
+                            v[j] = 1.0
+                            array.append(v)
                     assert len(array) == n_parent
                     assert np.allclose(array[0], vec_i)
                     array = np.reshape(array, (n_parent, n_leaf, n_leaf))
@@ -251,6 +250,7 @@ class MultiLayer(object):
                     if axis is not None:
                         array = np.moveaxis(array, 0, axis)
                 t.set_array(array)
+                t.normalize(forced=True)
                 assert (t.axis is None or
                         np.linalg.matrix_rank(t.local_norm()) ==
                         t.shape[t.axis])
