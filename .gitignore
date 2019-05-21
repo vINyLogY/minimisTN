@@ -33,3 +33,6 @@ var/
 *.mp4
 *.png
 *.svg
+
+# Backup all data in data/
+!/data/*
