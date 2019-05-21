@@ -22,7 +22,7 @@ from builtins import filter, map, range, zip
 
 import numpy as np
 
-from minitn.lib.tools import time_this
+from minitn.lib.tools import time_this, figure, plt, __
 from minitn.lib.units import Quantity
 from minitn.ml import MultiLayer
 from minitn.models.spinboson import SpinBosonModel
@@ -37,12 +37,9 @@ def sbm_ft(including_bath=False):
         e1=0.,
         e2=Quantity(6500, 'cm-1').value_in_au,
         v=Quantity(500, 'cm-1').value_in_au,
-        omega_list=[Quantity(2100, 'cm-1').value_in_au,
-                    Quantity(650, 'cm-1').value_in_au,
-                    Quantity(400, 'cm-1').value_in_au,
-                    Quantity(150, 'cm-1').value_in_au],
-        lambda_list=([Quantity(750, 'cm-1').value_in_au] * 4),
-        dim_list=[10, 14, 20, 30],
+        omega_list=[Quantity(2100, 'cm-1').value_in_au],
+        lambda_list=([Quantity(750, 'cm-1').value_in_au]),
+        dim_list=[10],
         stop=Quantity(10000, 'cm-1').value_in_au,
         n=32,
         dim=30,
@@ -57,7 +54,11 @@ def sbm_ft(including_bath=False):
     )
 
     # Define the topological structure of the ML-MCTDH tree
-    graph, root = sbm.autograph_with_aux(n_branch=2) 
+    graph, root = {
+        'ROOT': ['ELECs', 'I0s'],
+        'ELECs': ['ELEC', "ELEC'"],
+        'I0s': ['I0', "I0'"],
+    }, 'ROOT'
     root = Tensor.generate(graph, root)
 
     # Define the detailed parameters for the MC-MCTDH tree
@@ -67,30 +68,14 @@ def sbm_ft(including_bath=False):
     # Leaves
     for s, i, t, j in root.linkage_visitor():
         if isinstance(t, Leaf):
-            dim = sbm.dimensions[t.name]
+            try:
+                dim = sbm.dimensions[t.name]
+            except KeyError:
+                dim = sbm.dimensions[t.name[:-1]]
             bond_dict[(s, i, t, j)] = dim
             s_ax = s.axis
             p, p_ax = s[s_ax]
             bond_dict[(p, p_ax, s, s_ax)] = dim ** 2 if dim < 9 else 50
-    # ELEC part
-    elec_r = root[0][0]
-    for s, i, t, j in elec_r.linkage_visitor(leaf=False):
-        if (s, i, t, j) not in bond_dict:
-            raise NotImplementedError()
-    # INNER part
-    inner_r = root[1][0] if including_bath else root
-    if including_bath:
-        bond_dict[(root, 1, inner_r, 0)] = 60
-    for s, i, t, j in inner_r.linkage_visitor(leaf=False):
-        if (s, i, t, j) not in bond_dict:
-            bond_dict[(s, i, t, j)] = 50
-    # OUTER part
-    if including_bath:
-        outer_r = root[2][0]
-        bond_dict[(root, 2, outer_r, 0)] = 20
-        for s, i, t, j in root[2][0].linkage_visitor(leaf=False):
-            if (s, i, t, j) not in bond_dict:
-                bond_dict[(s, i, t, j)] = 10
     solver.autocomplete(bond_dict, max_entangled=True)
 
     # Define the computation details
@@ -103,7 +88,7 @@ def sbm_ft(including_bath=False):
 
     # Do the imaginary time propogation
     inv_tem = 1 / 500
-    steps = 1000
+    steps = 100
     for time, _ in solver.propagator(
         steps=steps,
         ode_inter=Quantity(inv_tem / steps / 2, unit='K-1').value_in_au,
@@ -123,7 +108,7 @@ def sbm_ft(including_bath=False):
 
     # Do the real time propogation
     tp_list = []
-    steps=2000
+    steps=500
     root.is_normalized=True
     for time, _ in solver.propagator(
         steps=steps,
@@ -137,8 +122,16 @@ def sbm_ft(including_bath=False):
         tp_list.append((t, p))
 
     # Save the results
-    msg = 'split-origin'
+    msg = 'mini-split-origin-example'
     np.save('sbm-ft-{}'.format(msg), tp_list)
+
+    with figure():
+        t, p = zip(*tp_list)
+        plt.plot(t, p, '-', label='split-origin')
+        plt.legend(loc='best')
+        plt.xlim(0, 100)
+        plt.show()
+
 
 
 logging.basicConfig(

@@ -91,4 +91,22 @@ $$
     - MCTDH：$n_1 = 5, n_2 = 40$
     - 数据文件：`data/SHO_6_*`
 
-    
+### 模型：SBM (无溶剂)
+
+- ZT
+
+    $\tau \sim 0.25~\text{fs}$
+
+- FT (500 K)
+
+	str_list = [
+		'sbm-ft-split',
+		'sbm-ft-split-case1',
+	]
+
+
+
+
+### 模型：SBM (含溶剂)
+
+- ZT

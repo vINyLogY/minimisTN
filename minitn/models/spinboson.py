@@ -37,18 +37,18 @@ def huffman_tree(sources, importances=None, prefix='', n_branch=2):
     sequence = list(zip(sources, importances))
     graph = {}
     counter = 0
-    while len(sequence) >= n_branch:
+    while len(sequence) > 1:
         sequence.sort(key=key)
-        branch, sequence = sequence[:n_branch], sequence[n_branch:]
+        try:
+            branch, sequence = sequence[:n_branch], sequence[n_branch:]
+        except:
+            branch, sequence = sequence, []
         p = sum(map(key, branch))
         new = prefix + '{:02d}'.format(counter)
         graph[new] = list(map(string, branch))
         sequence.insert(0, (new, p))
         counter += 1
-    if n_branch > 2:
-        graph[prefix + '{:02d}'.format(counter)] = list(map(string, sequence))
-        counter += 1
-    return graph, (prefix + '{:02d}'.format(counter - 1))
+    return graph, string(sequence[0])
 
 
 class SpinBosonModel(object):
@@ -125,8 +125,11 @@ class SpinBosonModel(object):
     @staticmethod
     def _update(graph, leaves, root, n_branch, prefix='A'):
         subtree, r = huffman_tree(leaves, prefix=prefix)
-        subtree[root] = subtree.pop(r)
-        graph.update(subtree)
+        try:
+            subtree[root] = subtree.pop(r)
+            graph.update(subtree)
+        except KeyError:
+            pass
         return
 
     def collect_electric_terms(self, h_list, absorbed=False):

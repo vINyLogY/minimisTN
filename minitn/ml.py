@@ -520,7 +520,9 @@ class MultiLayer(object):
                 break
             if n % cmf_steps == 0:
                 if n >= self.max_ode_steps:
-                    raise RuntimeWarning('Reach ODE limit {}'.format(n))
+                    msg = __('Reach ODE limit {}', n)
+                    logging.warning(msg)
+                    raise RuntimeWarning(msg)
                 reformer()
             ode_solver.step()
             updater(ode_solver.y)
@@ -551,7 +553,7 @@ class MultiLayer(object):
         else:
             raise RuntimeError("Cannot propagate on Tensor {}"
                                "which is not a root node!".format(tensor))
-        logging.info(__("* Propagating at {} ({}) for {}",
+        logging.debug(__("* Propagating at {} ({}) for {}",
                         tensor, tensor.shape, tau))
         y0 = np.reshape(tensor.array, -1)
         with self.log_inner_product(level=logging.DEBUG):
