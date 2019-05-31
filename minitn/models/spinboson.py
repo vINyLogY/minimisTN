@@ -85,6 +85,22 @@ class SpinBosonModel(object):
         self.h_list, self.f_list = self.collect_electric_terms(h_list)
         return
 
+    def autograph_mctdh(self):
+        if self.including_bath:
+            raise NotImplementedError()
+        leaves = self.inner_leaves
+        spfs = [s + "s" for s in leaves]
+        graph = {'ROOT': [self.elec_leaf] + spfs}
+        graph.update(dict(zip(spfs, leaves)))
+        return graph, 'ROOT'
+
+    def autograph_full(self):
+        if self.including_bath:
+            raise NotImplementedError()
+        leaves = self.inner_leaves
+        graph = {'ROOT': [self.elec_leaf] + leaves}
+        return graph, 'ROOT'
+
     def autograph(self, n_branch=2):
         graph = {'ROOT': [self.elec_leaf, 'INNER', 'OUTER']}
         if self.including_bath:
