@@ -101,7 +101,7 @@ def iter_visitor(start, r, method='DFS'):
 
 @contextlib.contextmanager
 def figure(*args, **kwargs):
-    rc('font', **{'family': 'sans-serif', 'sans-serif': ['Helvetica']})
+    rc('font',family='Times New Roman')
     rc('text', usetex=True)
     fig = plt.figure(*args, **kwargs)
     # for Palatino and other serif fonts use:

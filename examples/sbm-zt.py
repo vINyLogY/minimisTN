@@ -90,7 +90,7 @@ def sbm_zt(including_bath=False, split=False):
     solver.settings(
         max_ode_steps=100,
         cmf_steps=(1 if split else 10),
-        ode_method='RK23',
+        ode_method='RK45',
         ps_method='split-unite'
     )
     print("Size of a wfn: {} complexes".format(len(root.vectorize())))
@@ -101,8 +101,8 @@ def sbm_zt(including_bath=False, split=False):
     op = [[[root[0][0], projector]]]
     t_p = []
     for time, _ in solver.propagator(
-        steps=1,
-        ode_inter=Quantity(0.1, 'fs').value_in_au,
+        steps=1000,
+        ode_inter=Quantity(0.25, 'fs').value_in_au,
         split=split,
     ):
         t, p = (Quantity(time).convert_to(unit='fs').value,

@@ -21,10 +21,10 @@ from ft_sho_model import test_2layers
 @time_this
 def main():
     n_dvr = 50
-    dofs = 2
+    dofs = 4
     ode_inter = 0.01
-    zipped_dict = {}
-    for m, ode_inter in product(range(2, 6), [0.005, 0.01, 0.02]):
+    cache = []
+    for m, ode_inter in product(range(3, 6), [0.005, 0.01, 0.02]):
         exp = test_2layers(n_spf=m, n_dvr=n_dvr, dofs=dofs)
         exp.settings(
             cmf_steps=1,
@@ -39,22 +39,24 @@ def main():
             print(m, 2 * t1, np.log(np.real(z1)))
             if 2 * t1 > 1:
                 break
-        zipped_dict[(m, ode_inter)] = zipped
+        cache.append((m, ode_inter, zipped))
     ref_zipped = []
     for t, z in ref(ode_inter=0.005, n_dvr=n_dvr, dofs=dofs):
         ref_zipped.append((t, np.log(z)))
         if t > 1:
             break
     with figure():
-        for (m, ode_inter), zipped in zipped_dict.items():
+        for m, ode_inter, zipped in cache:
             t, z = zip(*zipped)
-            label = "M={}, tau={}".format(m, ode_inter)
+            label = "$n={}$, $\\tau={}$".format(m, ode_inter)
             plt.plot(t, z, '.', label=label)
         t, z = zip(*ref_zipped)
-        plt.plot(t, z, '-', label='Ref')
+        plt.plot(t, z, 'k-', label='Ref')
         plt.legend(loc='best')
+        plt.xlabel(r'$\beta$ (a. u.)')
+        plt.ylabel(r'$\ln Z$')
         plt.show()
-    print()
+    np.save('tmp', cache)
     return
 
 

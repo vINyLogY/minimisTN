@@ -14,20 +14,19 @@ from minitn.lib.tools import figure, BraceMessage as __
 
 def plot():
     root = 'data/'
-    str2 = 'ref'
-    str1 = 'exp'
+    str2 = 'exp'
+    str1 = 'ref'
 
     t1 = np.load(root + str1 + '_t.npy')
     a1 = np.load(root + str1 + '_a.npy')
     t2 = np.load(root + str2 + '_t.npy')
     a2 = np.load(root + str2 + '_a.npy')
-    t3 = np.load(root + str1 + '2_t.npy')
-    a3 = np.load(root + str1 + '2_a.npy')
     with figure():
-        plt.plot(t2, np.abs(a2), '-', label='MCTDH')
-        plt.plot(t1, np.abs(a1), '--', label='ML-MCTDH-PS-U')
-        plt.plot(t3, np.abs(a3), '--', label='ML-MCTDH-PS-S')
+        plt.plot(t2, np.abs(a2)**2, '-', label='MCTDH')
+        plt.plot(t1, np.abs(a1)**2, '--', label='ML-MCTDH-PS')
         plt.legend(loc='best')
+        plt.xlabel(r'$t$ (a. u.)')
+        plt.ylabel(r'$P$')
         plt.show()
 
 
@@ -46,8 +45,10 @@ def plot_n():
     with figure():
         for i, (t, a) in zipped.items():
             label = r'$N_1 = {0}$'.format(i)
-            plt.plot(t, np.abs(a), '--', label=label)
+            plt.plot(t, np.abs(a) ** 2, '-', label=label)
         plt.legend(loc='best')
+        plt.xlabel(r'$t$ (a. u.)')
+        plt.ylabel(r'$P$')
         plt.show()
 
 

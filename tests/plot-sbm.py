@@ -13,20 +13,22 @@ import scipy
 from minitn.lib.tools import figure, BraceMessage as __
 
 def plot():
-    root = 'data/'
+    root = './'
     str_list = [
-        'sbm-ft-split',
-        'sbm-ft-split-case1',
+        # 'sbm-ft-split-origin-1',
+        # 'sbm-ft-split-origin-2',
+        'sbm-zt-origin',
     ]
     with figure():
         tp_list = []
         for string in str_list:
             tmp = np.load(root + string + '.npy')
             t, p = zip(*tmp)
-            plt.plot(t, p, '-', label=string.upper())
+            plt.plot(t, p, '-')
             tp_list.append(tmp)
-        plt.legend(loc='best')
         plt.xlim(0, 100)
+        plt.xlabel(r'$t$ (fs)')
+        plt.ylabel(r'$P_2$')
         plt.show()
 
 

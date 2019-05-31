@@ -74,8 +74,12 @@ if __name__ == '__main__':
                                    Quantity(500, 'cm-1').value_in_au,
                                    Quantity(1250, 'cm-1').value_in_au,
                                    Quantity(50, 'cm-1').value_in_au)
-    ans = linear_discretization(j_w, Quantity(10000, 'cm-1').value_in_au, 50)
+    ans = linear_discretization(j_w, Quantity(2500, 'cm-1').value_in_au, 32)
     x, y = zip(*ans)
+    x = list(map(lambda w: Quantity(w).convert_to('cm-1').value, x))
+    for i, j in zip(x, y):
+        msg = '{:.1f} & {:.5f} \\\\'.format(i, j * 1e5)
+        print(msg)
     with figure():
         plt.plot(x, y, 'o')
         plt.show()
