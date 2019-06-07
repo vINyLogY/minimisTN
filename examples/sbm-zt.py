@@ -32,6 +32,7 @@ from minitn.tensor import Leaf, Tensor
 
 @time_this
 def sbm_zt(including_bath=False, split=False):
+    omega= 8000
     sbm = SpinBosonModel(
         including_bath=including_bath,
         e1=0.,
@@ -53,7 +54,7 @@ def sbm_zt(including_bath=False, split=False):
         mu=Quantity(250, 'cm-1').value_in_au,
         tau=Quantity(30, 'fs').value_in_au,
         t_d=Quantity(60, 'fs').value_in_au,
-        omega=Quantity(13000, 'cm-1').value_in_au,
+        omega=Quantity(omega, 'cm-1').value_in_au,
     )
 
     # Define the topological structure of the ML-MCTDH tree
@@ -101,9 +102,10 @@ def sbm_zt(including_bath=False, split=False):
     op = [[[root[0][0], projector]]]
     t_p = []
     for time, _ in solver.propagator(
-        steps=1000,
+        steps=400,
         ode_inter=Quantity(0.25, 'fs').value_in_au,
         split=split,
+        move_energy=True,
     ):
         t, p = (Quantity(time).convert_to(unit='fs').value,
                 solver.expection(op=op))
@@ -114,11 +116,11 @@ def sbm_zt(including_bath=False, split=False):
 
     # Save the results
     msg = 'split' if split else 'origin'
-    np.save('sbm-zt-{}'.format(msg), t_p)
+    np.save('sbm-zt-{}-{}'.format(msg, omega), t_p)
 
 
 logging.basicConfig(
-    format='%(levelname)s: (In %(module)s)[%(funcName)s] %(message)s',
+    format='%(asctime)s-%(levelname)s: (In %(module)s)[%(funcName)s] %(message)s',
     level=logging.INFO
 )
 sbm_zt(including_bath=False, split=False)

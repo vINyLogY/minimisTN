@@ -51,8 +51,8 @@ def sbm_zt(including_bath=False, split=False):
         lambda_d=Quantity(1250, 'cm-1').value_in_au,
         omega_d=Quantity(50, 'cm-1').value_in_au,
         mu=Quantity(250, 'cm-1').value_in_au,
-        tau=Quantity(30, 'fs').value_in_au,
-        t_d=Quantity(60, 'fs').value_in_au,
+        tau=Quantity(10, 'fs').value_in_au,
+        t_d=Quantity(10, 'fs').value_in_au,
         omega=Quantity(13000, 'cm-1').value_in_au,
     )
 
@@ -86,7 +86,7 @@ def sbm_zt(including_bath=False, split=False):
     op = [[[root[0][0], projector]]]
     t_p = []
     for time, _ in solver.propagator(
-        steps=1000,
+        steps=100,
         ode_inter=Quantity(0.25, 'fs').value_in_au,
         split=split,
     ):
@@ -99,11 +99,11 @@ def sbm_zt(including_bath=False, split=False):
 
     # Save the results
     msg = 'split' if split else 'origin'
-    np.save('sbm-zt-mctdh-{}'.format(msg), t_p)
+    np.save('sbm-zt-mctdh-{}-1'.format(msg), t_p)
 
 
 logging.basicConfig(
     format='%(levelname)s: (In %(module)s)[%(funcName)s] %(message)s',
     level=logging.INFO
 )
-sbm_zt(including_bath=False, split=True)
+sbm_zt(including_bath=False, split=False)

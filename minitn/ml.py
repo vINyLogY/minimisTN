@@ -111,8 +111,9 @@ class MultiLayer(object):
         self.f_list = f_list
 
         # For propogation purpose
-        self.time = 0.0
+        self.time = None
         self.overall_norm = 1
+        self.init_energy = None
 
         # Type check
         for term in h_list:
@@ -259,10 +260,12 @@ class MultiLayer(object):
                 t.check_completness(strict=True)
         return
 
-    def term_visitor(self, use_cache=False, op=None, imaginary=False):
+    def term_visitor(self, use_cache=False, op=None):
         """Visit all terms in self.h_list.
         """
-        time = 0.0 if imaginary else self.time 
+        time = self.time
+        if time is None:
+            time = 0.0
         visitor = self.root.visitor
         for tensor in visitor(axis=None):
             tensor.reset()
@@ -386,7 +389,27 @@ class MultiLayer(object):
                     self.env_[(n, tensor, i)] = env_
         return self.env_
 
-    def eom(self, check=False, imaginary=False):
+    def dense_hamiltonian(self):
+        h_list = self.h_list
+        f_list = self.f_list
+        if f_list is not None:
+            raise NotImplementedError()
+        leaves = self.root.leaves()
+        dims = {}
+        for l in leaves:
+            t, i = l[0]
+            dims[l] = t.shape[i]
+        ans = 0.
+        for term in h_list:
+            h_i = 1
+            term_ = dict(term)
+            for l in leaves:
+                h_ij = term_.get(l, np.identity(dims[l]))
+                h_i = np.kron(h_i, h_ij)
+            ans = ans + h_i
+        return ans
+
+    def eom(self, check=False):
         r"""Write the derivative of each Tensor in tensor.aux.
 
                    .
@@ -396,8 +419,6 @@ class MultiLayer(object):
         ----------
         check : bool
             True to check the linkage completness.
-        imaginary : bool
-            Whether to treat t as it.
         """
         visitor = self.root.visitor
         if check:
@@ -407,17 +428,20 @@ class MultiLayer(object):
         for t in visitor():
             t.aux = None
         # Term by term...
-        for n in self.term_visitor(imaginary=imaginary):
+        for n in self.term_visitor():
             for tensor in visitor(leaf=False):
                 tmp = self._single_eom(tensor, n)
                 prev = tensor.aux
                 tensor.aux = tmp if prev is None else prev + tmp
         # Times coefficient
         for tensor in visitor(leaf=False):
-            tensor.aux /= self.coefficient(imaginary=imaginary)
+            tensor.aux /= self.coefficient()
+            if tensor.axis is None and self.init_energy is not None:
+                tensor.aux -= self.init_energy * tensor.array
         return
 
-    def coefficient(self, imaginary=False):
+    def coefficient(self):
+        imaginary = self.time is None
         return -self.hbar if imaginary else 1.0j * self.hbar
 
     def direct_step(self, ode_inter=0.01, imaginary=False):
@@ -426,7 +450,7 @@ class MultiLayer(object):
         self._form_inv_density()
         method = self.ode_method
         if method == 'Newton':
-            self.eom(imaginary=imaginary)
+            self.eom()
             for t in visitor(leaf=False):
                 y0 = t.array
                 dy = ode_inter * t.aux
@@ -434,7 +458,7 @@ class MultiLayer(object):
                 t.aux = None
         elif method == 'RK4':
             k = [{}, {}, {}, {}]  # save [y0, k1, k2, k3]
-            eom = partial(self.eom, imaginary=imaginary)
+            eom = partial(self.eom)
             eom()    # for k1
             for t in visitor(leaf=False):
                 y0 = t.array
@@ -471,7 +495,8 @@ class MultiLayer(object):
                 """
                 origin = root.vectorize()
                 root.tensorize(y)
-                self.eom(imaginary=imaginary)
+                self.time = t if not imaginary else None
+                self.eom()
                 ans = root.vectorize(use_aux=True)
                 root.tensorize(origin)
                 return ans
@@ -510,6 +535,8 @@ class MultiLayer(object):
     def _solve_ode(self, diff, y0, ode_inter, reformer, updater):
         OdeSolver = getattr(integrate, self.ode_method)
         t0 = self.time
+        if t0 is None:
+            t0 = 0.0
         t1 = t0 + ode_inter
         ode_solver = OdeSolver(diff, t0, y0, t1, vectorized=False)
         cmf_steps = self.cmf_steps
@@ -535,14 +562,18 @@ class MultiLayer(object):
             origin = tensor.array
             tensor.set_array(np.reshape(y, tensor.shape))
             ans = np.zeros_like(y)
-            self.time = t
-            for n in self.term_visitor(use_cache=False, imaginary=imaginary):
+            self.time = t if not imaginary else None
+            for n in self.term_visitor(use_cache=True):
                 ans += np.reshape(self._single_eom(tensor, n, cache=cache), -1)
-            ans /= self.coefficient(imaginary=imaginary)
+            if self.init_energy is not None:
+                ans -= self.init_energy * y
+            ans /= self.coefficient()
             tensor.set_array(origin)
-            return np.reshape(ans, -1)
+            return ans
 
-        def reformer(): return
+        def reformer():
+            self._form_env()
+            return
 
         def updater(y):
             tensor.set_array(np.reshape(y, tensor.shape))
@@ -581,6 +612,7 @@ class MultiLayer(object):
         return end
 
     def split_step(self, ode_inter=0.01, imaginary=False):
+        self._form_env()
         prop = partial(self._split_prop, tau=ode_inter, imaginary=imaginary,
                        cache=True)
         inv_prop = partial(self._split_prop, tau=(-ode_inter),
@@ -597,6 +629,7 @@ class MultiLayer(object):
         return
 
     def unite_step(self, ode_inter=0.01, imaginary=False):
+        self._form_env()
         prop = partial(self._split_prop, tau=ode_inter, imaginary=imaginary,
                        cache=True)
         inv_prop = partial(self._split_prop, tau=(-ode_inter),
@@ -664,7 +697,7 @@ class MultiLayer(object):
         return
 
     def propagator(self, steps=None, ode_inter=0.01, split=False,
-                   imaginary=False, start=0):
+                   imaginary=False, start=0, move_energy=False):
         """Propagator generator
 
         Parameters
@@ -684,6 +717,8 @@ class MultiLayer(object):
             step = self.direct_step
         root = self.root
         expection = self.expection
+        if move_energy:
+            self.init_energy = expection(normalized=True)
 
         for n in count():
             if steps is not None and n > steps:
@@ -695,7 +730,7 @@ class MultiLayer(object):
                 expection(normalized=True),
                 root.global_square()
             ))
-            self.time = time
+            self.time = time if not imaginary else None
             yield (time, root)
             try:
                 step(ode_inter=ode_inter, imaginary=imaginary)

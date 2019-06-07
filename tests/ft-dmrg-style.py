@@ -24,6 +24,7 @@ def main():
     dofs = 4
     ode_inter = 0.01
     cache = []
+    """
     for m, ode_inter in product(range(3, 6), [0.005, 0.01, 0.02]):
         exp = test_2layers(n_spf=m, n_dvr=n_dvr, dofs=dofs)
         exp.settings(
@@ -40,6 +41,7 @@ def main():
             if 2 * t1 > 1:
                 break
         cache.append((m, ode_inter, zipped))
+    """
     ref_zipped = []
     for t, z in ref(ode_inter=0.005, n_dvr=n_dvr, dofs=dofs):
         ref_zipped.append((t, np.log(z)))

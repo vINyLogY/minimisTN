@@ -21,17 +21,18 @@ import logging
 from builtins import filter, map, range, zip
 
 import numpy as np
-from scipy import linalg
 
 from minitn.lib.tools import time_this
 from minitn.lib.units import Quantity
 from minitn.ml import MultiLayer
 from minitn.models.spinboson import SpinBosonModel
 from minitn.tensor import Leaf, Tensor
+from minitn.lib.tools import plt, figure, BraceMessage as __
 
 
 @time_this
-def sbm_zt(including_bath=False, split=False):
+def sbm_ft(including_bath=False):
+    # Define parameters of the model.
     sbm = SpinBosonModel(
         including_bath=including_bath,
         e1=0.,
@@ -43,7 +44,7 @@ def sbm_zt(including_bath=False, split=False):
                     Quantity(150, 'cm-1').value_in_au],
         lambda_list=([Quantity(750, 'cm-1').value_in_au] * 4),
         dim_list=[10, 14, 20, 30],
-        stop=Quantity(3 * 2250, 'cm-1').value_in_au,
+        stop=Quantity(10000, 'cm-1').value_in_au,
         n=32,
         dim=30,
         lambda_g=Quantity(2250, 'cm-1').value_in_au,
@@ -55,55 +56,22 @@ def sbm_zt(including_bath=False, split=False):
         t_d=Quantity(60, 'fs').value_in_au,
         omega=Quantity(13000, 'cm-1').value_in_au,
     )
+    f = sbm.td_electron_hamiltionian()
+    t_space = np.linspace(0, 100, 1000)
+    tau = map(lambda x: Quantity(x, 'fs').value_in_au, t_space)
+    fau = map(lambda x: f(x)[0, 1], tau)
+    f_space = list(map(lambda x: Quantity(x).convert_to('cm-1').value, fau))
+    with figure():
+        plt.plot(t_space, f_space, 'k-')
+        plt.xlim(0, 100)
+        plt.xlabel(r'$t$ (fs)')
+        plt.ylabel(r'$E(t)\mu~(\mathrm{cm}^{-1})$')
+        plt.show()
 
-    # Define the topological structure of the ML-MCTDH tree
-    graph, root = sbm.autograph_full()
-    root = Tensor.generate(graph, root)
-
-    # Define the detailed parameters for the MC-MCTDH tree
-    solver = MultiLayer(root, sbm.h_list, f_list=sbm.f_list,
-                        use_str_name=True)
-    bond_dict = {}
-    # Leaves
-    for s, i, t, j in root.linkage_visitor():
-        if isinstance(t, Leaf):
-            dim = sbm.dimensions[t.name]
-            bond_dict[(s, i, t, j)] = dim
-    solver.autocomplete(bond_dict, max_entangled=False)
-
-    # Define the computation details
-    solver.settings(
-        max_ode_steps=100,
-        cmf_steps=(1 if split else 10),
-        ode_method='RK45',
-        ps_method='split-unite'
-    )
-    print("Size of a wfn: {} complexes".format(len(root.vectorize())))
-    root.is_normalized=True
-    # Define the obersevable of interest
-    projector = np.array([[0., 0.],
-                        [0., 1.]])
-    op = [[[root[0][0], projector]]]
-    t_p = []
-    for time, _ in solver.propagator(
-        steps=400,
-        ode_inter=Quantity(0.25, 'fs').value_in_au,
-        split=split,
-    ):
-        t, p = (Quantity(time).convert_to(unit='fs').value,
-                solver.expection(op=op))
-        t_p.append((t, p))
-        logging.warning('Time: {:.2f} fs, P2: {}'.format(t, p))
-        if np.abs(p) > 0.5:
-            break
-
-    # Save the results
-    msg = 'split' if split else 'origin'
-    np.save('sbm-zt-mctdh-{}'.format(msg), t_p)
 
 
 logging.basicConfig(
-    format='%(levelname)s: (In %(module)s)[%(funcName)s] %(message)s',
+    format='%(asctime)s-%(levelname)s: (In %(module)s)[%(funcName)s] %(message)s',
     level=logging.INFO
 )
-sbm_zt(including_bath=False, split=False)
+sbm_ft(including_bath=False)

@@ -665,6 +665,18 @@ class Tensor(object):
             link(*linkage)
         return root
 
+    def contraction(self, dry_run=False):
+        if dry_run:
+            raise NotImplementedError()
+        while True:
+            children = list(self.children(leaf=False))
+            if not children:
+                break
+            for _, t, j in children:
+                i = t[j][1]
+                self.unite(i, root=self)
+        return self.array
+
     def normalize(self, forced=False):
         """Normalize the array of self. Only work when self.is_normalized.
         Set `forced` to `True` to normalize any way.

@@ -33,6 +33,14 @@ def plot():
 
 def plot_n():
     zipped = {}
+    try:
+        t_str = 'data/ed_t.npy'
+        auto_str = 'data/ed_a.npy'
+        t = np.load(t_str)
+        auto = np.load(auto_str)
+        zipped[0] = (t, auto)
+    except:
+        pass
     for i in range(5):
         t_str = 'data/ref_{}_t.npy'.format(i)
         auto_str = 'data/ref_{}_a.npy'.format(i)
@@ -44,13 +52,17 @@ def plot_n():
             pass
     with figure():
         for i, (t, a) in zipped.items():
-            label = r'$N_1 = {0}$'.format(i)
-            plt.plot(t, np.abs(a) ** 2, '-', label=label)
+            if i == 0:
+                label = 'ED'
+                plt.plot(t, np.abs(a) ** 2, 'k-', label=label)
+            else:
+                label = r"$N_1 = {0}$".format(i)
+                plt.plot(t, np.abs(a) ** 2, '--', label=label)
         plt.legend(loc='best')
         plt.xlabel(r'$t$ (a. u.)')
         plt.ylabel(r'$P$')
         plt.show()
 
 
-#plot_n()
-plot()
+plot_n()
+#plot()

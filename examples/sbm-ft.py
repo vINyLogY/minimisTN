@@ -128,8 +128,9 @@ def sbm_ft(including_bath=False):
     for time, _ in solver.propagator(
         steps=steps,
         ode_inter=Quantity(100 / steps, 'fs').value_in_au,
-        split=False,
-        imaginary=False
+        split=True,
+        imaginary=False,
+        move_energy=True
     ):
         t = Quantity(time).convert_to(unit='fs').value
         p = solver.expection(op=op)
@@ -137,7 +138,7 @@ def sbm_ft(including_bath=False):
         tp_list.append((t, p))
 
     # Save the results
-    msg = 'split-origin'
+    msg = 'split'
     np.save('sbm-ft-{}'.format(msg), tp_list)
 
 
