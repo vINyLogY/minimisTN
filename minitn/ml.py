@@ -80,10 +80,13 @@ class MultiLayer(object):
         ode_method : {'RK45', 'RK23', ...}
             Name of `OdeSolver` in `scipy.intergate`.
         snd_order : boot
-            Whether to use 2nd order method in projector splitting.
+            [Deprecated] Whether to use 2nd order method in projector splitting.
             Note that 2nd order method should be more accurate, but its
             complexity is :math:`2^d`, where `d` is the depth of tree.
             Default is False.
+        ps_method : string
+            Method of projector-splitting.
+            `s` for one-site method and `u` for two-site method.
         """
         for name, value in kwargs.items():
             if not hasattr(cls, name):
@@ -144,6 +147,12 @@ class MultiLayer(object):
         return
 
     def print_hamiltonian(self, verbose=False):
+        """
+        Parameters
+        verbose : bool
+            Whether to print the dense array of each term.
+            Default is `False`.
+        """
         for n, term in enumerate(self.h_list):
             print('Term {:d}'.format(n))
             for leaf, array in term:
@@ -155,6 +164,8 @@ class MultiLayer(object):
 
     @staticmethod
     def triangular(n_list):
+        """A Generator yields the natural number in a triangular order.
+        """
         length = len(n_list)
         prod_list = [1]
         for n in n_list:
@@ -202,6 +213,17 @@ class MultiLayer(object):
         return matvec
 
     def autocomplete(self, n_bond_dict, max_entangled=False):
+        """Autocomplete the tensors linked to `self.root` with suitable initial
+        value.
+
+        Parameters
+        ----------
+        n_bond_dict : {Leaf: int}
+            A dictionary to specify the dimensions of each primary basis.
+        max_entangled : bool
+            Whether to use the max entangled state as initial value (for finite
+            temperature and imaginary-time propagation).  Default is `False`.
+        """
         for t in self.root.visitor(leaf=False):
             try:
                 t.array
@@ -260,8 +282,17 @@ class MultiLayer(object):
                 t.check_completness(strict=True)
         return
 
-    def term_visitor(self, use_cache=False, op=None):
+    def term_visitor(self, use_cache=False, op=None, only_td=False):
         """Visit all terms in self.h_list.
+
+        Parameters
+        ----------
+        use_cache : bool
+            Whether to load the cached mean fields in `self.env_` to 
+            `tensor._partial_env`.  Default is `False`.
+        op : [[(Leaf, array | float  ->  array)]]
+            The operator to be visited term by term. 
+            Default is `self.h_list` (and `self.f_list`, if any). 
         """
         time = self.time
         if time is None:
@@ -277,6 +308,8 @@ class MultiLayer(object):
         else:
             all_terms = op
         for n, term in enumerate(all_terms):
+            if op is None and only_td and n < len(self.h_list):
+                continue
             for tensor in visitor(axis=None, leaf=False):
                 tensor.reset()
                 if use_cache:
@@ -379,10 +412,10 @@ class MultiLayer(object):
         return self.inv_density
 
     # @profile
-    def _form_env(self):
+    def _form_env(self, update=False):
         self.env_ = {}
         network = self.root.visitor(axis=None, leaf=False)
-        for n in self.term_visitor():
+        for n in self.term_visitor(only_td=update):
             for tensor in network:
                 for i in range(tensor.order):
                     env_ = tensor.partial_env(i, proper=True)
@@ -572,7 +605,7 @@ class MultiLayer(object):
             return ans
 
         def reformer():
-            self._form_env()
+            self._form_env(update=True)
             return
 
         def updater(y):

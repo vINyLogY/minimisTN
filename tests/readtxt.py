@@ -12,7 +12,7 @@ import numpy as np
 from minitn.lib.tools import plt, figure, BraceMessage as __
 from minitn.lib.units import Quantity
 
-filename = 'ft-so.txt'
+filename = 'ft-1.txt'
 with open(filename, 'r') as f:
     fs = f.read()
     time = []

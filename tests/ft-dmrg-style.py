@@ -24,24 +24,26 @@ def main():
     dofs = 4
     ode_inter = 0.01
     cache = []
-    """
     for m, ode_inter in product(range(3, 6), [0.005, 0.01, 0.02]):
-        exp = test_2layers(n_spf=m, n_dvr=n_dvr, dofs=dofs)
-        exp.settings(
-            cmf_steps=1,
-            ode_method='RK45',
-            ps_method='s'
-        )
-        p = exp.propagator(ode_inter=ode_inter, split=True, imaginary=True)
-        zipped = []
-        for t1, _ in p:
-            z1 = exp.relative_partition_function * (n_dvr ** dofs)
-            zipped.append((2 * t1, np.log(np.real(z1))))
-            print(m, 2 * t1, np.log(np.real(z1)))
-            if 2 * t1 > 1:
-                break
+        try:
+            zipped = np.read('ft-sho-{}-{:.3f}.py'.format(m, ode_inter))
+        except:
+            exp = test_2layers(n_spf=m, n_dvr=n_dvr, dofs=dofs)
+            exp.settings(
+                cmf_steps=1,
+                ode_method='RK45',
+                ps_method='s'
+            )
+            p = exp.propagator(ode_inter=ode_inter, split=True, imaginary=True)
+            zipped = []
+            for t1, _ in p:
+                z1 = exp.relative_partition_function * (n_dvr ** dofs)
+                zipped.append((2 * t1, np.log(np.real(z1))))
+                print(m, 2 * t1, np.log(np.real(z1)))
+                if 2 * t1 > 1:
+                    break
+            np.save('ft-sho-{}-{:.3f}'.format(m, ode_inter), zipped)
         cache.append((m, ode_inter, zipped))
-    """
     ref_zipped = []
     for t, z in ref(ode_inter=0.005, n_dvr=n_dvr, dofs=dofs):
         ref_zipped.append((t, np.log(z)))
@@ -58,7 +60,6 @@ def main():
         plt.xlabel(r'$\beta$ (a. u.)')
         plt.ylabel(r'$\ln Z$')
         plt.show()
-    np.save('tmp', cache)
     return
 
 

@@ -22,8 +22,8 @@ def ref():
     exp.settings(cmf_steps=10, ode_method='RK23')
     t1, a1 = zip(
         *exp.autocorr(steps=100, ode_inter=0.1, fast=True, split=False))
-    np.save('./data/ref_t', t1)
-    np.save('./data/ref_a', a1)
+    np.save('./tmp/ref_t', t1)
+    np.save('./tmp/ref_a', a1)
     return
 
 
@@ -34,8 +34,8 @@ def main2():
                     svd_rank=None)
     t1, a1 = zip(*solver.autocorr(steps=100, ode_inter=0.1,
                                   fast=True, split=True))
-    np.save('./data/exp2_t', t1)
-    np.save('./data/exp2_a', a1)
+    np.save('./tmp/exp2_t', t1)
+    np.save('./tmp/exp2_a', a1)
     return
 
 
@@ -46,11 +46,11 @@ def main():
                     svd_rank=None)
     t2, a2 = zip(*solver.autocorr(steps=100, ode_inter=0.1,
                                   fast=True, split=True))
-    np.save('./data/exp_t', t2)
-    np.save('./data/exp_a', a2)
+    np.save('./tmp/exp_t', t2)
+    np.save('./tmp/exp_a', a2)
 
 
-logging.root.setLevel(logging.INFO)
+logging.root.setLevel(logging.DEBUG)
 main()
 main2()
 ref()
