@@ -342,8 +342,9 @@ class Tensor(object):
                     for i_, tensor, j in self.children(axis=i)
                 ]    # Recursively
                 # Make use of the normalization condition
-                if not use_aux and i == self.axis and all(args[1] is None
-                                                          for args in env_):
+                if not use_aux and i == self.axis and self.is_normalized and (
+                    all(args[1] is None for args in env_)
+                ):
                     ans = None
                 else:
                     temp = self.array

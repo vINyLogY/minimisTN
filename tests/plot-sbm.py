@@ -15,12 +15,12 @@ from minitn.lib.tools import figure, BraceMessage as __
 def plot():
     root = './'
     str_list = [
-        ('data/sbm-ft-split-origin', 'FT'),
-        ('data/sbm-ft-split-origin-2', 'FT2'),
-        ('sbm-zt-mctdh-origin', 'ZT'),
-        ('tmp/sbm-zt-origin-13000', 'MCTDH'),
-        ('tmp/sbm-zt-split-13000', 'MCTDH-PS'),
-        ('tmp/sbm-ft-split', 'FT3')
+        # ('data/sbm-ft-split-origin', r'FT-PS-origin'),
+        # ('tmp/sbm-ft-split', r'FT-PS'),
+        ('sbm-zt-mctdh-origin', 'Std.'),
+        ('data/sbm-zt-origin', 'MCTDH-0.25'),
+        ('tmp/sbm-zt-split-13000', 'MCTDH-PS-0.05'),
+        ('data/sbm-zt-split-0.25fs', 'MCTDH-PS-0.25')
     ]
     with figure():
         tp_list = []

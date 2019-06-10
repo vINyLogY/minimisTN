@@ -9,7 +9,7 @@ $$
 ### 模型：SHO
 
 $$
-V = \sum_{i=1}^d x_i^2 + c^2 \sum_{i=1}^{d} x_i x_{i+1}
+V = \frac{1}{2}\sum_{i=1}^d x_i^2 + c^2 \sum_{i=1}^{d} x_i x_{i+1}
 $$
 
 使用 Sine DVR（[-5.0, 5.0]）。

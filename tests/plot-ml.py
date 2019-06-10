@@ -13,17 +13,22 @@ import scipy
 from minitn.lib.tools import figure, BraceMessage as __
 
 def plot():
-    root = 'data/'
-    str2 = 'exp'
+    root = 'tmp/'
     str1 = 'ref'
+    str2 = 'exp'
 
-    t1 = np.load(root + str1 + '_t.npy')
-    a1 = np.load(root + str1 + '_a.npy')
-    t2 = np.load(root + str2 + '_t.npy')
-    a2 = np.load(root + str2 + '_a.npy')
+    # t1 = np.load(root + str1 + '_t.npy')
+    # a1 = np.load(root + str1 + '_a.npy')
+    # t2 = np.load(root + str2 + '_t.npy')
+    # a2 = np.load(root + str2 + '_a.npy')
+    # t3 = np.load(root + str2 + '2_t.npy')
+    # a3 = np.load(root + str2 + '2_a.npy')
+    t1, a1 = zip(*np.load('./tmp/ref_sho.npy'))
+    t2, a2 = zip(*np.load('./data/exp_sho_split.npy'))
     with figure():
-        plt.plot(t2, np.abs(a2)**2, '-', label='MCTDH')
-        plt.plot(t1, np.abs(a1)**2, '--', label='ML-MCTDH-PS')
+        plt.plot(t1, np.abs(a1)**2, '-', label='MCTDH')
+        plt.plot(t2, np.abs(a2)**2, '--', label='ML-MCTDH-PS1')
+        # plt.plot(t3, np.abs(a3)**2, '--', label='ML-MCTDH-PS2')
         plt.legend(loc='best')
         plt.xlabel(r'$t$ (a. u.)')
         plt.ylabel(r'$P$')
@@ -64,5 +69,5 @@ def plot_n():
         plt.show()
 
 
-plot_n()
-#plot()
+#plot_n()
+plot()

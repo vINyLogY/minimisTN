@@ -491,7 +491,7 @@ class MultiLayer(object):
                 t.aux = None
         elif method == 'RK4':
             k = [{}, {}, {}, {}]  # save [y0, k1, k2, k3]
-            eom = partial(self.eom)
+            eom = self.eom
             eom()    # for k1
             for t in visitor(leaf=False):
                 y0 = t.array
@@ -583,7 +583,8 @@ class MultiLayer(object):
                     msg = __('Reach ODE limit {}', n)
                     logging.warning(msg)
                     raise RuntimeWarning(msg)
-                reformer()
+                if reformer is not None:
+                    reformer()
             ode_solver.step()
             updater(ode_solver.y)
         return
@@ -620,8 +621,9 @@ class MultiLayer(object):
         logging.debug(__("* Propagating at {} ({}) for {}",
                         tensor, tensor.shape, tau))
         y0 = np.reshape(tensor.array, -1)
+        _re = None if self.f_list is None else reformer
         with self.log_inner_product(level=logging.DEBUG):
-            self._solve_ode(diff, y0, tau, reformer, updater)
+            self._solve_ode(diff, y0, tau, _re, updater)
         return tensor
 
     def remove_env(self, *args):
@@ -773,14 +775,14 @@ class MultiLayer(object):
                 break
 
     def autocorr(self, steps=None, ode_inter=0.01, split=False,
-                 imaginary=False, fast=False, start=0):
+                 imaginary=False, fast=False, start=0, move_energy=False):
         if not fast:
             _init = {}
             for t in self.root.visitor(leaf=False):
                 _init[t] = t.array
         for time, r in self.propagator(steps=steps, ode_inter=ode_inter,
                                        split=split, imaginary=imaginary,
-                                       start=start):
+                                       start=start, move_energy=move_energy):
             for t in r.visitor(leaf=False):
                 t.aux = t.array if fast else np.conj(_init[t])
             auto = r.global_inner_product()
