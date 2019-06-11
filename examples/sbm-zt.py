@@ -31,8 +31,8 @@ from minitn.tensor import Leaf, Tensor
 
 
 @time_this
-def sbm_zt(including_bath=False, split=False):
-    omega= 8000
+def sbm_zt(including_bath=False, split=False, snd=False):
+    omega= 13000
     sbm = SpinBosonModel(
         including_bath=including_bath,
         e1=0.,
@@ -92,7 +92,8 @@ def sbm_zt(including_bath=False, split=False):
         max_ode_steps=100,
         cmf_steps=(1 if split else 10),
         ode_method='RK45',
-        ps_method='split-unite'
+        ps_method='s',
+        snd_order=snd,
     )
     print("Size of a wfn: {} complexes".format(len(root.vectorize())))
     root.is_normalized=True
@@ -102,8 +103,8 @@ def sbm_zt(including_bath=False, split=False):
     op = [[[root[0][0], projector]]]
     t_p = []
     for time, _ in solver.propagator(
-        steps=400,
-        ode_inter=Quantity(0.25, 'fs').value_in_au,
+        steps=800,
+        ode_inter=Quantity(0.125, 'fs').value_in_au,
         split=split,
         move_energy=True,
     ):
@@ -116,11 +117,12 @@ def sbm_zt(including_bath=False, split=False):
 
     # Save the results
     msg = 'split' if split else 'origin'
-    np.save('sbm-zt-{}-{}'.format(msg, omega), t_p)
+    msg2 = 'snd' if snd else 'fst'
+    np.save('sbm-zt-{}-{}-half'.format(msg, msg2), t_p)
 
 
 logging.basicConfig(
     format='%(asctime)s-%(levelname)s: (In %(module)s)[%(funcName)s] %(message)s',
     level=logging.INFO
 )
-sbm_zt(including_bath=False, split=False)
+sbm_zt(including_bath=False, split=True, snd=False)

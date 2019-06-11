@@ -575,7 +575,7 @@ class MultiLayer(object):
         cmf_steps = self.cmf_steps
         for n in count(1):
             if ode_solver.status != 'running':
-                logging.info(__('* Propagation done.  Average CMF steps: {}',
+                logging.debug(__('* Propagation done.  Average CMF steps: {}',
                                 n // cmf_steps))
                 break
             if n % cmf_steps == 0:
@@ -646,7 +646,14 @@ class MultiLayer(object):
         self.remove_env(*path)
         return end
 
-    def split_step(self, ode_inter=0.01, imaginary=False):
+    @staticmethod
+    def snd_order_step(step, ode_inter=0.01, imaginary=False):
+        half = 0.5 * ode_inter
+        step(ode_inter=half, imaginary=imaginary, backward=False)
+        step(ode_inter=half, imaginary=imaginary, backward=True)
+        return 
+
+    def split_step(self, ode_inter=0.01, imaginary=False, backward=False):
         self._form_env()
         prop = partial(self._split_prop, tau=ode_inter, imaginary=imaginary,
                        cache=True)
@@ -654,16 +661,25 @@ class MultiLayer(object):
                            imaginary=imaginary, cache=True)
         linkages = list(self.root.directed_linkage_visitor(leaf=False))
         move = self.move
-        for rev, (t1, i, _, _) in linkages:
-            if not rev:
-                move(t1, i)
-            else:
-                prop(t1)
-                move(t1, i, op=inv_prop)
-        prop(self.root)
+        if backward:
+            prop(self.root)
+            for rev, (t1, _, t2, j) in reversed(linkages):
+                if rev:
+                    move(t2, j, op=inv_prop)
+                    prop(t1)
+                else:
+                    move(t2, j)
+        else:
+            for rev, (t1, i, _, _) in linkages:
+                if not rev:
+                    move(t1, i)
+                else:
+                    prop(t1)
+                    move(t1, i, op=inv_prop)
+            prop(self.root)
         return
 
-    def unite_step(self, ode_inter=0.01, imaginary=False):
+    def unite_step(self, ode_inter=0.01, imaginary=False, backward=False):
         self._form_env()
         prop = partial(self._split_prop, tau=ode_inter, imaginary=imaginary,
                        cache=True)
@@ -675,21 +691,33 @@ class MultiLayer(object):
         counter = {}
         for t in self.root.visitor(leaf=False):
             counter[t] = len(list(t.children(leaf=False)))
-        for rev, (t1, i, t2, _) in linkages:
-            if not rev:
-                if counter[t2] > 0:
-                    move(t1, i)
-            else:
-                move(t1, i, op=prop, unite_first=True)
-                counter[t2] -= 1
-                if t2 is not origin or counter[t2] > 0:
-                    inv_prop(t2)
+        if backward:
+            n_origin = counter[origin]
+            for rev, (t2, _, t1, i) in reversed(linkages):
+                if rev:
+                    if t2 is not origin or counter[t2] != n_origin:
+                        inv_prop(t2)
+                        counter[t2] -= 1
+                    move(t1, i, op=prop, unite_first=True)
+                else:
+                    if counter[t2] > 0:
+                        move(t1, i)
+        else:
+            for rev, (t1, i, t2, _) in linkages:
+                if not rev:
+                    if counter[t2] > 0:
+                        move(t1, i)
+                else:
+                    move(t1, i, op=prop, unite_first=True)
+                    counter[t2] -= 1
+                    if t2 is not origin or counter[t2] > 0:
+                        inv_prop(t2)
         assert not any(counter.values())
         return
 
-    def _split_step(self, ode_inter=0.01, imaginary=False,
+    def r_split_step(self, ode_inter=0.01, imaginary=False,
                     _root=None, _axis=None):
-        """[Deprecated] Recursive projector-splitting method.  The time of the
+        """Recursive projector-splitting method.  The time of the
         coefficient of a wfn matters most.
         """
         if _root is None:
@@ -703,23 +731,11 @@ class MultiLayer(object):
             linkages = list(r.children(axis=axis, leaf=False))
             if backward:
                 op1, op2,  = op2, op1
-            if logging.root.isEnabledFor(logging.DEBUG):
-                shape_dict = {}
-                init = r.vectorize(shape_dict=shape_dict)
             for i, t, j in linkages:
                 move(r, i, op1)
-                self._split_step(ode_inter=tau, imaginary=imaginary,
+                self.r_split_step(ode_inter=tau, imaginary=imaginary,
                                  _root=t, _axis=j)
                 move(t, j, op2)
-                if logging.root.isEnabledFor(logging.DEBUG):
-                    try:
-                        r.tensorize(np.conj(init), use_aux=True,
-                                    shape_dict=shape_dict)
-                        ip = r.global_inner_product()
-                    except:
-                        ip = 'N/A'
-                    logging.debug(__("r:{}({}); t:{}({}), <|>:{}",
-                                     r, r.shape, t, t.shape, ip))
             return
 
         if self.snd_order:
@@ -742,12 +758,17 @@ class MultiLayer(object):
         method : {'Newton', 'RK4', 'RK45', ...}
         """
         if split:
-            if self.ps_method.upper().startswith('U'):
+            identifier = self.ps_method.upper()
+            if identifier.startswith('U'):
                 step = self.unite_step
-            elif self.ps_method.upper().startswith('S'):
+            elif identifier.startswith('S'):
                 step = self.split_step
+            elif identifier.startswith('R'):
+                step = self.r_split_step
             else:
                 raise ValueError("No PS method '{}'!".format(self.ps_method))
+            if self.snd_order and not identifier.startswith('R'):
+                step = partial(self.snd_order_step, step)
         else:
             step = self.direct_step
         root = self.root

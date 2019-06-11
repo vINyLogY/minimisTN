@@ -19,8 +19,12 @@ def plot():
         # ('tmp/sbm-ft-split', r'FT-PS'),
         ('sbm-zt-mctdh-origin', 'Std.'),
         ('data/sbm-zt-origin', 'MCTDH-0.25'),
-        ('tmp/sbm-zt-split-13000', 'MCTDH-PS-0.05'),
-        ('data/sbm-zt-split-0.25fs', 'MCTDH-PS-0.25')
+        # ('tmp/sbm-zt-split-13000', 'MCTDH-PS-0.05'),
+        # ('data/sbm-zt-split-0.25fs', 'MCTDH-PS-0.25'),
+        ('./sbm-zt-split-snd-r', 'Test-snd (rec.)'),
+        ('./sbm-zt-split-snd', 'Test-snd'),
+        ('./sbm-zt-split-fst', 'Test-fst'),
+        ('sbm-zt-split-fst-half', 'Test-fst (half)')
     ]
     with figure():
         tp_list = []
