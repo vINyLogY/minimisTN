@@ -1,4 +1,7 @@
-#!/bin/bash
+#!/usr/bin/sbatch
+# This is only a helper script for Dirac.
+# Run with `sbatch`.
+
 WORKING=./examples
 NAME=sbm-ft
 DATA=.
