@@ -24,7 +24,7 @@ import numpy as np
 
 from minitn.lib.tools import time_this
 from minitn.lib.units import Quantity
-from minitn.ml import MultiLayer
+from minitn.algorithms.ml import MultiLayer
 from minitn.models.spinboson import SpinBosonModel
 from minitn.tensor import Leaf, Tensor
 

@@ -19,6 +19,11 @@ class Phonon(object):
     hamiltionian.
     """
     def __init__(self, dim, omega, mass=1, hbar=1, dense=True):
+        r"""The Hamiltonian for a SHO is::
+
+            H = \frac{p^2}{2 m} + \frac{m \omega^2}{2} x^2)
+
+        """
         self.dim = dim
         self.omega = omega
         self.mass = mass

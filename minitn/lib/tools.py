@@ -101,10 +101,33 @@ def iter_visitor(start, r, method='DFS'):
 
 @contextlib.contextmanager
 def figure(*args, **kwargs):
-    rc('font',family='Times New Roman')
+    rc('font', family='Times New Roman')
     rc('text', usetex=True)
     fig = plt.figure(*args, **kwargs)
     # for Palatino and other serif fonts use:
     # rc('font',**{'family':'serif','serif':['Palatino']})
     yield fig
     plt.close(fig)
+
+
+def huffman_tree(sources, importances=None, prefix='', n_branch=2):
+    def string(x): return x[0]
+
+    def key(x): return x[1]
+    if importances is None:
+        importances = [1] * len(sources)
+    sequence = list(zip(sources, importances))
+    graph = {}
+    counter = 0
+    while len(sequence) > 1:
+        sequence.sort(key=key)
+        try:
+            branch, sequence = sequence[:n_branch], sequence[n_branch:]
+        except:
+            branch, sequence = sequence, []
+        p = sum(map(key, branch))
+        new = prefix + '{:02d}'.format(counter)
+        graph[new] = list(map(string, branch))
+        sequence.insert(0, (new, p))
+        counter += 1
+    return graph, string(sequence[0])

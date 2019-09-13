@@ -61,11 +61,12 @@ class Tensor(object):
         self._access = {}
 
         # Cache
+        # TODO: REMOVE THIS
         self._partial_env = {}    # {(int, matrix)}, saving mean field
 
         # For some special methods
         self.aux = None
-        self.is_normalized = normalized
+        self.normalized = normalized
         return
 
     def __repr__(self):
@@ -229,6 +230,11 @@ class Tensor(object):
     def __setitem__(self, key, value):
         t, j = value
         self.link_to(key, t, j)
+        return
+
+    def __delitem__(self, key):
+        self.unlink_to(key, fast=True)
+        return
 
     def link_to(self, i, b, j):
         self.link(self, i, b, j)
@@ -286,7 +292,7 @@ class Tensor(object):
             for tensor in child.visitor(axis=j, leaf=leaf):
                 yield tensor
 
-    def linkage_visitor(self, axis=_empty, leaf=True):
+    def linkage_visitor(self, axis=_empty, leaf=True, directed=False):
         """
         Yield
         -----
@@ -296,8 +302,10 @@ class Tensor(object):
             yield (self, i, child, j)
             for linkage in child.linkage_visitor(axis=j, leaf=leaf):
                 yield linkage
+            if directed:
+                yield (child, j, self, i)
 
-    def directed_linkage_visitor(self, axis=_empty, leaf=True):
+    def decorated_linkage_visitor(self, axis=_empty, leaf=True):
         """
         Yield
         -----
@@ -307,7 +315,7 @@ class Tensor(object):
         """
         for i, child, j in self.children(axis=axis, leaf=leaf):
             yield (False, (self, i, child, j))
-            for linkage in child.directed_linkage_visitor(axis=j, leaf=leaf):
+            for linkage in child.decorated_linkage_visitor(axis=j, leaf=leaf):
                 yield linkage
             yield (True, (child, j, self, i))
 
@@ -342,7 +350,7 @@ class Tensor(object):
                     for i_, tensor, j in self.children(axis=i)
                 ]    # Recursively
                 # Make use of the normalization condition
-                if not use_aux and i == self.axis and self.is_normalized and (
+                if not use_aux and i == self.axis and self.normalized and (
                     all(args[1] is None for args in env_)
                 ):
                     ans = None
@@ -482,7 +490,7 @@ class Tensor(object):
         """
         end, j = self._access[i]
         if normalized is None:
-            normalized = self.is_normalized and end.is_normalized
+            normalized = self.normalized and end.normalized
         mid, _ = self.split(i, rank=rank, err=err, child=self,
                             normalized=normalized)
         if operator is not None:
@@ -507,7 +515,7 @@ class Tensor(object):
             linkage_old = list(self.linkage_visitor(axis=None))
         end, j = self._access[i]
         if normalized is None:
-            normalized = self.is_normalized and end.is_normalized
+            normalized = self.normalized and end.normalized
         axes = [i + k for k in range(end.order - 1)]
         mid = self.unite(i, normalized=normalized)
         if operator is not None:
@@ -679,10 +687,10 @@ class Tensor(object):
         return self.array
 
     def normalize(self, forced=False):
-        """Normalize the array of self. Only work when self.is_normalized.
+        """Normalize the array of self. Only work when self.normalized.
         Set `forced` to `True` to normalize any way.
         """
-        if not self.is_normalized and not forced:
+        if not self.normalized and not forced:
             return
         array = self.array
         axis = self.axis

@@ -24,7 +24,7 @@ import numpy as np
 
 from minitn.lib.tools import time_this, figure, plt, __
 from minitn.lib.units import Quantity
-from minitn.ml import MultiLayer
+from minitn.algorithms.ml import MultiLayer
 from minitn.models.spinboson import SpinBosonModel
 from minitn.tensor import Leaf, Tensor
 
@@ -48,8 +48,8 @@ def sbm_ft(including_bath=False):
         lambda_d=Quantity(1250, 'cm-1').value_in_au,
         omega_d=Quantity(50, 'cm-1').value_in_au,
         mu=Quantity(250, 'cm-1').value_in_au,
-        tau=Quantity(30, 'fs').value_in_au,
-        t_d=Quantity(60, 'fs').value_in_au,
+        tau=Quantity(3, 'fs').value_in_au,
+        t_d=Quantity(6, 'fs').value_in_au,
         omega=Quantity(13000, 'cm-1').value_in_au,
     )
 
@@ -87,8 +87,8 @@ def sbm_ft(including_bath=False):
     print("Size of a wfn: {} complexes".format(len(root.vectorize())))
 
     # Do the imaginary time propogation
-    inv_tem = 1 / 500
-    steps = 100
+    inv_tem = 1 / 1000
+    steps = 50
     for time, _ in solver.propagator(
         steps=steps,
         ode_inter=Quantity(inv_tem / steps / 2, unit='K-1').value_in_au,
@@ -108,12 +108,12 @@ def sbm_ft(including_bath=False):
 
     # Do the real time propogation
     tp_list = []
-    steps=500
+    steps=50
     root.is_normalized=True
     for time, _ in solver.propagator(
         steps=steps,
-        ode_inter=Quantity(100 / steps, 'fs').value_in_au,
-        split=False,
+        ode_inter=Quantity(10 / steps, 'fs').value_in_au,
+        split=True,
         imaginary=False
     ):
         t = Quantity(time).convert_to(unit='fs').value
@@ -127,9 +127,9 @@ def sbm_ft(including_bath=False):
 
     with figure():
         t, p = zip(*tp_list)
-        plt.plot(t, p, '-', label='split-origin')
+        plt.plot(t, p, '-', label='split')
         plt.legend(loc='best')
-        plt.xlim(0, 100)
+        plt.xlim(0, 10)
         plt.show()
 
 

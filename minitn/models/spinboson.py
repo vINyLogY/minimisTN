@@ -22,33 +22,11 @@ import numpy as np
 from scipy import linalg
 from scipy.integrate import quad
 
-from minitn.lib.tools import __
+from minitn.lib.tools import __, huffman_tree
 from minitn.models.particles import Phonon
 from minitn.models import bath
 from minitn.tensor import Tensor, Leaf
-from minitn.ml import MultiLayer
-
-
-def huffman_tree(sources, importances=None, prefix='', n_branch=2):
-    def string(x): return x[0]
-    def key(x): return x[1]
-    if importances is None:
-        importances = [1] * len(sources)
-    sequence = list(zip(sources, importances))
-    graph = {}
-    counter = 0
-    while len(sequence) > 1:
-        sequence.sort(key=key)
-        try:
-            branch, sequence = sequence[:n_branch], sequence[n_branch:]
-        except:
-            branch, sequence = sequence, []
-        p = sum(map(key, branch))
-        new = prefix + '{:02d}'.format(counter)
-        graph[new] = list(map(string, branch))
-        sequence.insert(0, (new, p))
-        counter += 1
-    return graph, string(sequence[0])
+from minitn.algorithms.ml import MultiLayer
 
 
 class SpinBosonModel(object):
@@ -105,15 +83,15 @@ class SpinBosonModel(object):
         graph = {'ROOT': [self.elec_leaf, 'INNER', 'OUTER']}
         if self.including_bath:
             self._update(graph, self.inner_leaves, 'INNER', n_branch,
-            prefix='AI')
+                         prefix='AI')
             self._update(graph, self.outer_leaves, 'OUTER', n_branch,
-            prefix='AO')
+                         prefix='AO')
         else:
             mid = len(self.inner_leaves) // 2
             self._update(graph, self.inner_leaves[:mid], 'INNER', n_branch,
-             prefix='AI1')
+                         prefix='AI1')
             self._update(graph, self.inner_leaves[mid:], 'OUTER', n_branch,
-            prefix='AI2')
+                         prefix='AI2')
         return graph, 'ROOT'
 
     def autograph_with_aux(self, n_branch=2):
@@ -149,9 +127,10 @@ class SpinBosonModel(object):
         return
 
     def collect_electric_terms(self, h_list, absorbed=False):
+        elec_leaf = self.elec_leaf
+
         def condition(term): return len(term) == 1 and term[0][0] == elec_leaf
         elec_list = filter(condition, h_list)
-        elec_leaf = self.elec_leaf
         elec_array = sum([term[0][1] for term in elec_list])
         left_list = list(filterfalse(condition, h_list))
         try:
@@ -176,7 +155,7 @@ class SpinBosonModel(object):
             delta = t - t_d
             coeff = (np.exp(-4. * np.log(2.) * (delta / tau) ** 2) *
                      np.cos(omega * delta))
-            ans =  coeff * np.array(h) 
+            ans = coeff * np.array(h)
             if ti_array is not None:
                 ans += ti_array
             return ans
@@ -188,7 +167,7 @@ class SpinBosonModel(object):
         -------
         [(str, ndarray)]
         """
-        e1, e2, v = [getattr(self, name) for name in self.ELEC]
+        e1, e2, v = [getattr(self, n) for n in self.ELEC]
         leaf = str(name)
         h = [[e1, v],
              [v, e2]]
@@ -261,7 +240,7 @@ if __name__ == '__main__':
     # systems in solution at zero temperature.
     from minitn.lib.units import Quantity
     from minitn.tensor import Leaf, Tensor
-    from minitn.ml import MultiLayer
+    from minitn.algorithms.ml import MultiLayer
     from minitn.lib.tools import plt, figure
     logging.basicConfig(
         format='(In %(module)s)[%(funcName)s] %(message)s',
@@ -338,7 +317,7 @@ if __name__ == '__main__':
                 solver.expection(op=op))
         t_p.append((t, p))
         print('Time: {:.2f} fs, P2: {}'.format(t, p))
-    
+
     # Check SBM
     t, p = zip(*t_p)
     with figure():

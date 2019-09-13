@@ -659,7 +659,7 @@ class MultiLayer(object):
                        cache=True)
         inv_prop = partial(self._split_prop, tau=(-ode_inter),
                            imaginary=imaginary, cache=True)
-        linkages = list(self.root.directed_linkage_visitor(leaf=False))
+        linkages = list(self.root.decorated_linkage_visitor(leaf=False))
         move = self.move
         if backward:
             prop(self.root)
@@ -685,7 +685,7 @@ class MultiLayer(object):
                        cache=True)
         inv_prop = partial(self._split_prop, tau=(-ode_inter),
                            imaginary=imaginary, cache=True)
-        linkages = list(self.root.directed_linkage_visitor(leaf=False))
+        linkages = list(self.root.decorated_linkage_visitor(leaf=False))
         move = self.move
         origin = self.root
         counter = {}
