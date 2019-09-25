@@ -1,4 +1,4 @@
-#!/usr/bin/sbatch
+#!/bin/bash
 # This is only a helper script for Dirac.
 # Run with `sbatch`.
 
