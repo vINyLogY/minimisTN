@@ -18,17 +18,22 @@ References
 from __future__ import absolute_import, division, print_function
 
 import logging
+import os
+import sys
 from builtins import filter, map, range, zip
-# import json
 
 import numpy as np
 from scipy import linalg
 
+from minitn.algorithms.ml import MultiLayer
 from minitn.lib.tools import time_this
 from minitn.lib.units import Quantity
-from minitn.algorithms.ml import MultiLayer
 from minitn.models.spinboson import SpinBosonModel
 from minitn.tensor import Leaf, Tensor
+import matplotlib.pyplot as plt
+
+
+os.chdir(os.path.abspath(os.path.dirname(__file__)))
 
 
 @time_this
@@ -58,9 +63,6 @@ def sbm_zt(including_bath=False, split=False, snd=False):
         't_d': Quantity(60, 'fs').value_in_au,
         'omega': Quantity(13000, 'cm-1').value_in_au,
     }
-    # with open('std_sbm.json', 'w') as f:
-    #     json.dump(sbm_para_dict, f)
-
     sbm = SpinBosonModel(**sbm_para_dict)
 
     # Define the topological structure of the ML-MCTDH tree
@@ -101,15 +103,15 @@ def sbm_zt(including_bath=False, split=False, snd=False):
         ps_method='s',
         snd_order=snd,
     )
-    root.is_normalized=True
+    root.is_normalized = True
     # Define the obersevable of interest
     projector = np.array([[0., 0.],
-                        [0., 1.]])
+                          [0., 1.]])
     op = [[[root[0][0], projector]]]
     t_p = []
     for time, _ in solver.propagator(
-        steps=10,
-        ode_inter=Quantity(0.125, 'fs').value_in_au,
+        steps=20,
+        ode_inter=Quantity(0.2, 'fs').value_in_au,
         split=split,
         move_energy=True,
     ):
@@ -123,11 +125,22 @@ def sbm_zt(including_bath=False, split=False, snd=False):
     # Save the results
     msg = 'split' if split else 'origin'
     msg2 = 'snd' if snd else 'fst'
-    np.save('sbm-zt-{}-{}-half'.format(msg, msg2), t_p)
+    np.savetxt('sbm-zt-{}-{}.dat'.format(msg, msg2), t_p)
 
 
-logging.basicConfig(
-    format='%(asctime)s-%(levelname)s: (In %(module)s)[%(funcName)s] %(message)s',
-    level=logging.INFO
-)
-sbm_zt(including_bath=False, split=True, snd=False)
+if __name__ == '__main__':
+    logging.basicConfig(
+        format='%(asctime)s-%(levelname)s: (In %(module)s)[%(funcName)s] %(message)s',
+        level=logging.WARNING
+    )
+    sbm_zt(including_bath=False, split=True, snd=False)
+    sbm_zt(including_bath=False, split=True, snd=True)
+    name_label_list = [
+        ('fst', 'x', 'First'),
+        ('snd', '-', 'Second'),
+    ]
+    for name, patten, label in name_label_list:
+        data = np.loadtxt('sbm-zt-split-' + name + '.dat')
+        plt.plot(data[:, 0], data[:, 1], patten, label=label)
+    plt.show()
+

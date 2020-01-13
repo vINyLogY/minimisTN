@@ -3,7 +3,7 @@
 import logging
 import sys
 # Basic logging setting
-level = logging.DEBUG if __debug__ else logging.INFO
+level = logging.DEBUG
 logging.basicConfig(
     format='(In %(module)s) %(message)s',
     stream=sys.stdout, level=level

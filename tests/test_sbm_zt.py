@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # coding: utf-8
 r""" A spin-boson model for photoinduced ET reactions in mixed-valence systems
 in solution at zero/finite temperature.
@@ -18,50 +18,48 @@ References
 from __future__ import absolute_import, division, print_function
 
 import logging
+import os
+import sys
+import pytest
 from builtins import filter, map, range, zip
-# import json
 
 import numpy as np
 from scipy import linalg
 
+from minitn.algorithms.ml import MultiLayer
 from minitn.lib.tools import time_this
 from minitn.lib.units import Quantity
-from minitn.algorithms.ml import MultiLayer
 from minitn.models.spinboson import SpinBosonModel
 from minitn.tensor import Leaf, Tensor
 
+data_dir = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'data')
 
 @time_this
 def sbm_zt(including_bath=False, split=False, snd=False):
-    sbm_para_dict = {
-        'including_bath': including_bath,
-        'e1': 0.,
-        'e2': Quantity(6500, 'cm-1').value_in_au,
-        'v': Quantity(500, 'cm-1').value_in_au,
-        "omega_list": [
-            Quantity(2100, 'cm-1').value_in_au,
-            Quantity(650, 'cm-1').value_in_au,
-            Quantity(400, 'cm-1').value_in_au,
-            Quantity(150, 'cm-1').value_in_au
-        ],
-        'lambda_list': ([Quantity(750, 'cm-1').value_in_au] * 4),
-        'dim_list': [10, 14, 20, 30],
-        'stop': Quantity(3 * 2250, 'cm-1').value_in_au,
-        'n': 32,
-        'dim': 30,
-        'lambda_g': Quantity(2250, 'cm-1').value_in_au,
-        'omega_g': Quantity(500, 'cm-1').value_in_au,
-        'lambda_d': Quantity(1250, 'cm-1').value_in_au,
-        'omega_d': Quantity(50, 'cm-1').value_in_au,
-        'mu': Quantity(250, 'cm-1').value_in_au,
-        'tau': Quantity(30, 'fs').value_in_au,
-        't_d': Quantity(60, 'fs').value_in_au,
-        'omega': Quantity(13000, 'cm-1').value_in_au,
-    }
-    # with open('std_sbm.json', 'w') as f:
-    #     json.dump(sbm_para_dict, f)
-
-    sbm = SpinBosonModel(**sbm_para_dict)
+    omega= 13000
+    sbm = SpinBosonModel(
+        including_bath=including_bath,
+        e1=0.,
+        e2=Quantity(6500, 'cm-1').value_in_au,
+        v=Quantity(500, 'cm-1').value_in_au,
+        omega_list=[Quantity(2100, 'cm-1').value_in_au,
+                    Quantity(650, 'cm-1').value_in_au,
+                    Quantity(400, 'cm-1').value_in_au,
+                    Quantity(150, 'cm-1').value_in_au],
+        lambda_list=([Quantity(750, 'cm-1').value_in_au] * 4),
+        dim_list=[10, 14, 20, 30],
+        stop=Quantity(3 * 2250, 'cm-1').value_in_au,
+        n=32,
+        dim=30,
+        lambda_g=Quantity(2250, 'cm-1').value_in_au,
+        omega_g=Quantity(500, 'cm-1').value_in_au,
+        lambda_d=Quantity(1250, 'cm-1').value_in_au,
+        omega_d=Quantity(50, 'cm-1').value_in_au,
+        mu=Quantity(250, 'cm-1').value_in_au,
+        tau=Quantity(30, 'fs').value_in_au,
+        t_d=Quantity(60, 'fs').value_in_au,
+        omega=Quantity(omega, 'cm-1').value_in_au,
+    )
 
     # Define the topological structure of the ML-MCTDH tree
     graph, root = sbm.autograph(n_branch=2)
@@ -101,6 +99,7 @@ def sbm_zt(including_bath=False, split=False, snd=False):
         ps_method='s',
         snd_order=snd,
     )
+    print("Size of a wfn: {} complexes".format(len(root.vectorize())))
     root.is_normalized=True
     # Define the obersevable of interest
     projector = np.array([[0., 0.],
@@ -108,8 +107,8 @@ def sbm_zt(including_bath=False, split=False, snd=False):
     op = [[[root[0][0], projector]]]
     t_p = []
     for time, _ in solver.propagator(
-        steps=10,
-        ode_inter=Quantity(0.125, 'fs').value_in_au,
+        steps=20,
+        ode_inter=Quantity(0.2, 'fs').value_in_au,
         split=split,
         move_energy=True,
     ):
@@ -119,15 +118,15 @@ def sbm_zt(including_bath=False, split=False, snd=False):
         logging.warning('Time: {:.2f} fs, P2: {}'.format(t, p))
         if np.abs(p) > 0.5:
             break
+    return np.array(t_p)
 
-    # Save the results
+@pytest.mark.parametrize('split, snd',
+                         [(True, True),
+                          (True, False)])
+def test_sbm_zt(split, snd):
     msg = 'split' if split else 'origin'
     msg2 = 'snd' if snd else 'fst'
-    np.save('sbm-zt-{}-{}-half'.format(msg, msg2), t_p)
+    ref = np.loadtxt(os.path.join(data_dir, 'sbm-zt-{}-{}.dat'.format(msg, msg2)))
+    tst = sbm_zt(including_bath=False, split=split, snd=snd)
+    np.testing.assert_allclose(tst, ref)
 
-
-logging.basicConfig(
-    format='%(asctime)s-%(levelname)s: (In %(module)s)[%(funcName)s] %(message)s',
-    level=logging.INFO
-)
-sbm_zt(including_bath=False, split=True, snd=False)
