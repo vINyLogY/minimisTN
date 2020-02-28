@@ -35,7 +35,8 @@ class SpinBosonModel(object):
     OUTER = ['stop', 'n', 'dim', 'lambda_g', 'omega_g', 'lambda_d', 'omega_d']
     FIELD = ['mu', 'tau', 't_d', 'omega']
 
-    def __init__(self, including_bath=True, **kwargs):
+    def __init__(self, including_bath=True, relaxation_list=None,
+                 **kwargs):
         """ Needed parameters:
         - (for electronic part)
             'e1', 'e2', 'v',
@@ -60,6 +61,11 @@ class SpinBosonModel(object):
         all_vibriations = (self.inner_hamiltonian() + self.outer_hamiltonian()
                            if including_bath else self.inner_hamiltonian())
         h_list.extend(all_vibriations)
+        # need to be polished
+        if relaxation_list is not None:
+            h_list.extend(
+                self.relaxation_hamiltonian(coupling_list=relaxation_list, prefix='I')
+            )
         self.h_list, self.f_list = self.collect_electric_terms(h_list)
         return
 
@@ -175,6 +181,28 @@ class SpinBosonModel(object):
         self.leaves.append(leaf)
         self.dimensions[leaf] = 2
         return [[[leaf, np.array(h)]]]
+
+    def relaxation_hamiltonian(self, coupling_list, prefix='R'):
+        """
+        Returns
+        -------
+        h_list: [[(str, ndarray)]]
+        """
+        omega_list, _, dim_list = [
+            getattr(self, name) for name in self.INNER
+        ]
+        elec_leaf = self.elec_leaf
+        projector = np.array([[0., 1.],
+                              [1., 0.]])
+        h_list = []
+        zipped = zip(dim_list, omega_list, coupling_list)
+        for n, (dim, omega, c) in enumerate(zipped):
+            ph = Phonon(dim, omega)
+            leaf = prefix + str(n)
+            # e-ph part
+            h_list.append([[leaf, omega * ph.coordinate_operator],
+                           [elec_leaf, (c / omega) * projector]])
+        return h_list
 
     def vibration_hamiltonian(self, omega_list, coupling_list, dim_list,
                               prefix='V'):

@@ -21,6 +21,7 @@ atomic_unit_in = {
     # Time
     's': constants["atomic unit of time"][0],
     'fs': 1.e15 * constants["atomic unit of time"][0],
+    'ps': 1.e12 * constants["atomic unit of time"][0],
     'K-1': constants["kelvin-hartree relationship"][0],
     # Length
     'm': constants["atomic unit of length"][0],
