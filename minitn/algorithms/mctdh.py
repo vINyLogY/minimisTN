@@ -20,7 +20,7 @@ from scipy import fftpack, linalg
 from scipy.integrate import RK45
 from scipy.sparse.linalg import LinearOperator, eigsh
 
-from minitn.basis.dvr import PO_DVR
+from minitn.bases.dvr import PO_DVR
 from minitn.lib import numerical
 from minitn.lib.numerical import DavidsonAlgorithm, expection
 from minitn.lib.tools import BraceMessage as __

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # coding: utf-8
 r""" A spin-boson model for photoinduced ET reactions in mixed-valence systems
 in solution at zero/finite temperature.
@@ -18,46 +18,36 @@ References
 from __future__ import absolute_import, division, print_function
 
 import logging
+import os
+import sys
+import pytest
 from builtins import filter, map, range, zip
-# import json
 
 import numpy as np
 from scipy import linalg
 
+from minitn.algorithms.ml import MultiLayer
 from minitn.lib.tools import time_this
 from minitn.lib.units import Quantity
-from minitn.algorithms.ml import MultiLayer
 from minitn.models.spinboson import SpinBosonModel
 from minitn.tensor import Leaf, Tensor
 
+data_dir = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'data')
 
 @time_this
 def sbm_zt(including_bath=False, split=False, snd=False):
     omega= 13000
     sbm = SpinBosonModel(
         including_bath=including_bath,
-        relaxation_list=[
-            Quantity(2100, 'cm-1').value_in_au,
-            Quantity(650, 'cm-1').value_in_au,
-            Quantity(0, 'cm-1').value_in_au,
-            Quantity(0, 'cm-1').value_in_au
-        ],
         e1=0.,
         e2=Quantity(6500, 'cm-1').value_in_au,
         v=Quantity(500, 'cm-1').value_in_au,
-        omega_list=[
-            Quantity(2100, 'cm-1').value_in_au,
-            Quantity(650, 'cm-1').value_in_au,
-            Quantity(400, 'cm-1').value_in_au,
-            Quantity(150, 'cm-1').value_in_au
-        ],
-        lambda_list=[
-            Quantity(750, 'cm-1').value_in_au,
-            Quantity(750, 'cm-1').value_in_au,
-            Quantity(750, 'cm-1').value_in_au,
-            Quantity(750, 'cm-1').value_in_au
-        ],
-        dim_list=[20, 20, 20, 20],
+        omega_list=[Quantity(2100, 'cm-1').value_in_au,
+                    Quantity(650, 'cm-1').value_in_au,
+                    Quantity(400, 'cm-1').value_in_au,
+                    Quantity(150, 'cm-1').value_in_au],
+        lambda_list=([Quantity(750, 'cm-1').value_in_au] * 4),
+        dim_list=[10, 14, 20, 30],
         stop=Quantity(3 * 2250, 'cm-1').value_in_au,
         n=32,
         dim=30,
@@ -76,7 +66,7 @@ def sbm_zt(including_bath=False, split=False, snd=False):
     root = Tensor.generate(graph, root)
 
     # Define the detailed parameters for the MC-MCTDH tree
-    solver = MultiLayer(root, sbm.h_list, # f_list=sbm.f_list,
+    solver = MultiLayer(root, sbm.h_list, f_list=sbm.f_list,
                         use_str_name=True)
     bond_dict = {}
     # Leaves
@@ -99,16 +89,8 @@ def sbm_zt(including_bath=False, split=False, snd=False):
         bond_dict[(root, 2, outer_r, 0)] = 20
         for s, i, t, j in root[2][0].linkage_visitor(leaf=False):
             bond_dict[(s, i, t, j)] = 10
-
-
     solver.autocomplete(bond_dict, max_entangled=False)
-    # manually set root array
-    init_proj = np.array([
-        [1.0, 0.0],
-        [1.0, 0.0]
-    ]) / np.sqrt(2.0)
-    root_array = Tensor.partial_product(root.array, 0, init_proj, 1)
-    root.set_array(root_array)
+
     # Define the computation details
     solver.settings(
         max_ode_steps=100,
@@ -117,6 +99,7 @@ def sbm_zt(including_bath=False, split=False, snd=False):
         ps_method='s',
         snd_order=snd,
     )
+    print("Size of a wfn: {} complexes".format(len(root.vectorize())))
     root.is_normalized=True
     # Define the obersevable of interest
     projector = np.array([[0., 0.],
@@ -124,30 +107,26 @@ def sbm_zt(including_bath=False, split=False, snd=False):
     op = [[[root[0][0], projector]]]
     t_p = []
     for time, _ in solver.propagator(
-        steps=2000,
-        ode_inter=Quantity(0.05, 'fs').value_in_au,
+        steps=20,
+        ode_inter=Quantity(0.2, 'fs').value_in_au,
         split=split,
         move_energy=True,
     ):
         t, p = (Quantity(time).convert_to(unit='fs').value,
                 solver.expection(op=op))
-        for tensor in root.visitor(axis=None):
-            tensor.reset()
-        rho = root.partial_env(0, proper=False)
-        for tensor in root.visitor(axis=None):
-            tensor.reset()
-        purity = np.trace(np.dot(rho, rho))
-        t_p.append((t, p, purity))
-        logging.warning('Time: {:.2f} fs, P2: {}, purity: {}'.format(t, p, purity))
+        t_p.append((t, p))
+        logging.warning('Time: {:.2f} fs, P2: {}'.format(t, p))
+        if np.abs(p) > 0.5:
+            break
+    return np.array(t_p)
 
-    # Save the results
+@pytest.mark.parametrize('split, snd',
+                         [(True, True),
+                          (True, False)])
+def test_sbm_zt(split, snd):
     msg = 'split' if split else 'origin'
     msg2 = 'snd' if snd else 'fst'
-    np.savetxt('sbm-eq-{}-{}-linear'.format(msg, msg2), t_p)
+    ref = np.loadtxt(os.path.join(data_dir, 'sbm-zt-{}-{}.dat'.format(msg, msg2)))
+    tst = sbm_zt(including_bath=False, split=split, snd=snd)
+    np.testing.assert_allclose(tst, ref)
 
-
-logging.basicConfig(
-    format='%(asctime)s-%(levelname)s: (In %(module)s)[%(funcName)s] %(message)s',
-    level=logging.INFO
-)
-sbm_zt(including_bath=False, split=True, snd=True)

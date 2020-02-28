@@ -346,7 +346,8 @@ class MultiLayer(object):
             ans += self.root.expection()
         if normalized:
             ans /= self.root.global_square()
-        return ans
+        np.testing.assert_almost_equal(np.imag(ans), 0) 
+        return np.real(ans)
 
     # @profile
     def _single_eom(self, tensor, n, cache=False):
