@@ -29,13 +29,14 @@ from minitn.tensor import Tensor, Leaf
 from minitn.algorithms.ml import MultiLayer
 
 
+# TODO: need to be polished
 class SpinBosonModel(object):
     ELEC = ['e1', 'e2', 'v']
     INNER = ['omega_list', 'lambda_list', 'dim_list']
     OUTER = ['stop', 'n', 'dim', 'lambda_g', 'omega_g', 'lambda_d', 'omega_d']
     FIELD = ['mu', 'tau', 't_d', 'omega']
 
-    def __init__(self, including_bath=True, relaxation_list=None,
+    def __init__(self, including_bath=False, relaxation_list=None,
                  **kwargs):
         """ Needed parameters:
         - (for electronic part)
@@ -45,6 +46,7 @@ class SpinBosonModel(object):
         - (for outer part)
             'stop', 'n', 'dim', 'lambda_g', 'omega_g', 'lambda_d', 'omega_d'
         """
+        # FIXME: including_bath=True case
         valid_attributes = self.ELEC + self.INNER + self.OUTER + self.FIELD
         for name, value in kwargs.items():
             if name in valid_attributes:
@@ -61,10 +63,10 @@ class SpinBosonModel(object):
         all_vibriations = (self.inner_hamiltonian() + self.outer_hamiltonian()
                            if including_bath else self.inner_hamiltonian())
         h_list.extend(all_vibriations)
-        # need to be polished
         if relaxation_list is not None:
             h_list.extend(
-                self.relaxation_hamiltonian(coupling_list=relaxation_list, prefix='I')
+                self.relaxation_hamiltonian(
+                    coupling_list=relaxation_list, prefix='I')
             )
         self.h_list, self.f_list = self.collect_electric_terms(h_list)
         return
@@ -263,94 +265,43 @@ class SpinBosonModel(object):
                 if leaf.startswith(self.outer_prefix)]
 
 
-if __name__ == '__main__':
-    # A spin-boson model for photoinduced ET reactions in mixed-valence
-    # systems in solution at zero temperature.
-    from minitn.lib.units import Quantity
-    from minitn.tensor import Leaf, Tensor
-    from minitn.algorithms.ml import MultiLayer
-    from minitn.lib.tools import plt, figure
-    logging.basicConfig(
-        format='(In %(module)s)[%(funcName)s] %(message)s',
-        level=logging.INFO
-    )
-    including_bath = False
+class RotSpinBosonModel(SpinBosonModel):
+    def __init__(self, including_bath=True, relaxation_list=None,
+                 **kwargs):
+        """ Needed parameters:
+        - (for electronic part)
+            'e1', 'e2', 'v',
+        - (for inner part)
+            'omega_list', 'lambda_list', 'dim_list',
+        - (for outer part)
+            'stop', 'n', 'dim', 'lambda_g', 'omega_g', 'lambda_d', 'omega_d'
+        """
+        super(RotSpinBosonModel, self).__init__(including_bath,
+                                                relaxation_list,
+                                                **kwargs)
+        valid_attributes = self.ELEC + self.INNER + self.OUTER + self.FIELD
+        for name, value in kwargs.items():
+            if name in valid_attributes:
+                setattr(self, name, value)
+            else:
+                logging.warning(__('Parameter {} unexpected, ignored.', name))
+        self.elec_leaf = None
+        self.inner_prefix = None
+        self.outer_prefix = None
+        self.leaves = []
+        self.dimensions = {}
+        self.including_bath = including_bath
+        h_list = self.electron_hamiltonian()
+        all_vibriations = (self.inner_hamiltonian() + self.outer_hamiltonian()
+                           if including_bath else self.inner_hamiltonian())
+        h_list.extend(all_vibriations)
+        if relaxation_list is not None:
+            h_list.extend(
+                self.relaxation_hamiltonian(
+                    coupling_list=relaxation_list, prefix='I')
+            )
+        self.h_list, self.f_list = self.collect_electric_terms(h_list)
+        return
 
-    sbm = SpinBosonModel(
-        including_bath=including_bath,
-        e1=0.,
-        e2=Quantity(6500, 'cm-1').value_in_au,
-        v=Quantity(500, 'cm-1').value_in_au,
-        omega_list=[Quantity(2100, 'cm-1').value_in_au,
-                    Quantity(650, 'cm-1').value_in_au,
-                    Quantity(400, 'cm-1').value_in_au,
-                    Quantity(150, 'cm-1').value_in_au],
-        lambda_list=([Quantity(750, 'cm-1').value_in_au] * 4),
-        dim_list=[10, 14, 20, 30],
-        stop=Quantity(3 * 2250, 'cm-1').value_in_au,
-        n=32,
-        dim=30,
-        lambda_g=Quantity(2250, 'cm-1').value_in_au,
-        omega_g=Quantity(500, 'cm-1').value_in_au,
-        lambda_d=Quantity(1250, 'cm-1').value_in_au,
-        omega_d=Quantity(50, 'cm-1').value_in_au,
-        mu=Quantity(250, 'cm-1').value_in_au,
-        tau=Quantity(30, 'fs').value_in_au,
-        t_d=Quantity(60, 'fs').value_in_au,
-        omega=Quantity(13000, 'cm-1').value_in_au,
-    )
-
-    graph, root = sbm.autograph(n_branch=2)
-    root = Tensor.generate(graph, root)
-    solver = MultiLayer(root, sbm.h_list, f_list=sbm.f_list,
-                        use_str_name=True)
-    bond_dict = {}
-    # Leaves
-    for s, i, t, j in root.linkage_visitor():
-        if isinstance(t, Leaf):
-            bond_dict[(s, i, t, j)] = sbm.dimensions[t.name]
-    # ELEC part
-    elec_r = root[0][0]
-    for s, i, t, j in elec_r.linkage_visitor(leaf=False):
-        raise NotImplementedError()
-    # INNER part
-    inner_r = root[1][0] if including_bath else root
-    if including_bath:
-        bond_dict[(root, 1, inner_r, 0)] = 60
-    for s, i, t, j in inner_r.linkage_visitor(leaf=False):
-        bond_dict[(s, i, t, j)] = 50
-    # OUTER part
-    if including_bath:
-        outer_r = root[2][0]
-        bond_dict[(root, 2, outer_r, 0)] = 20
-        for s, i, t, j in root[2][0].linkage_visitor(leaf=False):
-            bond_dict[(s, i, t, j)] = 10
-    solver.autocomplete(bond_dict, max_entangled=False)
-    solver.settings(
-        cmf_steps=1,
-        ode_method='RK45',
-        ps_method='split-unite'
-    )
-    projector = np.array([[0., 0.],
-                          [0., 1.]])
-    op = [[[elec_r, projector]]]
-    print("Size of a wfn: {} complexes".format(len(root.vectorize())))
-    t_p = []
-    for time, _ in solver.propagator(
-        steps=400,
-        ode_inter=Quantity(0.25, 'fs').value_in_au,
-        split=True,
-    ):
-        t, p = (Quantity(time).convert_to(unit='fs').value,
-                solver.expection(op=op))
-        t_p.append((t, p))
-        print('Time: {:.2f} fs, P2: {}'.format(t, p))
-
-    # Check SBM
-    t, p = zip(*t_p)
-    with figure():
-        plt.plot(t, p, '-')
-        plt.show()
-    np.save('sbm-zt', t_p)
 
 # EOF
