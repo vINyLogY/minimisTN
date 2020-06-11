@@ -27,11 +27,10 @@ from scipy import linalg
 from scipy.integrate import quad
 
 from minitn.algorithms.ml import MultiLayer
-from minitn.lib.tools import time_this
+from minitn.lib.tools import time_this, __, huffman_tree
 from minitn.lib.units import Quantity
 from minitn.models import bath
 from minitn.models.particles import Phonon
-from minitn.models.spinboson import SpinBosonModel
 from minitn.tensor import Leaf, Tensor
 
 
@@ -88,21 +87,18 @@ def main(dof=4):
             return 0.0
             
     # Define all Leaf tensors and hamiltonian we need
-    root = Tensor(name='wfn', normalized=True)
     h_list = []
     sys_leaf = Leaf(name='sys0')
     sys_hamiltonian = np.array([[0.0, v], [v, e]], dtype=DTYPE)
-    projector = np.array([[0.0, 0.0], [0.0, 1.0]], dtype=DTYPE)
-    root.link_to(0, sys_leaf, 0)
     h_list.append([(sys_leaf, sys_hamiltonian)])
+    projector = np.array([[0.0, 0.0], [0.0, 1.0]], dtype=DTYPE)
 
     ph_parameters = linear_discretization(spec_func, omega0, dof)
+    leaves = []
     for n, (omega, g) in enumerate(ph_parameters, 1):
-        ph = Phonon(primitive_dim, omega)
+        ph = Phonon(primitive_dim, 2 * omega * n / dof)
         ph_leaf = Leaf(name='ph{}'.format(n))
-        ph_spf = Tensor(name='spf{}'.format(n), axis=0)
-        root.link_to(n, ph_spf, 0)
-        ph_spf.link_to(1, ph_leaf, 0)
+        leaves.append(ph_leaf)
         # hamiltonian ph part
         h_list.append([(ph_leaf, ph.hamiltonian)])
         # e-ph part
@@ -110,7 +106,29 @@ def main(dof=4):
         h_list.append([(ph_leaf, g * op),
                        (sys_leaf, projector)])
 
-    # Define the detailed parameters for the MC-MCTDH tree
+    def ph_spf(n=0):
+        n += 1
+        return Tensor(name='spf{}'.format(n), axis=0)
+
+    graph, root = huffman_tree(leaves, obj_new=ph_spf, n_branch=2)
+    try:
+        graph[root].insert(0, sys_leaf)
+    except KeyError:
+        ph_leaf = root
+        root = Tensor( )
+        graph[root] = [sys_leaf, ph_leaf]
+    finally:
+        root.name = 'wfn'
+        root.axis = None
+    stack = [root]
+    while stack:
+        parent = stack.pop()
+        for child in graph[parent]:
+            parent.link_to(parent.order, child, 0)
+            if child in graph:
+                stack.append(child)
+
+    # Define the detailed parameters for the ML-MCTDH tree
     solver = MultiLayer(root, h_list)
     bond_dict = {}
     # Leaves
@@ -159,7 +177,7 @@ def main(dof=4):
         logging.warning('Time: {:.2f} fs, rho: {}'.format(t, np.reshape(rho, -1)))
 
     # Save the results
-    np.savetxt('data-{}dof.txt'.format(dof), data_list,
+    np.savetxt('ml-data-{}dof.txt'.format(dof), data_list,
         header='time/fs    rho00    rho01    rho10    rho11'
     )
 
@@ -169,5 +187,5 @@ if __name__ == '__main__':
         format='%(asctime)s-%(levelname)s: (In %(module)s)[%(funcName)s] %(message)s',
         level=logging.INFO
     )
-    for dof in [1,2,3]:
+    for dof in [2,3,4]:
         main(dof=dof)

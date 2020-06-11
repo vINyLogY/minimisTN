@@ -110,15 +110,22 @@ def figure(*args, **kwargs):
     plt.close(fig)
 
 
-def huffman_tree(sources, importances=None, prefix='', n_branch=2):
+def huffman_tree(sources, importances=None, obj_new=None, n_branch=2):
     def string(x): return x[0]
 
     def key(x): return x[1]
+
     if importances is None:
         importances = [1] * len(sources)
+    if obj_new is None:
+        def counter(x=0):
+            x += 1
+            return x
+        
+        obj_new = counter
+
     sequence = list(zip(sources, importances))
     graph = {}
-    counter = 0
     while len(sequence) > 1:
         sequence.sort(key=key)
         try:
@@ -126,8 +133,7 @@ def huffman_tree(sources, importances=None, prefix='', n_branch=2):
         except:
             branch, sequence = sequence, []
         p = sum(map(key, branch))
-        new = prefix + '{:02d}'.format(counter)
+        new = obj_new()
         graph[new] = list(map(string, branch))
         sequence.insert(0, (new, p))
-        counter += 1
     return graph, string(sequence[0])

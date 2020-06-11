@@ -129,10 +129,7 @@ class Tensor(object):
 
     @property
     def order(self):
-        if self._array is None:
-            return None
-        else:
-            return len(self._array.shape)
+        return len(self._access)
 
     @staticmethod
     def link(a, i, b, j):

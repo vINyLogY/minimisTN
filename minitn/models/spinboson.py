@@ -126,7 +126,11 @@ class SpinBosonModel(object):
 
     @staticmethod
     def _update(graph, leaves, root, n_branch, prefix='A'):
-        subtree, r = huffman_tree(leaves, prefix=prefix)
+        def obj_new(x=0):
+            x += 1
+            return str(prefix) + str(x)
+
+        subtree, r = huffman_tree(leaves, obj_new=obj_new)
         try:
             subtree[root] = subtree.pop(r)
             graph.update(subtree)

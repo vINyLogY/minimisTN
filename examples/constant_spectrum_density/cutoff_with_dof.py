@@ -75,7 +75,7 @@ def main(dof=2):
     # define parameters
     e = Quantity(6500, 'cm-1').value_in_au
     v = 0.0
-    eta = Quantity(250, 'cm-1').value_in_au**2
+    eta = Quantity(10000, 'cm-1').value_in_au**2
     omega0 = Quantity(500 * dof, 'cm-1').value_in_au
     primitive_dim = 100
     spf_dim = 20
@@ -143,7 +143,7 @@ def main(dof=2):
     # Define the obersevable of interest
     data_list = []
     for time, _ in solver.propagator(
-        steps=1000,
+        steps=2000,
         ode_inter=Quantity(0.1, 'fs').value_in_au,
         split=True,
         move_energy=True,
@@ -158,7 +158,7 @@ def main(dof=2):
         logging.warning('Time: {:.2f} fs, rho: {}'.format(t, np.reshape(rho, -1)))
 
     # Save the results
-    np.savetxt('data-{}dof-{}cutoff.txt'.format(dof, omega0), data_list,
+    np.savetxt('data-{}dof-{}cutoff.txt'.format(dof, 500 * dof), data_list,
         header='time/fs    rho00    rho01    rho10    rho11'
     )
 
@@ -168,5 +168,5 @@ if __name__ == '__main__':
         format='%(asctime)s-%(levelname)s: (In %(module)s)[%(funcName)s] %(message)s',
         level=logging.INFO
     )
-    for dof in [1, 2, 3, 4, 5]:
+    for dof in [1, 2, 3]:
         main(dof=dof)
