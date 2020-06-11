@@ -28,6 +28,7 @@ from scipy.integrate import quad
 
 from minitn.algorithms.ml import MultiLayer
 from minitn.lib.tools import time_this, __, huffman_tree
+from minitn.lib.logging import Logger
 from minitn.lib.units import Quantity
 from minitn.models import bath
 from minitn.models.particles import Phonon
@@ -36,7 +37,7 @@ from minitn.tensor import Leaf, Tensor
 
 
 DTYPE = np.complex128
-
+logger = Logger().logger
 
 def linear_discretization(spec_func, stop, num, start=0.0):
     """A simple linear method to discretize a spectral density.
@@ -71,18 +72,18 @@ def linear_discretization(spec_func, stop, num, start=0.0):
     return ans
 
 @time_this
-def main(dof=2):
+def main(dof=4):
     # define parameters
     e = Quantity(6500, 'cm-1').value_in_au
     v = 0.0
     eta = Quantity(2500, 'cm-1').value_in_au**2
-    omega0 = Quantity(dof * 500, 'cm-1').value_in_au
+    omega0 = Quantity(1000, 'cm-1').value_in_au
     primitive_dim = 100
     spf_dim = 20
     
     def spec_func(omega):
         if 0 < omega < omega0:
-            return 0.5 * eta * omega
+            return eta
         else:
             return 0.0
             
@@ -96,7 +97,7 @@ def main(dof=2):
     ph_parameters = linear_discretization(spec_func, omega0, dof)
     leaves = []
     for n, (omega, g) in enumerate(ph_parameters, 1):
-        ph = Phonon(primitive_dim, omega)
+        ph = Phonon(primitive_dim, 2 * omega * n / dof)
         ph_leaf = Leaf(name='ph{}'.format(n))
         leaves.append(ph_leaf)
         # hamiltonian ph part
@@ -160,9 +161,9 @@ def main(dof=2):
     )
     root.is_normalized=True
     # Define the obersevable of interest
-    data_list = []
+    logger.info('''# time/fs    rho00  rho01  rho10  rho11''')
     for time, _ in solver.propagator(
-        steps=2000,
+        steps=200000,
         ode_inter=Quantity(0.1, 'fs').value_in_au,
         split=True,
         move_energy=True,
@@ -173,19 +174,12 @@ def main(dof=2):
         rho = root.partial_env(0, proper=False)
         for tensor in root.visitor(axis=None):
             tensor.reset()
-        data_list.append([t] + list(np.reshape(rho, -1)))
-        logging.warning('Time: {:.2f} fs, rho: {}'.format(t, np.reshape(rho, -1)))
-
-    # Save the results
-    np.savetxt('ml-data-{}dof-{}cutoff.txt'.format(dof, 500 * dof), data_list,
-        header='time/fs    rho00    rho01    rho10    rho11'
-    )
-
+        flat_data = [t] + list(np.reshape(rho, -1))
+        logger.info('{}    {}  {}  {}  {}'.format(*flat_data))
 
 if __name__ == '__main__':
     logging.basicConfig(
         format='%(asctime)s-%(levelname)s: (In %(module)s)[%(funcName)s] %(message)s',
         level=logging.INFO
     )
-    for dof in [2,4,8]:
-        main(dof=dof)
+    main(dof=2)

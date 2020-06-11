@@ -2,6 +2,8 @@
 # coding: utf-8
 """Interface to logging package.
 """
+import os
+import sys
 import logging
 from logging import handlers
 
@@ -16,10 +18,12 @@ class Logger(object):
     }
 
     def __init__(self,
-        filename, level='info', when='D', backupCount=3,
-        stream_fmt='%(asctime)s - %(pathname)s[line:%(lineno)d] - %(levelname)s: %(message)s',
+        filename=None, level='info', when='D', backupCount=3,
+        stream_fmt='%(asctime)s - %(filename)s[line:%(lineno)d] - %(levelname)s: %(message)s',
         file_fmt='%(message)s'
     ):
+        if filename is None:
+            filename = os.path.splitext(os.path.basename(sys.argv[0]))[0] + '.log'
         self.logger = logging.getLogger(filename)
         self.logger.setLevel(self.levels[level]) 
         sh = logging.StreamHandler()
