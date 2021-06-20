@@ -1,0 +1,40 @@
+# Hidden Files
+.*
+!/.gitignore
+tst.*
+*.txt
+!/requirements.txt
+*.pdf
+*.npy
+_tests/
+*.out
+remote/
+
+# Optimized
+*.py[cod]
+*.lprof
+
+# Distribution / packaging
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Media
+*.mp4
+*.png
+*.svg
+
+# Backup all data in data/
+!/data/*
