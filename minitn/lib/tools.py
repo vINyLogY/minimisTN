@@ -16,6 +16,19 @@ import matplotlib.pyplot as plt
 from matplotlib import rc
 
 
+class lazyproperty:
+    def __init__(self, func):
+        self.func = func
+
+    def __get__(self, instance, cls):
+        if instance is None:
+            return self
+        else:
+            value = self.func(instance)
+            setattr(instance, self.func.__name__, value)
+            return value
+
+
 def unzip(iterable):
     """The same as zip(*iter) but returns iterators, instead
     of expand the iterator. Mostly used for large sequence.
