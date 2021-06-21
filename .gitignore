@@ -6,9 +6,11 @@ tst.*
 !/requirements.txt
 *.pdf
 *.npy
-_tests/
 *.out
-remote/
+app/
+
+# Backup all data in data/
+!/data/*
 
 # Optimized
 *.py[cod]
@@ -35,6 +37,3 @@ var/
 *.mp4
 *.png
 *.svg
-
-# Backup all data in data/
-!/data/*
