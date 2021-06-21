@@ -87,7 +87,7 @@ class Drude(Correlation):
     def symm_coeff(self, k):
         v, l, bh = self.nu, self.lambda_, self.beta * self.hbar
         if k == 0:
-            s = v * l * np.cot(bh * v / 2.0)
+            s = v * l / np.tan(bh * v / 2.0)
         else:
             s = 2.0 * self.spectrum(self.exp_coeff(k)) / bh
         return s
