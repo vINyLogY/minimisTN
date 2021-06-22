@@ -795,7 +795,7 @@ class MultiLayer(object):
             logging.info(__(
                 "Propagating at t: {:.3f}, E: {:.8f}, |v|^2: {:.8f}",
                 time,
-                expection(normalized=True),
+                expection(normalized=False),
                 root.global_square()
             ))
             self.time = time if not imaginary else None

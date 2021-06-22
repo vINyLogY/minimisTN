@@ -91,7 +91,7 @@ def test_diff_heom():
         flat_data = [time] + list(rho) + [pr]
         print(r'# time    rho00  rho01  rho10  rho11    Pr')
         print('{}    {}  {}  {}  {}    {}'.format(*flat_data))
-        print
+        print()
 
 
 if __name__ == '__main__':

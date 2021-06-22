@@ -142,8 +142,6 @@ class MultiLayer(object):
             With the same shape with tensor.shape.
         """
         partial_product = Tensor.partial_product
-        partial_trace = Tensor.partial_trace
-        partial_env = tensor.partial_env
 
         # Env Hamiltonians
         tmp = tensor.array
@@ -153,21 +151,8 @@ class MultiLayer(object):
             tmp = partial_product(tmp, i, env_)
         # For non-root nodes...
         if tensor.axis is not None:
-            # Inversion
-            axis, inv = tensor.axis, self.inv_density[tensor]
-            tmp = partial_product(tmp, axis, inv)
-            # Projection
-            tmp_1 = np.array(tmp)
-            array = tensor.array
-            conj_array = np.conj(array)
-            tmp = partial_trace(tmp, axis, conj_array, axis)
-            tmp = partial_product(array, axis, tmp, j=1)
-            tmp = (tmp_1 - tmp)
-        return self.coefficient * tmp    
-        
-    @property
-    def coefficient(self):
-        return -1.0j / self.hbar
+            raise RuntimeError()
+        return tmp
 
     def _form_inv_density(self):
         self.inv_density = {}
@@ -224,12 +209,12 @@ class MultiLayer(object):
         def diff(t, y):
             """This function will not change the arrays in tensor network.
             """
-            # origin = tensor.array
+            origin = tensor.array
             tensor.set_array(np.reshape(y, tensor.shape))
             ans = np.zeros_like(y)
             for n in self.term_visitor():
                 ans += np.reshape(self._single_diff(tensor, n), -1)
-            # tensor.set_array(origin)
+            tensor.set_array(origin)
             return ans
 
         if tensor.axis is None:
@@ -336,7 +321,7 @@ class MultiLayer(object):
         ----------
         steps : int
         ode_inter : float
-        method : {'Newton', 'RK4', 'RK45', ...}
+        method : {'RK23', 'RK45', ...}
         """
         identifier = self.ps_method.upper()
         if identifier.startswith('U'):
