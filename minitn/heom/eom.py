@@ -66,15 +66,15 @@ class Hierachy(object):
         identity = np.identity(self.n_states)
         return np.kron(op, identity) + np.kron(identity, op)
 
-    @lazyproperty
+    @property
     def sys_liouvillian(self):
-        return -1.0j / self.hbar * self._comm(self.h)
+        return self._comm(self.h) / (1.0j * self.hbar)
 
-    @lazyproperty
+    @property
     def commutator(self):
         return self._comm(self.op)
 
-    @lazyproperty
+    @property
     def acommutator(self):
         return self._acomm(self.op)
 
@@ -91,7 +91,7 @@ class Hierachy(object):
 
     def _diff_ij(self):
         array = self.sys_liouvillian - \
-            self.corr.delta_coeff() / self.hbar**2 * np.dot(self.commutator, self.commutator)
+            self.corr.delta_coeff() * np.matmul(self.commutator, self.commutator)
         return [[(self.k_max, array)]]
 
     def _diff_k(self, k):
@@ -99,11 +99,7 @@ class Hierachy(object):
         gamma_k = self.corr.exp_coeff(k)
         s_k = self.corr.symm_coeff(k)
         a_k = self.corr.asymm_coeff(k)
-        
-        # helper vectors
         k_max = self.k_max
-        nrange = np.arange(self.n_dims[k]) 
-        krange = np.arange(k_max + 1)
         
         # L_0
         ## gamma_k * np.einsum('k,...k...->...k...', nrange, rho_n)
@@ -111,13 +107,12 @@ class Hierachy(object):
         res.append([(k, array0)])
 
         # L_+
-        array1_ij = -1.0j / self.hbar * \
-            (s_k * self.commutator + 1.0j * a_k * self.acommutator)
-        array1_k = np.dot(self._numberer(k), self._upper(k))
+        array1_ij = (s_k * self.commutator + 1.0j * a_k * self.acommutator) / (1.0j * self.hbar)
+        array1_k = np.matmul(self._numberer(k), self._upper(k))
         res.append([(k_max, array1_ij), (k, array1_k)])
 
         # L_-
-        array2_ij = -1.0j / self.hbar * self.commutator
+        array2_ij = self.commutator / (1.0j * self.hbar)
         array2_k = self._lower(k)
         res.append([(k_max, array2_ij), (k, array2_k)])
 
@@ -166,4 +161,7 @@ if __name__ == '__main__':
 
     init_rho = heom.gen_extended_rho(rho_0)
     print(init_rho.shape)
-    print(heom.diff(init_rho))
+    for n, term in enumerate(heom.diff()):
+        print('- Term {}:'.format(n))
+        for label, array in term: 
+            print('Label: {}, shape: {}'.format(label, array.shape))
