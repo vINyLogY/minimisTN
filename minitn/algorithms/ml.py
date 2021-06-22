@@ -416,9 +416,9 @@ class MultiLayer(object):
     # @profile
     def _form_env(self, update=False):
         self.env_ = {}
-        network = self.root.visitor(axis=None, leaf=False)
+        network = self.root.visitor
         for n in self.term_visitor(only_td=update):
-            for tensor in network:
+            for tensor in network(axis=None, leaf=False):
                 for i in range(tensor.order):
                     env_ = tensor.partial_env(i, proper=True)
                     self.env_[(n, tensor, i)] = env_

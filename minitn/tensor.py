@@ -904,8 +904,6 @@ class Leaf(Tensor):
         """
         if proper:
             raise RuntimeError('No proper mean field at Leaf {}'.format(self))
-        elif i != 0:
-            raise RuntimeError('For Leaf {} `i` must be 0'.format(self))
         else:
             return self.aux if use_aux else self.array
 

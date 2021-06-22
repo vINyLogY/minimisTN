@@ -108,7 +108,7 @@ class Hierachy(object):
         # L_0
         ## gamma_k * np.einsum('k,...k...->...k...', nrange, rho_n)
         array0 = -gamma_k * self._numberer(k) 
-        res.append([(k_max, array0)])
+        res.append([(k, array0)])
 
         # L_+
         array1_ij = -1.0j / self.hbar * \
@@ -130,7 +130,7 @@ class Hierachy(object):
         derivative = self._diff_ij()
 
         for k in range(self.k_max):
-            derivative.append(self._diff_k(k))
+            derivative.extend(self._diff_k(k))
 
         return derivative
 
