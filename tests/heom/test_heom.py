@@ -33,9 +33,11 @@ from minitn.heom.eom import Hierachy
 from minitn.heom.propagate import MultiLayer
 from minitn.structures.states import Tensor
 from minitn.lib.logging import Logger
+import time
+import pyheom
 
-data_dir = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'data')
-os.chdir(data_dir)
+
+os.chdir(os.path.abspath(os.path.dirname(__file__)))
 
 def test_diff_heom():
     # System
@@ -94,5 +96,135 @@ def test_diff_heom():
         print()
 
 
+def test_brownian():
+    lambda_0 = 0.01 # reorganization energy (dimensionless)
+    omega_0   = 1.0 # vibrational frequency (dimensionless) 
+    zeta      = 0.5 # damping constant      (dimensionless)
+    max_tier  = 10
+    omega_1 = np.sqrt(omega_0**2 - zeta**2*0.25)
+
+    J = pyheom.Brownian(lambda_0, zeta, omega_0)
+
+    corr_dict = pyheom.noise_decomposition(
+        J,
+        T = 1,                      # temperature (dimensionless)
+        type_LTC = 'PSD',
+        n_PSD = 1,
+        type_PSD = 'N-1/N'
+    )
+    s = corr_dict['s'].toarray()
+    a = corr_dict['a'].toarray()
+    gamma = corr_dict['gamma'].toarray()
+    delta = corr_dict['S_delta']
+
+    print(s)
+    print(a)
+    print(gamma)
+    print(delta)
+
+
+
+    h = np.array([[omega_1, 0],
+                [0, 0]])
+
+    op = np.array([[0, 1],
+                [1, 0]])
+
+    max_terms = 3
+
+    corr = Correlation(k_max=max_terms, beta=1)
+    corr.symm_coeff = lambda k: s[k, k]    
+    corr.asymm_coeff = lambda k: a[k, k]
+    corr.exp_coeff = lambda k: gamma[k, k]
+    corr.delta_coeff = lambda: delta
+    heom = Hierachy([max_tier] * max_terms, h, op, corr)
+    rho_0 = np.zeros((2, 2))
+    rho_0[0, 0] = 1
+
+    init_wfn = heom.gen_extended_rho(rho_0)
+
+    # Simple HEOM
+    root = Tensor(name='root', array=init_wfn, axis=None)
+    for k in range(max_terms + 1):
+        name_str = k
+        l = Leaf(name=name_str)
+        root[k] = (l, 1)
+
+    solver = MultiLayer(root, heom.diff(), use_str_name=True)
+
+    solver.settings(
+        ode_method='RK45',
+        ps_method='s',
+        snd_order=False,
+    )
+
+    # Define the obersevable of interest
+    print(r'# time    rho00  rho01  rho10  rho11')
+    for n, (time, r) in enumerate(solver.propagator(
+        steps=5000,
+        ode_inter=0.01,
+    )):
+        if n % 5 == 0:
+            rho = np.reshape(r.array, (-1, 4))[0]
+            flat_data = [time] + list(rho)
+            print('{}    {}  {}  {}  {}'.format(*flat_data))
+
+
+
+def gen_ref():
+    lambda_0 = 0.01 # reorganization energy (dimensionless)
+    omega_0   = 1.0 # vibrational frequency (dimensionless) 
+    zeta      = 0.5 # damping constant      (dimensionless)
+    max_tier  = 5
+
+    J = pyheom.Brownian(lambda_0, zeta, omega_0)
+    corr_dict = pyheom.noise_decomposition(
+        J,
+        T = 1,                      # temperature (dimensionless)
+        type_LTC = 'PSD',
+        n_PSD = 1,
+        type_PSD = 'N-1/N'
+    )
+
+    n_state = 2
+
+    omega_1 = np.sqrt(omega_0**2 - zeta**2 * 0.25)
+    H = np.array([[omega_1, 0],
+                [0, 0]])
+
+    V = np.array([[0, 1],
+                [1, 0]])
+
+    noises = [
+        dict(V=V, C=corr_dict)
+    ]
+
+    h = pyheom.HEOM(
+        H,
+        noises,
+        max_tier=max_tier,
+        matrix_type='dense',
+        hierarchy_connection='loop',
+    )
+        
+    dt__unit = 1e-2
+            
+    rho_0 = np.zeros((n_state,n_state))
+    rho_0[0, 0] = 1
+    h.set_rho(rho_0)
+                
+    callback_interval = 5
+    count             = 5000
+
+    print('- Start HEOM simulation')
+    print('# density matrix dynamics')
+    print('# time    rho00 rho01 rho10 rho11')
+    def callback(t, rho):
+        flat_data = [t] + list(np.reshape(rho, -1))
+        print('{}   {} {} {} {}'.format(*flat_data))
+    h.time_evolution(dt__unit, count, callback, callback_interval)
+    print('- End')
+
 if __name__ == '__main__':
-    test_diff_heom()
+    # gen_ref()
+    test_brownian()
