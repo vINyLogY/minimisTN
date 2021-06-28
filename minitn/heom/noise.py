@@ -31,7 +31,7 @@ class SpectrumFactory:
 class Correlation(object):
     hbar = 1.0
 
-    def __init__(self, k_max, beta):
+    def __init__(self, k_max=None, beta=None):
         """
         k_max : int
             number of the terms in the basis functions
