@@ -33,56 +33,55 @@ from minitn.heom.eom import Hierachy
 from minitn.heom.propagate import MultiLayer
 from minitn.structures.states import Tensor
 from minitn.lib.logging import Logger
-import time
 import pyheom
 
 
 os.chdir(os.path.abspath(os.path.dirname(__file__)))
 
-## Parameters settings
-max_tier  = 5
 
-lambda_0 = 0.01 # reorganization energy (dimensionless)
-omega_0   = 1.0 # vibrational frequency (dimensionless) 
-zeta      = 0.5 # damping constant      (dimensionless)
-omega_1 = np.sqrt(omega_0**2 - zeta**2*0.25)
-J = pyheom.Brownian(lambda_0, zeta, omega_0)
+def test_brownian():
+    lambda_0 = 0.01 # reorganization energy (dimensionless)
+    omega_0   = 1.0 # vibrational frequency (dimensionless) 
+    zeta      = 0.5 # damping constant      (dimensionless)
+    max_tier  = 4
+    omega_1 = np.sqrt(omega_0**2 - zeta**2*0.25)
 
-corr_dict = pyheom.noise_decomposition(
-    J,
-    T = 1,                      # temperature (dimensionless)
-    type_LTC = 'PSD',
-    n_PSD = 1,
-    type_PSD = 'N-1/N'
-)
+    J = pyheom.Brownian(lambda_0, zeta, omega_0)
 
-h = np.array([[omega_1, 0],
+    corr_dict = pyheom.noise_decomposition(
+        J,
+        T = 1,                      # temperature (dimensionless)
+        type_LTC = 'PSD',
+        n_PSD = 1,
+        type_PSD = 'N-1/N'
+    )
+    s = corr_dict['s'].toarray()
+    a = corr_dict['a'].toarray()
+    gamma = corr_dict['gamma'].toarray()
+    delta = corr_dict['S_delta']
+
+    h = np.array([[omega_1, 0],
                 [0, 0]])
 
-op = np.array([[0, 1],
+    op = np.array([[0, 1],
                 [1, 0]])
 
-rho_0 = np.zeros((2, 2))
-rho_0[0, 0] = 1
+    max_terms = 3
 
-dt = 0.01
-callback_interval = 5
-steps = 5000
-
-
-def gen_brownian():
-    corr = Correlation(k_max=3)
-    corr.symm_coeff = lambda k: corr_dict['s'][k, k]    
-    corr.asymm_coeff = lambda k: corr_dict['a'][k, k]
-    corr.exp_coeff = lambda k: corr_dict['gamma'][k, k]
-    corr.delta_coeff = lambda: corr_dict['S_delta']
-    heom = Hierachy([max_tier] * corr.k_max, h, op, corr)
+    corr = Correlation(k_max=max_terms, beta=1)
+    corr.symm_coeff = lambda k: s[k, k]    
+    corr.asymm_coeff = lambda k: a[k, k]
+    corr.exp_coeff = lambda k: gamma[k, k]
+    corr.delta_coeff = lambda: delta
+    heom = Hierachy([max_tier] * max_terms, h, op, corr)
+    rho_0 = np.zeros((2, 2))
+    rho_0[0, 0] = 1
 
     init_wfn = heom.gen_extended_rho(rho_0)
 
     # Simple HEOM
     root = Tensor(name='root', array=init_wfn, axis=None)
-    for k in range(corr.k_max + 1):
+    for k in range(max_terms + 1):
         name_str = k
         l = Leaf(name=name_str)
         root[k] = (l, 1)
@@ -96,49 +95,85 @@ def gen_brownian():
     )
 
     # Define the obersevable of interest
-    data = []
+    dat = []
     for n, (time, r) in enumerate(solver.propagator(
-        steps=steps,
-        ode_inter=dt,
+        steps=5000,
+        ode_inter=0.01,
     )):
-        if n % callback_interval == 0:
-            rho = r.array[0, 0, 0, :]
-            flat_data = [time] + list(rho)
-            data.append(flat_data)
-            print("Time: {}; Pop.: {}".format(time, np.abs(rho[0] + rho[-1])))
-
-    data = np.array(data)
-    np.savetxt('tst.dat', data)
-    return data
+        if n % 100 == 0:
+            rho = np.reshape(r.array, (-1, 4))
+            for n, _ in enumerate(rho):
+                if n == 0:
+                    flat_data = [time] + list(rho[0])
+                    dat.append(flat_data)
+    return np.array(dat)
 
 
-def gen_ref_brownian():
+
+def gen_ref():
+    lambda_0 = 0.01 # reorganization energy (dimensionless)
+    omega_0   = 1.0 # vibrational frequency (dimensionless) 
+    zeta      = 0.5 # damping constant      (dimensionless)
+    max_tier  = 5
+
+    J = pyheom.Brownian(lambda_0, zeta, omega_0)
+    corr_dict = pyheom.noise_decomposition(
+        J,
+        T = 1,                      # temperature (dimensionless)
+        type_LTC = 'PSD',
+        n_PSD = 1,
+        type_PSD = 'N-1/N'
+    )
+
+    n_state = 2
+
+    omega_1 = np.sqrt(omega_0**2 - zeta**2 * 0.25)
+    H = np.array([[omega_1, 0],
+                [0, 0]])
+
+    V = np.array([[0, 1],
+                [1, 0]])
+
     noises = [
-        dict(V=op, C=corr_dict)
+        dict(V=V, C=corr_dict)
     ]
 
-    heom = pyheom.HEOM(
-        h,
+    h = pyheom.HEOM(
+        H,
         noises,
         max_tier=max_tier,
         matrix_type='dense',
         hierarchy_connection='loop',
     )
-
-    heom.set_rho(rho_0)
+        
+    dt__unit = 1e-2
+            
+    rho_0 = np.zeros((n_state,n_state))
+    rho_0[0, 0] = 1
+    h.set_rho(rho_0)
                 
-    ref_data = []
+    callback_interval = 5
+    count             = 5000
+
+    ref = []
     def callback(t, rho):
         flat_data = [t] + list(np.reshape(rho, -1))
-        ref_data.append(flat_data)
-        print("Time: {}; Pop.: {}".format(t, np.abs(rho[0,0] + rho[1,1])))
-    heom.time_evolution(dt, steps, callback, callback_interval)
-    
-    ref_data = np.array(ref_data)
-    np.savetxt('ref.dat', ref_data)
-    return ref_data
+        ref.append(flat_data)
+    h.time_evolution(dt__unit, count, callback, callback_interval)
+    return np.array(ref)
 
-    
+
+
 if __name__ == '__main__':
-    ref = gen_ref_brownian()
-    tst = gen_brownian()
+    from matplotlib import pyplot as plt
+    # a1 = gen_ref()
+    # np.savetxt('reference.dat', a1)
+    a1 = np.loadtxt('reference.dat', dtype=complex)
+    a2 = test_brownian()
+    np.savetxt('test.dat', a2)
+    a2 = np.loadtxt('test.dat', dtype=complex)
+    plt.plot(a1[:, 0], a1[:, 1], '-', label='Ikeda')
+    plt.plot(a2[:, 0], a2[:, 1], '--', label='minitn')
+    plt.legend()
+    plt.savefig('cmp.png')
+
