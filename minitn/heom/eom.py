@@ -35,6 +35,9 @@ class Hierachy(object):
         self.k_max = len(n_dims)
         assert isinstance(corr, Correlation)
         assert self.k_max == corr.k_max
+        self._i = len(n_dims)
+        self._j = len(n_dims) + 1
+        
         self.corr = corr
         assert sys_op.ndim == 2 
         assert sys_op.shape == sys_hamiltonian.shape
@@ -44,20 +47,21 @@ class Hierachy(object):
 
     def gen_extended_rho(self, rho):
         """Get rho_n from rho with the conversion:
-            rho[n_0, ..., n_(k-1), ij]
+            rho[n_0, ..., n_(k-1), i, j]
 
         Parameters
         ----------
         rho : np.ndarray
         """
-        assert rho.ndim == 2 and rho.shape[0] == rho.shape[1]
-        # rho_n[i, j, 0] = rho
-        # rho_n[i, j, n] = 0
+        shape = list(rho.shape)
+        assert len(shape) == 2 and shape[0] == shape[1]
+        # Let: rho_n[0, i, j] = rho and rho_n[n, i, j] = 0
         ext = np.zeros((np.prod(self.n_dims),))
         ext[0] = 1
-        rho_n = np.reshape(np.tensordot(ext, rho, axes=0), list(self.n_dims) + [-1])
+        rho_n = np.reshape(np.tensordot(ext, rho, axes=0), list(self.n_dims) + shape)
         return rho_n
 
+    """    
     def _comm(self, op):
         identity = np.identity(self.n_states)
         return np.kron(op, identity) - np.kron(identity, op)
@@ -67,16 +71,13 @@ class Hierachy(object):
         return np.kron(op, identity) + np.kron(identity, op)
 
     @property
-    def sys_liouvillian(self):
-        return self._comm(self.h) / (1.0j * self.hbar)
-
-    @property
     def commutator(self):
         return self._comm(self.op)
 
     @property
     def acommutator(self):
         return self._acomm(self.op)
+    """
 
     def _upper(self, k):
         dim = self.n_dims[k]
@@ -90,33 +91,34 @@ class Hierachy(object):
         return np.diag(np.arange(self.n_dims[k]))
 
     def _diff_ij(self):
-        array = self.sys_liouvillian - \
-            self.corr.delta_coeff() * np.matmul(self.commutator, self.commutator)
-        return [[(self.k_max, array)]]
+        delta = self.corr.delta_coeff
+        ans = [
+            [(self._i, -1.0j / self.hbar * np.transpose(self.h))],
+            [(self._j, 1.0j / self.hbar * self.h)],
+            [(self._i, -delta * np.transpose(self.op @ self.op))],
+            [(self._i, np.sqrt(2.0) * delta * np.transpose(self.op)), 
+             (self._j, np.sqrt(2.0) * delta * self.op)],
+            [(self._j, -delta * (self.op @ self.op))],
+        ]
+        
+        return ans
 
     def _diff_k(self, k):
-        res = []
-        gamma_k = self.corr.exp_coeff(k)
-        s_k = self.corr.symm_coeff(k)
-        a_k = self.corr.asymm_coeff(k)
-        k_max = self.k_max
-        
-        # L_0
-        ## gamma_k * np.einsum('k,...k...->...k...', nrange, rho_n)
-        array0 = -gamma_k * self._numberer(k) 
-        res.append([(k, array0)])
+        gamma_k = self.corr.exp_coeff[k]
+        c_k = self.corr.symm_coeff[k] + 1.0j * self.corr.asymm_coeff[k]
+        lower = self._lower(k)
+        upper = self._upper(k)
+        numberer = self._numberer(k)
 
-        # L_+
-        array1_ij = (s_k * self.commutator + 1.0j * a_k * self.acommutator) / (1.0j * self.hbar)
-        array1_k = np.matmul(self._numberer(k), self._upper(k))
-        res.append([(k_max, array1_ij), (k, array1_k)])
+        ans = [
+            [(k, - gamma_k * numberer)],
+            [(self._i, -1.0j / self.hbar * np.transpose(self.op)), (k, lower)],
+            [(self._j, 1.0j / self.hbar * self.op), (k, lower)],
+            [(self._i, -1.0j / self.hbar * c_k * np.transpose(self.op)), (k, numberer @ upper)],
+            [(self._j, 1.0j / self.hbar * np.conj(c_k) * self.op), (k, numberer @ upper)],
+        ]
 
-        # L_-
-        array2_ij = self.commutator / (1.0j * self.hbar)
-        array2_k = self._lower(k)
-        res.append([(k_max, array2_ij), (k, array2_k)])
-
-        return res
+        return ans
 
     def diff(self):
         """Get the derivative of rho_n at time t
@@ -130,7 +132,6 @@ class Hierachy(object):
         return derivative
 
 
-# TODO: TD propagation
 
 if __name__ == '__main__':
     from minitn.heom.noise import Drude

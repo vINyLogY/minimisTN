@@ -1,49 +1,28 @@
 #!/usr/bin/env python3
 # coding: utf-8
-r""" A spin-boson model for photoinduced ET reactions in mixed-valence systems
-in solution at zero/finite temperature.
-
-Spin-boson model::
-
-    H = H_e + H_v + H_B
-
-where :math:`H_v = 1/2 \sum_j (p_j^2 + \omega_j^2(q_j -\frac{2c_j}{\omega_j^2}
-|2><2|)^2)`. H_B similar (discretized from :math:`J_B`)
-
-References
-----------
-.. [1] J. Chem. Phys. 124, 034114 (2006)
-       https://doi.org/10.1063/1.2161178
-"""
 from __future__ import absolute_import, division, print_function
 
-import logging
-from minitn.tensor import Leaf
 import os
-import sys
-import pytest
 from builtins import filter, map, range, zip
 
 import numpy as np
-from scipy import linalg
-
-from minitn.heom.noise import Correlation, Drude
-from minitn.lib.units import Quantity
 from minitn.heom.eom import Hierachy
+from minitn.heom.noise import Correlation, Drude
 from minitn.heom.propagate import MultiLayer
 from minitn.structures.states import Tensor
-from minitn.lib.logging import Logger
+from minitn.tensor import Leaf
+
 import pyheom
 
-
-os.chdir(os.path.abspath(os.path.dirname(__file__)))
+f_dir = os.path.abspath(os.path.dirname(__file__))
+os.chdir(os.path.join(f_dir, 'pyheom'))
 
 
 def test_brownian():
     lambda_0 = 0.01 # reorganization energy (dimensionless)
     omega_0   = 1.0 # vibrational frequency (dimensionless) 
     zeta      = 0.5 # damping constant      (dimensionless)
-    max_tier  = 4
+    max_tier  = 10
     omega_1 = np.sqrt(omega_0**2 - zeta**2*0.25)
 
     J = pyheom.Brownian(lambda_0, zeta, omega_0)
@@ -67,12 +46,12 @@ def test_brownian():
                 [1, 0]])
 
     max_terms = 3
-
     corr = Correlation(k_max=max_terms, beta=1)
-    corr.symm_coeff = lambda k: s[k, k]    
-    corr.asymm_coeff = lambda k: a[k, k]
-    corr.exp_coeff = lambda k: gamma[k, k]
-    corr.delta_coeff = lambda: delta
+    corr.symm_coeff = np.diag(s)
+    corr.asymm_coeff = np.diag(a)
+    corr.exp_coeff = np.diag(gamma)
+    corr.delta_coeff = delta
+    corr.print()
     heom = Hierachy([max_tier] * max_terms, h, op, corr)
     rho_0 = np.zeros((2, 2))
     rho_0[0, 0] = 1
@@ -81,10 +60,10 @@ def test_brownian():
 
     # Simple HEOM
     root = Tensor(name='root', array=init_wfn, axis=None)
-    for k in range(max_terms + 1):
+    for k in range(max_terms + 2):
         name_str = k
         l = Leaf(name=name_str)
-        root[k] = (l, 1)
+        root[k] = (l, 0)
 
     solver = MultiLayer(root, heom.diff(), use_str_name=True)
 
@@ -106,6 +85,7 @@ def test_brownian():
                 if n == 0:
                     flat_data = [time] + list(rho[0])
                     dat.append(flat_data)
+                    print("{}    {}    {}".format(flat_data[1], flat_data[-1], flat_data[1] + flat_data[-1]))
     return np.array(dat)
 
 
@@ -166,14 +146,14 @@ def gen_ref():
 
 if __name__ == '__main__':
     from matplotlib import pyplot as plt
+
     # a1 = gen_ref()
     # np.savetxt('reference.dat', a1)
     a1 = np.loadtxt('reference.dat', dtype=complex)
     a2 = test_brownian()
     np.savetxt('test.dat', a2)
-    a2 = np.loadtxt('test.dat', dtype=complex)
+    # a2 = np.loadtxt('test.dat', dtype=complex)
     plt.plot(a1[:, 0], a1[:, 1], '-', label='Ikeda')
     plt.plot(a2[:, 0], a2[:, 1], '--', label='minitn')
     plt.legend()
     plt.savefig('cmp.png')
-

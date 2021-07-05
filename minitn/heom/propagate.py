@@ -223,10 +223,13 @@ class MultiLayer(object):
             raise RuntimeError("Cannot propagate on Tensor {}:"
                                "Not a root node!".format(tensor))
         y0 = np.reshape(tensor.array, -1)
-        solver = solve_ivp(diff, (self.time, self.time + tau), y0, method=self.ode_method)
-        tensor.set_array(np.reshape(solver.y[:, -1], tensor.shape))
+        #solver = solve_ivp(diff, (self.time, self.time + tau), y0, method=self.ode_method)
+        #tensor.set_array(np.reshape(solver.y[:, -1], tensor.shape))
 
-        # self._solve_ode(diff, y0, tau, None, updater)
+        def updater(a):
+            tensor.set_array(np.reshape(a, tensor.shape))
+
+        self._solve_ode(diff, y0, tau, None, updater)
         return tensor
 
     def remove_env(self, *args):
