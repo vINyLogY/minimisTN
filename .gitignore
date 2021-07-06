@@ -8,6 +8,7 @@ tst.*
 *.npy
 *.out
 *.dat
+*.log
 app/
 
 # Backup all data in data/

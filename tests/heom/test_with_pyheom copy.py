@@ -18,41 +18,42 @@ f_dir = os.path.abspath(os.path.dirname(__file__))
 os.chdir(os.path.join(f_dir, 'pyheom'))
 
 
-def test_brownian():
-    lambda_0 = 0.05 # reorganization energy (dimensionless)
-    omega_0   = 1.0 # vibrational frequency (dimensionless) 
-    zeta      = 0.5 # damping constant      (dimensionless)
-    max_tier  = 5
-    omega_1 = np.sqrt(omega_0**2 - zeta**2*0.25)
+def test_drude():
+    eta = 0.05 # reorganization energy (dimensionless)
+    gamma_c   = 0.05 # vibrational frequency (dimensionless) 
+    max_tier  = 10
 
-    J = pyheom.Brownian(lambda_0, zeta, omega_0)
-
+    J = pyheom.Drudian(eta, gamma_c)
     corr_dict = pyheom.noise_decomposition(
         J,
         T = 1,                      # temperature (dimensionless)
         type_LTC = 'PSD',
-        n_PSD = 1,
+        n_PSD = 4,
         type_PSD = 'N-1/N'
     )
+
     s = corr_dict['s'].toarray()
     a = corr_dict['a'].toarray()
     gamma = corr_dict['gamma'].toarray()
     delta = 0
+    n_state = 2
 
-    h = np.array([[omega_1, 0],
-                [0, 0]])
+    omega_1 = 0.05
+    omega_2 = 0.02
+    H = np.array([[omega_1, omega_2],
+                [omega_2, 0]])
 
-    op = np.array([[0, 1],
-                [1, 0]])
+    V = np.array([[0, 0],
+                [0, 1]])
 
-    max_terms = 3
+    max_terms = 2
     corr = Correlation(k_max=max_terms, beta=1)
     corr.symm_coeff = np.diag(s)
     corr.asymm_coeff = np.diag(a)
     corr.exp_coeff = np.diag(gamma)
     corr.delta_coeff = delta
     corr.print()
-    heom = Hierachy([max_tier] * max_terms, h, op, corr)
+    heom = Hierachy([max_tier] * max_terms, H, V, corr)
     rho_0 = np.zeros((2, 2))
     rho_0[0, 0] = 1
 
@@ -65,7 +66,7 @@ def test_brownian():
     # Define the obersevable of interest
     dat = []
     for n, (time, r) in enumerate(solver.propagator(
-        steps=5000,
+        steps=10000,
         ode_inter=0.01,
     )):
         if n % 100 == 0:
@@ -81,28 +82,28 @@ def test_brownian():
 
 
 def gen_ref():
-    lambda_0 = 0.05 # reorganization energy (dimensionless)
-    omega_0   = 1.0 # vibrational frequency (dimensionless) 
-    zeta      = 0.5 # damping constant      (dimensionless)
+    eta = 0.05 # reorganization energy (dimensionless)
+    gamma_c   = 0.05 # vibrational frequency (dimensionless) 
     max_tier  = 5
 
-    J = pyheom.Brownian(lambda_0, zeta, omega_0)
+    J = pyheom.Drudian(eta, gamma_c)
     corr_dict = pyheom.noise_decomposition(
         J,
         T = 1,                      # temperature (dimensionless)
         type_LTC = 'PSD',
-        n_PSD = 1,
+        n_PSD = 4,
         type_PSD = 'N-1/N'
     )
 
     n_state = 2
 
-    omega_1 = np.sqrt(omega_0**2 - zeta**2 * 0.25)
-    H = np.array([[omega_1, 0],
-                [0, 0]])
+    omega_1 = 0.05
+    omega_2 = 0.02
+    H = np.array([[omega_1, omega_2],
+                [omega_2, 0]])
 
-    V = np.array([[0, 1],
-                [1, 0]])
+    V = np.array([[0, 0],
+                [0, 1]])
 
     noises = [
         dict(V=V, C=corr_dict)
@@ -137,13 +138,13 @@ def gen_ref():
 if __name__ == '__main__':
     from matplotlib import pyplot as plt
 
-    a1 = gen_ref()
-    np.savetxt('reference.dat', a1)
-    # a1 = np.loadtxt('reference.dat', dtype=complex)
-    # a2 = test_brownian()
-    # np.savetxt('test.dat', a2)
-    a2 = np.loadtxt('test.dat', dtype=complex)
+    # a1 = gen_ref()
+    # np.savetxt('reference.dat', a1)
+    a1 = np.loadtxt('reference.dat', dtype=complex)
+    a2 = test_drude()
+    np.savetxt('test.dat', a2)
+    # a2 = np.loadtxt('test.dat', dtype=complex)
     plt.plot(a1[:, 0], a1[:, 1], '-', label='Ikeda')
     plt.plot(a2[:, 0], a2[:, 1], '--', label='minitn')
     plt.legend()
-    plt.savefig('cmp2.png')
+    plt.savefig('cmp3.png')
