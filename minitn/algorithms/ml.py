@@ -226,9 +226,7 @@ class MultiLayer(object):
             temperature and imaginary-time propagation).  Default is `False`.
         """
         for t in self.root.visitor(leaf=False):
-            try:
-                t.array
-            except AttributeError:
+            if t.array is None:
                 axis = t.axis
                 if max_entangled and not any(t.children(leaf=False)):
                     if len(list(t.children(leaf=True))) != 2 or axis is None:

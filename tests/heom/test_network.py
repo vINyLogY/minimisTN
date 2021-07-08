@@ -17,7 +17,7 @@ from minitn.tensor import Leaf
 import pyheom
 
 f_dir = os.path.abspath(os.path.dirname(__file__))
-os.chdir(os.path.join(f_dir, 'pyheom'))
+os.chdir(os.path.join(f_dir, 'tensor_train'))
 
 
 def test_drude():
@@ -67,8 +67,7 @@ def test_drude():
     solver = MultiLayer(root, heom.diff(), use_str_name=True)
     solver.ode_method = 'RK45'
     solver.snd_order = False
-    solver.atol = 1.e-7
-    solver.rtol = 1.e-7
+
 
     # Define the obersevable of interest
     dat = []
@@ -148,12 +147,12 @@ if __name__ == '__main__':
     from matplotlib import pyplot as plt
     #logging.basicConfig(level=logging.DEBUG)
 
-    #a1 = gen_ref()
-    #np.savetxt('reference2.dat', a1)
-    a1 = np.loadtxt('reference2.dat', dtype=complex)
-    a2 = test_drude()
-    np.savetxt('test2.dat', a2)
-    #a2 = np.loadtxt('test2.dat', dtype=complex)
+    a1 = gen_ref()
+    np.savetxt('reference2.dat', a1)
+    #a1 = np.loadtxt('reference2.dat', dtype=complex)
+    #a2 = test_drude()
+    #np.savetxt('test2.dat', a2)
+    a2 = np.loadtxt('test2.dat', dtype=complex)
     plt.plot(a1[:, 0], a1[:, 1], '-', label='P(0) (pyheom)')
     plt.plot(a2[:, 0], a2[:, 1], '--', label='P(0) (minitn)')
     
