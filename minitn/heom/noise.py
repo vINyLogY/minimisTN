@@ -16,14 +16,15 @@ from builtins import filter, map, range, zip
 
 import numpy as np
 
-from minitn.lib.tools import __
+from minitn.lib.tools import __, lazyproperty
+
 
 
 class SpectrumFactory:
     @staticmethod
-    def drude(lambda_, nu):
+    def drude(lambda_, omega_0):
         def _drude(omega):
-            res = 2.0 * lambda_ * (omega * nu) / (omega**2 + nu**2)
+            res = 2.0 * lambda_ * (omega * omega_0) / (omega**2 + omega_0**2)
             return res
         return _drude
 
@@ -31,7 +32,7 @@ class SpectrumFactory:
 class Correlation(object):
     hbar = 1.0
 
-    def __init__(self, k_max, beta):
+    def __init__(self, k_max=None, beta=None):
         """
         k_max : int
             number of the terms in the basis functions
@@ -43,28 +44,26 @@ class Correlation(object):
         self.beta = beta
         return
 
-    def symm_coeff(self, k):
-        's_k'
-        assert 0 <= k < self.k_max
-        return NotImplemented
+    symm_coeff = NotImplemented
+    asymm_coeff = NotImplemented
+    delta_coeff = NotImplemented
+    exp_coeff = NotImplemented
 
-    def asymm_coeff(self, k):
-        'a_k'
-        assert 0 <= k < self.k_max
-        return NotImplemented
-
-    def delta_coeff(self):
-        's_delta'
-        return NotImplemented
-    
-    def exp_coeff(self, k):
-        'gamma_k'
-        assert 0 <= k < self.k_max
-        return NotImplemented
+    def print(self):
+        string = """Correlation coefficents:
+            S: {};
+            (S_delta = {};)
+            A: {};
+            gamma: {}.
+        """.format(self.symm_coeff,
+                   self.delta_coeff,
+                   self.asymm_coeff,
+                   self.exp_coeff)
+        print(string)
 
 
 class Drude(Correlation):
-    def __init__(self, lambda_, nu, k_max, beta):
+    def __init__(self, lambda_, omega_0, k_max, beta):
         """
         Parameters
         ----------
@@ -72,37 +71,47 @@ class Drude(Correlation):
         nu : np.ndarray
         """
         self.lambda_ = lambda_
-        self.nu = nu
+        self.omega_0 = omega_0
         super().__init__(k_max, beta)
-        self.spectrum = SpectrumFactory.drude(lambda_, nu)
+        self.spectrum = SpectrumFactory.drude(lambda_, omega_0)
         return
 
-    def exp_coeff(self, k):
-        if k == 0:
-            gamma = self.nu
-        else:
-            gamma = 2.0 * np.pi * k / (self.beta * self.hbar)
-        return gamma
 
-    def symm_coeff(self, k):
-        v, l, bh = self.nu, self.lambda_, self.beta * self.hbar
-        if k == 0:
-            s = v * l / np.tan(bh * v / 2.0)
-        else:
-            s = 2.0 * self.spectrum(self.exp_coeff(k)) / bh
-        return s
+    @lazyproperty
+    def exp_coeff(self):
+        """Masturaba Frequencies"""
+        def _gamma(k):
+            if k == 0:
+                gamma = self.omega_0
+            else:
+                gamma = 2.0 * np.pi * k / (self.beta * self.hbar)
+            return gamma
+        return np.array([_gamma(k) for k in range(self.k_max)])
 
-    def asymm_coeff(self, k):
-        if k == 0:
-            a = -self.nu * self.lambda_
-        else:
-            a = 0
-        return a
+    @lazyproperty
+    def symm_coeff(self):
+        v, l, bh = self.omega_0, self.lambda_, self.beta * self.hbar
+        def _s(k):
+            if k == 0:
+                s = v * l / np.tan(bh * v / 2.0)
+            else:
+                s = 2.0 * self.spectrum(self.exp_coeff[k]) / bh
+            return s
+        return np.array([_s(k) for k in range(self.k_max)])
 
+    @lazyproperty
+    def asymm_coeff(self):
+        def _a(k):
+            if k == 0:
+                a = -self.omega_0 * self.lambda_
+            else:
+                a = 0
+            return a
+        return np.array([_a(k) for k in range(self.k_max)])
+
+    @lazyproperty
     def delta_coeff(self):
-        v, l, bh = self.nu, self.lambda_, self.beta * self.hbar
-        d = np.sum([(self.symm_coeff(k) + 1.0j * self.asymm_coeff(k)) /
-                     self.exp_coeff(k) 
-                     for k in range(self.k_max)])
-        return 2.0 * l / (bh * v) - d
+        t1 = 2.0 * self.lambda_ / (self.beta * self.hbar**2)
+        t2 = np.sum([(self.symm_coeff + 1.0j * self.asymm_coeff) / (self.hbar * self.exp_coeff)])
+        return t1 - t2
 

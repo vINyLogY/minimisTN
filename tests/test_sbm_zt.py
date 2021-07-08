@@ -120,6 +120,7 @@ def sbm_zt(including_bath=False, split=False, snd=False):
             break
     return np.array(t_p)
 
+"""
 @pytest.mark.parametrize('split, snd',
                          [(True, True),
                           (True, False)])
@@ -129,4 +130,7 @@ def test_sbm_zt(split, snd):
     ref = np.loadtxt(os.path.join(data_dir, 'sbm-zt-{}-{}.dat'.format(msg, msg2)))
     tst = sbm_zt(including_bath=False, split=split, snd=snd)
     np.testing.assert_allclose(tst, ref)
+"""
 
+if __name__ == '__main__':
+    sbm_zt(split=True, snd=True)

@@ -128,6 +128,7 @@ def sbm_ft(including_bath=False, snd=False):
         tp_list.append((t, p))
     return np.array(tp_list)
 
+"""
 @pytest.mark.parametrize('snd',
                          [True, False])
 def test_sbm_ft(snd):
@@ -135,4 +136,7 @@ def test_sbm_ft(snd):
     ref = np.loadtxt(os.path.join(data_dir, 'sbm-ft-{}.dat'.format(msg)))
     tst = sbm_ft(including_bath=False, snd=snd)
     np.testing.assert_allclose(tst, ref)
+"""
 
+if __name__ == '__main__':
+    sbm_ft(including_bath=False, snd=True)

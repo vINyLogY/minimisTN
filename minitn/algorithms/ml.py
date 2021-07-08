@@ -226,9 +226,7 @@ class MultiLayer(object):
             temperature and imaginary-time propagation).  Default is `False`.
         """
         for t in self.root.visitor(leaf=False):
-            try:
-                t.array
-            except AttributeError:
+            if t.array is None:
                 axis = t.axis
                 if max_entangled and not any(t.children(leaf=False)):
                     if len(list(t.children(leaf=True))) != 2 or axis is None:
@@ -792,12 +790,12 @@ class MultiLayer(object):
             if steps is not None and n >= steps:
                 break
             time = start + n * ode_inter
-            logging.info(__(
-                "Propagating at t: {:.3f}, E: {:.8f}, |v|^2: {:.8f}",
-                time,
-                expection(normalized=False),
-                root.global_square()
-            ))
+            # logging.info(__(
+            #     "Propagating at t: {:.3f}, E: {:.8f}, |v|^2: {:.8f}",
+            #     time,
+            #     expection(normalized=False),
+            #     root.global_square()
+            # ))
             self.time = time if not imaginary else None
             yield (time, root)
             try:

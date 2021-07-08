@@ -418,3 +418,32 @@ def compressed_svd(a, rank=None, err=None, **kwargs):
         vh = vh[:rank,:]
     s = np.diag(s)
     return u, s, vh
+
+def triangular(n_list):
+    """A Generator yields the natural number in a triangular order.
+    """
+    length = len(n_list)
+    prod_list = [1]
+    for n in n_list:
+        prod_list.append(prod_list[-1] * n)
+    prod_list = prod_list
+
+    def key(case):
+        return sum(n * i for n, i in zip(prod_list, case))
+
+    combinations = {0: [[0] * length]}
+    for m in range(prod_list[-1]):
+        if m not in combinations:
+            permutation = [
+                case[:j] + [case[j] + 1] + case[j + 1:]
+                for case in combinations[m - 1] for j in range(length)
+                if case[j] + 1 < n_list[j]
+            ]
+            combinations[m] = []
+            for case in permutation:
+                if case not in combinations[m]:
+                    combinations[m].append(case)
+        for case in combinations[m]:
+            yield key(case)
+
+

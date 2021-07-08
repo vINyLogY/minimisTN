@@ -7,6 +7,8 @@ tst.*
 *.pdf
 *.npy
 *.out
+*.dat
+*.log
 app/
 
 # Backup all data in data/

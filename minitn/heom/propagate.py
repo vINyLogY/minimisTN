@@ -1,12 +1,8 @@
 #!/usr/bin/env python
 # coding: utf-8
-r"""ML-MCTDH Algorithms
-
-References
-----------
-.. [1] arXiv:1603.03039v4
-.. [2] My slides
+r"""ML-MCTDH Algorithms with projector-splitting method only.
 """
+
 from __future__ import absolute_import, division, print_function
 
 import logging
@@ -27,49 +23,15 @@ from minitn.tensor import Tensor, Leaf
 class MultiLayer(object):
     r"""A mini version of ML-MCTDH propagation method.
     """
-    # Coefficient settings...
+    # Coefficients and Superparameters...
     hbar = 1.
-    regular_err = 1.e-12
     svd_err = None
     svd_rank = None
-    pinv = True
-    max_ode_steps = 1000
-    cmf_steps = 1
     ode_method = 'RK45'
-    ode_in_real = False
     snd_order = False
+    atol = 1.0e-11
+    rtol = 1.0e-8
     ps_method = 'split-unite'
-
-    @classmethod
-    def settings(cls, **kwargs):
-        """
-        Parameters
-        ----------
-        hbar : float
-            Default = 1.
-        regular_err : float
-            Default = 1.e-12
-        svd_err : float
-            Error allowed for SVD; default is None.
-        pinv : bool
-            Whether to use `scipy.linalg.pinv2` for inversion.
-            Default is True.
-        max_ode_steps : int 
-            Maximal steps allowed in one ODE solver; default = 1000.
-        cmf_steps : int
-            Upper bound for CMF steps; default = 1
-        ode_method : {'RK45', 'RK23', ...}
-            Name of `OdeSolver` in `scipy.intergate`.
-        ps_method : string
-            Method of projector-splitting.
-            `s` for one-site method and `u` for two-site method.
-        """
-        for name, value in kwargs.items():
-            if not hasattr(cls, name):
-                raise AttributeError('{} has no attr \'{}\'!'
-                                     .format(cls, name))
-            setattr(cls, name, value)
-        return
 
     def __init__(self, root, h_list, use_str_name=False):
         """
@@ -106,9 +68,9 @@ class MultiLayer(object):
                     term.append((leaves_dict[str(fst)], snd))
 
         # Some pre-calculated data
-        self.inv_density = {}    # {Tensor: ndarray}
         self.env_ = {}    # {(int, Tensor, int): ndarray}
         return
+        
 
     def term_visitor(self):
         """Visit all terms in self.h_list.
@@ -123,11 +85,19 @@ class MultiLayer(object):
             for leaf, _ in term:
                 leaf.reset()
 
-    # @profile
+    def _form_env(self):
+        self.env_ = {}
+        network = self.root.visitor
+        for n in self.term_visitor():
+            for tensor in network(axis=None, leaf=False):
+                for i in range(tensor.order):
+                    env_ = tensor.partial_env(i, proper=True)
+                    self.env_[(n, tensor, i)] = env_
+        return self.env_
+
     def _single_diff(self, tensor, n):
         """C.f. `Multi-Configuration Time Dependent Hartree Theory: a Tensor
-        Network Perspective`, p38. This method does not contain the `i hbar`
-        coefficient.
+        Network Perspective`, p38.
 
         Parameters
         ----------
@@ -146,87 +116,44 @@ class MultiLayer(object):
         # Env Hamiltonians
         tmp = tensor.array
         for i in range(tensor.order):
-            env_ = self.env_[(n, tensor, i)]
-
+            try:
+                env_ = self.env_[(n, tensor, i)]
+            except KeyError:
+                env_ = tensor.partial_env(i, proper=True)
             tmp = partial_product(tmp, i, env_)
-        # For non-root nodes...
+
+        # For non-root nodes: PS not allowed
         if tensor.axis is not None:
             raise RuntimeError()
         return tmp
 
-    def _form_inv_density(self):
-        self.inv_density = {}
-        visitor = self.root.visitor
-        for tensor in visitor(axis=None):
-            tensor.reset()
-        for tensor in visitor(axis=None):
-            axis = tensor.axis
-            if axis is not None:
-                density = tensor.partial_env(axis, proper=True)
-                if self.pinv:
-                    inv = linalg.pinv2(density)
-                else:
-                    inv = linalg.inv(density + self.regular_err *
-                                     np.identity(tensor.shape[axis]))
-                self.inv_density[tensor] = inv
-        return self.inv_density
-
-    # @profile
-    def _form_env(self):
-        self.env_ = {}
-        network = self.root.visitor
-        for n in self.term_visitor():
-            for tensor in network(axis=None, leaf=False):
-                for i in range(tensor.order):
-                    env_ = tensor.partial_env(i, proper=True)
-                    self.env_[(n, tensor, i)] = env_
-        return self.env_
-
-    def _solve_ode(self, diff, y0, ode_inter, reformer, updater):
-        OdeSolver = getattr(integrate, self.ode_method)
-        t0 = self.time
-        t1 = t0 + ode_inter
-
-        ode_solver = OdeSolver(diff, t0, y0, t1, vectorized=False)
-        cmf_steps = self.cmf_steps
-        for n in count(1):
-            if ode_solver.status != 'running':
-                logging.debug(__('* Propagation done.  Average CMF steps: {}',
-                                n // cmf_steps))
-                break
-            if n % cmf_steps == 0:
-                if n >= self.max_ode_steps:
-                    msg = __('Reach ODE limit {}', n)
-                    logging.warning(msg)
-                    raise RuntimeWarning(msg)
-                if reformer is not None:
-                    reformer()
-            ode_solver.step()
-            updater(ode_solver.y)
-        return
-
-    def _split_prop(self, tensor, tau=0.01):
-        def diff(t, y):
-            """This function will not change the arrays in tensor network.
-            """
-            origin = tensor.array
-            tensor.set_array(np.reshape(y, tensor.shape))
-            ans = np.zeros_like(y)
-            for n in self.term_visitor():
-                ans += np.reshape(self._single_diff(tensor, n), -1)
-            tensor.set_array(origin)
-            return ans
-
+    def _single_prop(self, tensor, tau=0.01):
         if tensor.axis is None:
             self.root = tensor
         else:
             raise RuntimeError("Cannot propagate on Tensor {}:"
                                "Not a root node!".format(tensor))
+
+        def diff(t, y):
+            """This function will not change the arrays in tensor network.
+            """
+            tensor.set_array(np.reshape(y, tensor.shape))
+            ans = np.zeros_like(y)
+            for n in self.term_visitor():
+                ans += np.reshape(self._single_diff(tensor, n), -1)
+            return ans
+
         y0 = np.reshape(tensor.array, -1)
-        solver = solve_ivp(diff, (self.time, self.time + tau), y0, method=self.ode_method)
+        solver = solve_ivp(
+            diff, 
+            (self.time, self.time + tau), 
+            y0, 
+            method=self.ode_method,
+            atol = self.atol,
+            rtol = self.rtol   
+        )
         tensor.set_array(np.reshape(solver.y[:, -1], tensor.shape))
 
-        # self._solve_ode(diff, y0, tau, None, updater)
         return tensor
 
     def remove_env(self, *args):
@@ -258,8 +185,8 @@ class MultiLayer(object):
 
     def split_step(self, ode_inter=0.01, backward=False):
         self._form_env()
-        prop = partial(self._split_prop, tau=ode_inter)
-        inv_prop = partial(self._split_prop, tau=(-ode_inter))
+        prop = partial(self._single_prop, tau=ode_inter)
+        inv_prop = partial(self._single_prop, tau=(-ode_inter))
         linkages = list(self.root.decorated_linkage_visitor(leaf=False))
         move = self.move
         if backward:
@@ -282,8 +209,8 @@ class MultiLayer(object):
 
     def unite_step(self, ode_inter=0.01, backward=False):
         self._form_env()
-        prop = partial(self._split_prop, tau=ode_inter)
-        inv_prop = partial(self._split_prop, tau=(-ode_inter))
+        prop = partial(self._single_prop, tau=ode_inter)
+        inv_prop = partial(self._single_prop, tau=(-ode_inter))
         linkages = list(self.root.decorated_linkage_visitor(leaf=False))
         move = self.move
         origin = self.root
@@ -342,5 +269,5 @@ class MultiLayer(object):
             yield (time, root)
             try:
                 step(ode_inter=ode_inter)
-            except RuntimeWarning:
+            except:
                 break
