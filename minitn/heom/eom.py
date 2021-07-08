@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 # coding: utf-8
-"""
+"""Generating the derivative of the extended rho in SoP formalism.
+
 Conversion:
-    rho[n_0, ..., n_(k-1), ij]
+    rho[n_0, ..., n_(k-1), i, j]
 """
 
 from __future__ import absolute_import, division, print_function
@@ -12,8 +13,11 @@ from builtins import filter, map, range, zip
 
 import numpy as np
 
-from minitn.lib.tools import __, lazyproperty
+from minitn.lib.tools import __
 from minitn.heom.noise import Correlation
+
+DTYPE = np.complex128
+
 
 class Hierachy(object):
     hbar = 1.0
@@ -59,25 +63,7 @@ class Hierachy(object):
         ext = np.zeros((np.prod(self.n_dims),))
         ext[0] = 1
         rho_n = np.reshape(np.tensordot(ext, rho, axes=0), list(self.n_dims) + shape)
-        return rho_n
-
-    """    
-    def _comm(self, op):
-        identity = np.identity(self.n_states)
-        return np.kron(op, identity) - np.kron(identity, op)
-    
-    def _acomm(self, op):
-        identity = np.identity(self.n_states)
-        return np.kron(op, identity) + np.kron(identity, op)
-
-    @property
-    def commutator(self):
-        return self._comm(self.op)
-
-    @property
-    def acommutator(self):
-        return self._acomm(self.op)
-    """
+        return np.array(rho_n, dtype=DTYPE)
 
     def _upper(self, k):
         dim = self.n_dims[k]

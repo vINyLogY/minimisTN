@@ -116,14 +116,14 @@ def gen_ref():
         hierarchy_connection='loop',
     )
         
-    dt__unit = 1e-2
+    dt__unit = 5.0e-3
             
     rho_0 = np.zeros((n_state,n_state))
     rho_0[0, 0] = 1
     h.set_rho(rho_0)
                 
     callback_interval = 5
-    count             = 5000
+    count             = 10000
 
     ref = []
     def callback(t, rho):
@@ -137,12 +137,12 @@ def gen_ref():
 if __name__ == '__main__':
     from matplotlib import pyplot as plt
 
-    a1 = gen_ref()
-    np.savetxt('reference.dat', a1)
-    # a1 = np.loadtxt('reference.dat', dtype=complex)
-    # a2 = test_brownian()
-    # np.savetxt('test.dat', a2)
-    a2 = np.loadtxt('test.dat', dtype=complex)
+    #a1 = gen_ref()
+    #np.savetxt('reference.dat', a1)
+    a1 = np.loadtxt('reference.dat', dtype=complex)
+    a2 = test_brownian()
+    np.savetxt('test.dat', a2)
+    #a2 = np.loadtxt('test.dat', dtype=complex)
     plt.plot(a1[:, 0], a1[:, 1], '-', label='Ikeda')
     plt.plot(a2[:, 0], a2[:, 1], '--', label='minitn')
     plt.legend()

@@ -77,7 +77,7 @@ class Drude(Correlation):
         return
 
 
-    @property
+    @lazyproperty
     def exp_coeff(self):
         """Masturaba Frequencies"""
         def _gamma(k):
@@ -88,7 +88,7 @@ class Drude(Correlation):
             return gamma
         return np.array([_gamma(k) for k in range(self.k_max)])
 
-    @property
+    @lazyproperty
     def symm_coeff(self):
         v, l, bh = self.omega_0, self.lambda_, self.beta * self.hbar
         def _s(k):
@@ -99,7 +99,7 @@ class Drude(Correlation):
             return s
         return np.array([_s(k) for k in range(self.k_max)])
 
-    @property
+    @lazyproperty
     def asymm_coeff(self):
         def _a(k):
             if k == 0:
@@ -109,7 +109,7 @@ class Drude(Correlation):
             return a
         return np.array([_a(k) for k in range(self.k_max)])
 
-    @property
+    @lazyproperty
     def delta_coeff(self):
         t1 = 2.0 * self.lambda_ / (self.beta * self.hbar**2)
         t2 = np.sum([(self.symm_coeff + 1.0j * self.asymm_coeff) / (self.hbar * self.exp_coeff)])

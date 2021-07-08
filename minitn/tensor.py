@@ -21,7 +21,7 @@ from minitn.lib.numerical import compressed_svd
 from minitn.lib.tools import __
 
 _empty = object()
-
+DTYPE = np.complex128
 
 class Tensor(object):
     r"""
@@ -102,7 +102,7 @@ class Tensor(object):
 
     def set_array(self, array):
         self._array = (
-            np.array(array, dtype='complex128') if array is not None else None
+            np.array(array, dtype=DTYPE) if array is not None else None
         )
         return
 
@@ -116,9 +116,9 @@ class Tensor(object):
     @property
     def array(self):
         if self._array is None:
-            raise AttributeError('No specific array set at {0}!'.format(self))
+            return None
         else:
-            return np.array(self._array, dtype='complex128')    # Return a copy
+            return np.array(self._array, dtype=DTYPE)    # Return a copy
 
     @property
     def shape(self):
@@ -885,7 +885,7 @@ class Leaf(Tensor):
     @property
     def array(self):
         ans = self._array
-        return ans if ans is None else np.array(ans, dtype='complex128')
+        return ans if ans is None else np.array(ans, dtype=DTYPE)
 
     order = 1  # Treat as an end point in a tensor tree
 
