@@ -69,9 +69,9 @@ def tensor_train_template(init_rho, pb_index, rank=2):
     root[1] = (Leaf(name=max_terms+1), 0)
 
     for i in pb_index:
-        assert rank < i
+        assert rank <= i
 
-    head = root
+    train = [root]
     for k in range(max_terms): # +2: i and j
         if k < max_terms - 1:
             array = np.eye(rank, pb_index[k] * rank)
@@ -80,12 +80,11 @@ def tensor_train_template(init_rho, pb_index, rank=2):
             array = np.eye(rank, pb_index[k])
         spf = Tensor(name=k, array=array, axis=0)
         l = Leaf(name=k)
-        spf[0] = (head, head.array.ndim - 1)
+        spf[0] = (train[-1], train[-1].array.ndim - 1)
         spf[1] = (l, 0)
-        head = spf
+        train.append(spf)
 
-    return root
-
+    return train
 
 
 

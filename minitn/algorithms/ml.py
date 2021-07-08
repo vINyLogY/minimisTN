@@ -790,12 +790,12 @@ class MultiLayer(object):
             if steps is not None and n >= steps:
                 break
             time = start + n * ode_inter
-            logging.info(__(
-                "Propagating at t: {:.3f}, E: {:.8f}, |v|^2: {:.8f}",
-                time,
-                expection(normalized=False),
-                root.global_square()
-            ))
+            # logging.info(__(
+            #     "Propagating at t: {:.3f}, E: {:.8f}, |v|^2: {:.8f}",
+            #     time,
+            #     expection(normalized=False),
+            #     root.global_square()
+            # ))
             self.time = time if not imaginary else None
             yield (time, root)
             try:

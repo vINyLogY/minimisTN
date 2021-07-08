@@ -10,6 +10,7 @@ from __future__ import absolute_import, division, print_function
 
 import logging
 from builtins import filter, map, range, zip
+from itertools import product
 
 import numpy as np
 
@@ -31,9 +32,9 @@ class Hierachy(object):
         sys_hamiltionian : np.ndarray
             H_s
         sys_op :
-            X_s in in H_sb X_s x X_b 
+            X_s in in H_sb X_s (x) X_b 
         corr : Correlation
-            Correlation case by X_b
+            Correlation caused by X_b
         """
         self.n_dims = n_dims
         self.k_max = len(n_dims)
@@ -65,13 +66,15 @@ class Hierachy(object):
         rho_n = np.reshape(np.tensordot(ext, rho, axes=0), list(self.n_dims) + shape)
         return np.array(rho_n, dtype=DTYPE)
 
-    def _upper(self, k):
-        dim = self.n_dims[k]
-        return np.eye(dim, k=-1)
-
-    def _lower(self, k):
+    def _raiser(self, k):
+        """Acting on 0-th index"""
         dim = self.n_dims[k]
         return np.eye(dim, k=1)
+
+    def _lower(self, k):
+        """Acting on 0-th index"""
+        dim = self.n_dims[k]
+        return np.eye(dim, k=-1)
 
     def _numberer(self, k, start=0):
         return np.diag(np.arange(start, start + self.n_dims[k]))
@@ -81,8 +84,7 @@ class Hierachy(object):
 
     def _diff_ij(self):
         # delta = self.corr.delta_coeff
-
-        ans = [
+        return [
             [(self._i, -1.0j * np.transpose(self.h))],
             [(self._j, 1.0j * self.h)],
             # [(self._i, -delta * np.transpose(self.op @ self.op))],
@@ -90,31 +92,43 @@ class Hierachy(object):
             #  (self._j, np.sqrt(2.0) * delta * self.op)],
             # [(self._j, -delta * (self.op @ self.op))],
         ]
-        
+
+    def _diff_n(self):
+        if self.corr.exp_coeff.ndim == 1:
+            gamma = np.diag(self.corr.exp_coeff)
+        ans = []
+        for i, j in product(range(self.k_max), repeat=2):
+            g = gamma[i, j]
+            if not np.allclose(g, 0.0):
+                term = [(i, - g * self._numberer(i))]
+                if i != j:
+                    n_i = self._sqrt_numberer(i)
+                    n_j = self._sqrt_numberer(j)
+                    raiser = self._raiser(i)
+                    lower = self._lower(j)
+                    term.extend([(i, raiser @ n_i), (j, n_j @ lower)])
+                ans.append(term)
         return ans
 
     def _diff_k(self, k):
-        gamma_k = self.corr.exp_coeff[k]
         c_k = self.corr.symm_coeff[k] + 1.0j * self.corr.asymm_coeff[k]
-        upper = np.transpose(self._upper(k))
-        lower = np.transpose(self._lower(k))
-        numberer = self._numberer(k)
+        numberer = self._sqrt_numberer(k)
+        raiser = self._raiser(k)
+        lower = self._lower(k)
 
-        ans = [
-            [(k, - gamma_k * numberer)],
-            [(self._i, -1.0j / self.hbar * np.transpose(self.op)), (k, lower)],
-            [(self._j, 1.0j / self.hbar * self.op), (k, lower)],
-            [(self._i, -1.0j / self.hbar * c_k * np.transpose(self.op)), (k, upper @ numberer)],
-            [(self._j, 1.0j / self.hbar * np.conj(c_k) * self.op), (k, upper @ numberer)],
+        return [
+            [(self._i, -1.0j / self.hbar * np.transpose(self.op)), (k, numberer @ lower)],
+            [(self._j, 1.0j / self.hbar * self.op), (k, numberer @ lower)],
+            [(self._i, -1.0j / self.hbar * c_k * np.transpose(self.op)), (k, raiser @ numberer)],
+            [(self._j, 1.0j / self.hbar * np.conj(c_k) * self.op), (k, raiser @ numberer)],
         ]
 
-        return ans
-
     def diff(self):
-        """Get the derivative of rho_n at time t
+        """Get the derivative of rho_n at time t.
         
+        Acting on 0-th index.
         """
-        derivative = self._diff_ij()
+        derivative = self._diff_ij() + self._diff_n()
 
         for k in range(self.k_max):
             derivative.extend(self._diff_k(k))

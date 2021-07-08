@@ -65,7 +65,7 @@ def test_drude():
     #root.check_completness(strict=True)
 
     solver = MultiLayer(root, heom.diff(), use_str_name=True)
-    solver.ode_method = 'RK45'
+    solver.ode_method = 'DOP853'
     solver.snd_order = False
     solver.atol = 1.e-7
     solver.rtol = 1.e-7
@@ -78,7 +78,6 @@ def test_drude():
     )):
         if n % 100 == 0:
             rho = np.reshape(r.array, (-1, 4))
-            #rho = np.reshape(r.array, (4, -1)).transpose()
             for n, _rn in enumerate(rho):
                 if n == 0:
                     flat_data = [time] + list(rho[0])
