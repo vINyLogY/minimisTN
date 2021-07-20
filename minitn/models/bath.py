@@ -54,8 +54,11 @@ def linear_discretization(spec_func, stop, num, start=0.0):
 
 
 def bimodal_spectral_density(lambda_g, omega_g, lambda_d, omega_d):
-    """C.f. J. Chem. Phys. 124, 034114 (2006). Return a function:
-    float  ->  float.
+    """C.f. J. Chem. Phys. 124, 034114 (2006). 
+    
+    Returns
+    -------
+        float  ->  float.
     """
     def _bimodal_spectral_density(omega):
         gaussian = ((np.sqrt(np.pi) * lambda_g * omega) / (4.*omega_g) *

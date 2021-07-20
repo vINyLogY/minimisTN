@@ -111,7 +111,8 @@ class Drude(Correlation):
 
     @lazyproperty
     def delta_coeff(self):
-        t1 = 2.0 * self.lambda_ / (self.beta * self.hbar**2)
-        t2 = np.sum([(self.symm_coeff + 1.0j * self.asymm_coeff) / (self.hbar * self.exp_coeff)])
-        return t1 - t2
+        # t1 = 2.0 * self.lambda_ / (self.beta * self.hbar**2)
+        # t2 = np.sum([(self.symm_coeff + 1.0j * self.asymm_coeff) / (self.hbar * self.exp_coeff)])
+        # return t1 - t2
+        return 0.0
 

@@ -7,15 +7,17 @@ Conversion:
 """
 
 from __future__ import absolute_import, division, print_function
+from itertools import count
 
 import logging
 from builtins import filter, map, range, zip
+from minitn.models.particles import Phonon
 
 import numpy as np
-from numpy.core.fromnumeric import shape
 
-from minitn.lib.tools import __
+from minitn.lib.tools import huffman_tree
 from minitn.tensor import Tensor, Leaf
+from minitn.models.network import autocomplete
 
 DTYPE=np.complex128
 
@@ -50,8 +52,7 @@ def simple_heom(init_rho, pb_index):
 
 
 def tensor_train_template(init_rho, pb_index, rank=2):
-    """Get rho_n from rho with the conversion:
-        rho[i, j]
+    """Get rho_n from rho in a Tensor Train representation.
 
     Parameters
     ----------
@@ -85,6 +86,54 @@ def tensor_train_template(init_rho, pb_index, rank=2):
         train.append(spf)
 
     return train
+
+def tensor_tree_template(init_rho, pb_index, rank=2):
+    """Get rho_n from rho in a Tensor Tree representation.
+
+    Parameters
+    ----------
+    rho : np.ndarray
+    """
+    n_state = get_n_state(init_rho)
+    n_vec = np.zeros((rank,), dtype=DTYPE)
+    n_vec[0] = 1.0
+    root_array = np.tensordot(init_rho, n_vec, axes=0)
+    max_terms = len(pb_index)
+
+    for i in pb_index:
+        assert rank <= i
+
+    # generate leaves
+    leaves = list(range(max_terms))
+    class new_spf(object):
+        counter = 0
+        prefix = 'SPF'
+        def __new__(cls):
+            name = cls.prefix + str(cls.counter)
+            cls.counter += 1
+            return name
+
+    importance = list(reversed(range(len(pb_index))))
+    graph, spf_root = huffman_tree(leaves, importances=importance,
+                                   obj_new=new_spf, n_branch=3)
+
+    root = 'root'
+    graph[root] = [spf_root, str(max_terms), str(max_terms + 1)]
+
+    print(graph, root)
+
+    root = Tensor.generate(graph, root)
+    bond_dict = {}
+    # Leaves
+    l_range = list(pb_index) + [n_state] * 2
+    for s, i, t, j in root.linkage_visitor():
+        if isinstance(t, Leaf):
+            bond_dict[(s, i, t, j)] = l_range[int(t.name)]
+        else:
+            bond_dict[(s, i, t, j)] = rank
+    autocomplete(root, bond_dict)
+
+    return root
 
 
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # coding: utf-8
 from __future__ import absolute_import, division, print_function
+from minitn.heom.propagate import ProjectorSplitting
 
 import os
 from builtins import filter, map, range, zip
@@ -64,7 +65,12 @@ def test_drude_train():
     root = tensor_train[0]
     #root.check_completness(strict=True)
 
-    solver = MultiLayer(root, heom.diff(), use_str_name=True)
+    leaves_dict = {leaf.name: leaf for leaf in root.leaves()}
+    all_terms = []
+    for term in heom.diff():
+        all_terms.append([(leaves_dict[str(fst)], snd) for fst, snd in term])
+
+    solver = ProjectorSplitting(root, all_terms)
     solver.ode_method = 'RK45'
     solver.snd_order = False
     solver.max_ode_steps = 100000
@@ -79,7 +85,7 @@ def test_drude_train():
         steps=20000,
         ode_inter=0.01,
     )):
-        if n % 1000 == 0:
+        if n % 2 == 0:
             
             head = root.array
             for t in tensor_train[1:]:
@@ -87,14 +93,21 @@ def test_drude_train():
 
             print(head.shape)
 
-            rho = np.transpose(np.reshape(head, (4, -1)))
+            rho = np.reshape(head, (4, -1))[:, 0]
+            flat_data = [time] + list(rho)
+            dat.append(flat_data)
+            print("Time {} | Pop_1 {} | Total {}".format(time, rho[0], rho[0] + rho[-1]))
 
-            for n, _rn in enumerate(rho):
-                if n == 0:
-                    flat_data = [time] + list(rho[0])
-                    dat.append(flat_data)
-                if n <= 2:
-                    print("Time: {}    ; {}:    {}".format(time, n, _rn[0] + _rn[-1]))
+            # Try 
+            head2 = root.array
+            for t in tensor_train[1:]:
+                spf = Tensor.partial_product(t.array, 1, projector, 0)
+                head2 = Tensor.partial_product(head2, head2.ndim-1, spf, 0)
+            
+            rho2 = np.reshape(head2, (4, -1))[:, 0]
+            print(np.allclose(rho2, rho))
+
+
     return np.array(dat)
 
 
