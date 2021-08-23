@@ -42,7 +42,6 @@ class Hierachy(object):
         assert isinstance(corr, Correlation)
         assert self.k_max == corr.k_max
         self._i = len(n_dims)
-        self._j = len(n_dims) + 1
 
         self.corr = corr
         assert sys_op.ndim == 2
@@ -50,27 +49,6 @@ class Hierachy(object):
         self.n_states = sys_op.shape[0]
         self.op = np.transpose(sys_op)
         self.h = np.transpose(sys_hamiltonian)
-
-    def get_ext_wfns(self, wfns, search_method='krylov'):
-        space = np.transpose(np.array(wfns))
-        vecs = np.transpose(np.array(wfns))
-        assert np.shape(space)[1] <= self.n_states
-        if search_method == 'krylov':
-            while True:
-                space = linalg.orth(vecs)
-                if np.shape(space)[1] >= self.n_states:
-                    break
-                vecs = list(np.transpose(self.h) @ vecs)
-                np.concatenate((space, vecs), axis=1)
-            psi = space[:, :self.n_states]
-            ext = np.zeros((np.prod(self.n_dims), ))
-            ext[0] = 1
-            psi_n = np.reshape(
-                np.tensordot(ext, psi, axes=0),
-                list(self.n_dims) + [self.n_states, self.n_states])
-            return np.array(psi_n, dtype=DTYPE)
-        else:
-            raise NotImplementedError
 
     def creator(self, k):
         """Acting on 0-th index"""
@@ -92,7 +70,7 @@ class Hierachy(object):
     def _diff_h(self):
         # delta = self.corr.delta_coeff
         return [
-            [(self._i, -1.0j / self.hbar * self.h)],
+            [(self._i, self.h)],
         ]
 
     def _diff_n(self):
@@ -102,7 +80,7 @@ class Hierachy(object):
         for i, j in product(range(self.k_max), repeat=2):
             g = gamma[i, j]
             if not np.allclose(g, 0.0):
-                term = [(i, -g / 2.0 * self.numberer(i))]
+                term = [(i, 0.5j * self.hbar * g * self.numberer(i))]
                 if i != j:
                     at = self.creator(i)
                     a = self.annihilator(j)
@@ -116,8 +94,8 @@ class Hierachy(object):
         a = self.annihilator(k)
 
         return [
-            [(self._i, -1.0j / self.hbar * self.op), (k, a)],
-            [(self._i, -1.0j / self.hbar * c_k * self.op), (k, at)],
+            [(self._i, self.op), (k, a)],
+            [(self._i, c_k * self.op), (k, at)],
         ]
 
     def diff(self):

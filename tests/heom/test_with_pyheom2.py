@@ -74,6 +74,8 @@ def test_drude():
 
 
 def gen_ref():
+    import pyheom
+
     eta = 0.05  # reorganization energy (dimensionless)
     gamma_c = 0.05  # vibrational frequency (dimensionless)
     max_tier = 5

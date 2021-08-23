@@ -240,6 +240,7 @@ class MultiLayer(object):
                     vec_i = np.diag(np.ones((n_leaf,)) / np.sqrt(n_leaf))
                     vec_i = np.reshape(vec_i, -1)
                     init_vecs = [vec_i]
+                    print(np.shape(init_vecs), np.shape(self._local_matvec(leaf)))
                     da = DavidsonAlgorithm(self._local_matvec(leaf),
                                            init_vecs=init_vecs,
                                            n_vals=n_parent)

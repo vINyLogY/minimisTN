@@ -17,7 +17,7 @@ from minitn.tensor import Leaf, Tensor
 import pyheom
 
 f_dir = os.path.abspath(os.path.dirname(__file__))
-os.chdir(os.path.join(f_dir, 'tensor_train'))
+os.chdir(os.path.join(f_dir, 'tensor_tree'))
 
 
 def test_drude_tree():
