@@ -155,7 +155,7 @@ if __name__ == '__main__':
 
     f_dir = os.path.abspath(os.path.dirname(__file__))
     os.chdir(os.path.join(f_dir, 'drude'))
-    prefix = "HEOM_train"
+    prefix = "HEOM"
 
     tst_fname = '{}_tst.dat'.format(prefix)
     ref_fname = 'HEOM_ref.dat'.format(prefix)
@@ -163,7 +163,8 @@ if __name__ == '__main__':
     try:
         tst = np.loadtxt(tst_fname, dtype=complex)
     except:
-        tst = test_train()
+        tst = test_simple()
+        #tst = test_train()
         np.savetxt(tst_fname, tst)
 
     try:

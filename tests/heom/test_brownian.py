@@ -9,6 +9,7 @@ import numpy as np
 from minitn.heom.eom import Hierachy
 from minitn.heom.noise import Correlation
 from minitn.heom.propagate import ProjectorSplitting
+from minitn.algorithms.ml import MultiLayer
 from minitn.lib.units import Quantity
 from minitn.lib.logging import Logger
 
@@ -66,6 +67,7 @@ def test_brownian(fname=None):
         all_terms.append([(leaves_dict[str(fst)], snd) for fst, snd in term])
 
     solver = ProjectorSplitting(root, all_terms)
+    solver = MultiLayer(root, all_terms)
     solver.ode_method = 'RK45'
     solver.snd_order = False
     solver.atol = 1.e-7
@@ -112,7 +114,7 @@ if __name__ == '__main__':
     from matplotlib import pyplot as plt
 
     f_dir = os.path.abspath(os.path.dirname(__file__))
-    os.chdir(os.path.join(f_dir, 'simple'))
+    os.chdir(os.path.join(f_dir, 'brownian'))
     prefix = "HEOM_brownian"
 
     tst_fname = '{}_tst.dat'.format(prefix)
@@ -141,4 +143,5 @@ if __name__ == '__main__':
     #plt.plot(ref[:, 0], np.imag(ref[:, 2]), '--', label="$\Im r$ (ref.)".format(prefix))
     plt.legend(loc=1)
     plt.title('Brownian model w/ pyheom')
+    plt.ylim(0, 1.1)
     plt.savefig('{}.png'.format(prefix))
