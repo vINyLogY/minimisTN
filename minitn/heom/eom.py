@@ -42,9 +42,9 @@ class Hierachy(object):
         assert self.k_max == corr.k_max
         self._i = len(n_dims)
         self._j = len(n_dims) + 1
-        
+
         self.corr = corr
-        assert sys_op.ndim == 2 
+        assert sys_op.ndim == 2
         assert sys_op.shape == sys_hamiltonian.shape
         self.n_states = sys_op.shape[0]
         self.op = sys_op
@@ -87,27 +87,25 @@ class Hierachy(object):
         return [
             [(self._i, -1.0j * np.transpose(self.h))],
             [(self._j, 1.0j * self.h)],
-            # [(self._i, -delta * np.transpose(self.op @ self.op))],
-            # [(self._i, np.sqrt(2.0) * delta * np.transpose(self.op)), 
-            #  (self._j, np.sqrt(2.0) * delta * self.op)],
-            # [(self._j, -delta * (self.op @ self.op))],
         ]
 
     def _diff_n(self):
-        if self.corr.exp_coeff.ndim == 1:
-            gamma = np.diag(self.corr.exp_coeff)
-        ans = []
-        for i, j in product(range(self.k_max), repeat=2):
-            g = gamma[i, j]
-            if not np.allclose(g, 0.0):
-                term = [(i, - g * self._numberer(i))]
-                if i != j:
-                    n_i = self._sqrt_numberer(i)
-                    n_j = self._sqrt_numberer(j)
-                    raiser = self._raiser(i)
-                    lower = self._lower(j)
-                    term.extend([(i, raiser @ n_i), (j, n_j @ lower)])
-                ans.append(term)
+        # if self.corr.exp_coeff.ndim == 1:
+        #     gamma = np.diag(self.corr.exp_coeff)
+        # ans = []
+        # for i, j in product(range(self.k_max), repeat=2):
+        #     g = gamma[i, j]
+        #     if not np.allclose(g, 0.0):
+        #         term = [(i, -g * self._numberer(i))]
+        #         if i != j:
+        #             n_i = self._sqrt_numberer(i)
+        #             n_j = self._sqrt_numberer(j)
+        #             raiser = self._raiser(i)
+        #             lower = self._lower(j)
+        #             term.extend([(i, raiser @ n_i), (j, n_j @ lower)])
+        #         ans.append(term)
+        gamma = self.corr.exp_coeff
+        ans = [[(i, -g * self._numberer(i))] for i, g in enumerate(gamma)]
         return ans
 
     def _diff_k(self, k):
@@ -136,7 +134,6 @@ class Hierachy(object):
         return derivative
 
 
-
 if __name__ == '__main__':
     from minitn.heom.noise import Drude
     from minitn.lib.units import Quantity
@@ -145,22 +142,20 @@ if __name__ == '__main__':
     e = Quantity(6500, 'cm-1').value_in_au
     v = Quantity(500, 'cm-1').value_in_au
     # Bath
-    lambda_0 = Quantity(2000, 'cm-1').value_in_au # reorganization energy
-    omega_0 = Quantity(2000, 'cm-1').value_in_au # vibrational frequency
-    beta = Quantity(300, 'K').value_in_au # temperature
+    lambda_0 = Quantity(2000, 'cm-1').value_in_au  # reorganization energy
+    omega_0 = Quantity(2000, 'cm-1').value_in_au  # vibrational frequency
+    beta = Quantity(300, 'K').value_in_au  # temperature
     # Superparameters
-    max_terms = 5 # (terms used in the expansion of the correlation function)
-    max_tier  = 10 # (number of possble values for each n_k in the extended rho)
+    max_terms = 5  # (terms used in the expansion of the correlation function)
+    max_tier = 10  # (number of possble values for each n_k in the extended rho)
 
-    h = np.array([[0, v],
-                  [v, e]])
+    h = np.array([[0, v], [v, e]])
 
-    op = np.array([[0, 0],
-                   [0, 1]])
+    op = np.array([[0, 0], [0, 1]])
 
     corr = Drude(lambda_0, omega_0, max_terms, beta)
     heom = Hierachy([max_tier] * max_terms, h, op, corr)
-    phi = [1/np.sqrt(2), 1/np.sqrt(2)] 
+    phi = [1 / np.sqrt(2), 1 / np.sqrt(2)]
     phi /= np.linalg.norm(phi)
     rho_0 = np.tensordot(phi, phi, axes=0)
 
@@ -168,5 +163,5 @@ if __name__ == '__main__':
     print(init_rho.shape)
     for n, term in enumerate(heom.diff()):
         print('- Term {}:'.format(n))
-        for label, array in term: 
+        for label, array in term:
             print('Label: {}, shape: {}'.format(label, array.shape))

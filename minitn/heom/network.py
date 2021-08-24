@@ -20,7 +20,7 @@ from minitn.lib.tools import huffman_tree
 from minitn.tensor import Tensor, Leaf
 from minitn.models.network import autocomplete
 
-DTYPE=np.complex128
+DTYPE = np.complex128
 
 
 def get_n_state(rho):
@@ -38,18 +38,36 @@ def simple_heom(init_rho, n_indices):
     rho : np.ndarray
     """
     n_state = get_n_state(init_rho)
-    # Let: rho_n[0, i, j] = rho and rho_n[n, i, j] = 0
+    # Let: rho_n[0, :, :] = rho and rho_n[n, :, :] = 0
     ext = np.zeros((np.prod(n_indices),))
     ext[0] = 1.0
     new_shape = list(n_indices) + [n_state, n_state]
     rho_n = np.reshape(np.tensordot(ext, init_rho, axes=0), new_shape)
 
     root = Tensor(name='root', array=rho_n, axis=None)
-    for k in range(len(new_shape)): # +2: i and j
+    for k in range(len(new_shape)):  # +2: i and j
         l = Leaf(name=k)
         root[k] = (l, 0)
 
     return root
+
+
+def simple_hseom(init_wfns, n_indices):
+    n_state = get_n_state(init_wfns)
+    # Let a[0, :, :] = wfn and a[n, :, :] = 0
+
+    ext = np.zeros((np.prod(n_indices),))
+    ext[0] = 1.0
+    new_shape = list(n_indices) + [n_state, n_state]
+
+    root_array = np.reshape(np.tensordot(ext, init_wfns, axes=0), new_shape)
+    root = Tensor(name='root', array=root_array, axis=None)
+    for k in range(len(new_shape)):  # +2: q and p
+        l = Leaf(name=k)
+        root[k] = (l, 0)
+
+    return root
+
 
 def get_ext_wfns(n_states, wfns, op, search_method='krylov'):
     wfns = np.array(wfns)
@@ -70,32 +88,6 @@ def get_ext_wfns(n_states, wfns, op, search_method='krylov'):
         raise NotImplementedError
 
 
-def simple_hseom(init_wfn, n_indices):
-    n_state = len(init_wfn)
-    n_term = len(n_indices) 
-    # Let a[0, i] = wfn and rho_n[n, i] = 0
-    # Let the spf[i] be op (power) i @ wfn (ONB). 
-    ext = np.zeros((np.prod(n_indices),))
-    ext[0] = 1.0
-    new_shape = list(n_indices) + [n_state]
-    unit = np.zeros_like(init_wfn)
-    unit[0] = 1.0
-
-    root_array = np.reshape(np.tensordot(ext, unit, axes=0), new_shape)
-    root = Tensor(name='root', array=root_array, axis=None)
-    for k in range(n_term):
-        l = Leaf(name=k)
-        root[k] = (l, 0)
-
-    space = np.identity(n_state)
-    spf_node = Tensor(name='spf', array=space, axis=0)
-    root[n_term] = (spf_node, 0)
-    spf_node[1] = (Leaf(name=n_term), 0) # ?
-
-    return root
-
-
-
 def tensor_train_template(init_rho, pb_index, rank=2):
     """Get rho_n from rho in a Tensor Train representation.
 
@@ -111,14 +103,15 @@ def tensor_train_template(init_rho, pb_index, rank=2):
     root = Tensor(name='root', array=root_array, axis=None)
     max_terms = len(pb_index)
 
+    # +2: i and j
     root[0] = (Leaf(name=max_terms), 0)
-    root[1] = (Leaf(name=max_terms+1), 0)
+    root[1] = (Leaf(name=max_terms + 1), 0)
 
     for i in pb_index:
         assert rank <= i
 
     train = [root]
-    for k in range(max_terms): # +2: i and j
+    for k in range(max_terms):
         if k < max_terms - 1:
             array = np.eye(rank, pb_index[k] * rank)
             array = np.reshape(array, (rank, -1, rank))
@@ -126,11 +119,12 @@ def tensor_train_template(init_rho, pb_index, rank=2):
             array = np.eye(rank, pb_index[k])
         spf = Tensor(name=k, array=array, axis=0)
         l = Leaf(name=k)
-        spf[0] = (train[-1], train[-1].array.ndim - 1)
+        spf[0] = (train[-1], 2)
         spf[1] = (l, 0)
         train.append(spf)
 
     return train
+
 
 def tensor_tree_template(init_rho, pb_index, rank=2):
     """Get rho_n from rho in a Tensor Tree representation.
@@ -150,17 +144,18 @@ def tensor_tree_template(init_rho, pb_index, rank=2):
 
     # generate leaves
     leaves = list(range(max_terms))
+
     class new_spf(object):
         counter = 0
         prefix = 'SPF'
+
         def __new__(cls):
             name = cls.prefix + str(cls.counter)
             cls.counter += 1
             return name
 
     importance = list(reversed(range(len(pb_index))))
-    graph, spf_root = huffman_tree(leaves, importances=importance,
-                                   obj_new=new_spf, n_branch=3)
+    graph, spf_root = huffman_tree(leaves, importances=importance, obj_new=new_spf, n_branch=3)
 
     root = 'root'
     graph[root] = [spf_root, str(max_terms), str(max_terms + 1)]
@@ -179,6 +174,3 @@ def tensor_tree_template(init_rho, pb_index, rank=2):
     autocomplete(root, bond_dict)
 
     return root
-
-
-

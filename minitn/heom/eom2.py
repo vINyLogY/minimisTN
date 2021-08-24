@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 # coding: utf-8
-"""Generating the derivative of the extended wfns in SoP formalism.
+"""[No Rescale] Generating the derivative of the extended rho in SoP formalism.
 
 Conversion:
-    c[n_0, ..., n_(k-1), i, k]
+    rho[n_0, ..., n_(k-1), i, j]
 """
 
 from __future__ import absolute_import, division, print_function
@@ -13,7 +13,6 @@ from builtins import filter, map, range, zip
 from itertools import product
 
 import numpy as np
-from scipy import linalg
 
 from minitn.lib.tools import __
 from minitn.heom.noise import Correlation
@@ -41,38 +40,57 @@ class Hierachy(object):
         self.k_max = len(n_dims)
         assert isinstance(corr, Correlation)
         assert self.k_max == corr.k_max
-        self._q = len(n_dims)
-        self._p = len(n_dims) + 1
+        self._i = len(n_dims)
+        self._j = len(n_dims) + 1
 
         self.corr = corr
         assert sys_op.ndim == 2
         assert sys_op.shape == sys_hamiltonian.shape
         self.n_states = sys_op.shape[0]
-        self.op = np.transpose(sys_op)
-        self.h = np.transpose(sys_hamiltonian)
-        return
+        self.op = sys_op
+        self.h = sys_hamiltonian
 
-    def creator(self, k):
+    def gen_extended_rho(self, rho):
+        """Get rho_n from rho with the conversion:
+            rho[n_0, ..., n_(k-1), i, j]
+
+        Parameters
+        ----------
+        rho : np.ndarray
+        """
+        shape = list(rho.shape)
+        assert len(shape) == 2 and shape[0] == shape[1]
+        # Let: rho_n[0, i, j] = rho and rho_n[n, i, j] = 0
+        ext = np.zeros((np.prod(self.n_dims),))
+        ext[0] = 1
+        rho_n = np.reshape(np.tensordot(ext, rho, axes=0), list(self.n_dims) + shape)
+        return np.array(rho_n, dtype=DTYPE)
+
+    def _raiser(self, k):
         """Acting on 0-th index"""
         dim = self.n_dims[k]
-        raiser = np.eye(dim, k=1)
-        sqrt_n = np.diag(np.sqrt(np.arange(dim)))
-        return raiser @ sqrt_n
+        return np.eye(dim, k=1)
 
-    def annihilator(self, k):
+    def _lower(self, k):
         """Acting on 0-th index"""
         dim = self.n_dims[k]
-        lower = np.eye(dim, k=-1)
-        sqrt_n = np.diag(np.sqrt(np.arange(dim)))
-        return sqrt_n @ lower
+        return np.eye(dim, k=-1)
 
-    def numberer(self, k):
-        """Acting on 0-th index"""
-        return np.diag(np.arange(self.n_dims[k]))
+    def _numberer(self, k, start=0):
+        return np.diag(np.arange(start, start + self.n_dims[k]))
 
-    def _diff_h(self):
+    def _sqrt_numberer(self, k, start=0):
+        return np.diag(np.sqrt(np.arange(start, start + self.n_dims[k])))
+
+    def _diff_ij(self):
+        # delta = self.corr.delta_coeff
         return [
-            [(self._p, self.h)],
+            [(self._i, -1.0j * np.transpose(self.h))],
+            [(self._j, 1.0j * self.h)],
+            # [(self._i, -delta * np.transpose(self.op @ self.op))],
+            # [(self._i, np.sqrt(2.0) * delta * np.transpose(self.op)),
+            #  (self._j, np.sqrt(2.0) * delta * self.op)],
+            # [(self._j, -delta * (self.op @ self.op))],
         ]
 
     def _diff_n(self):
@@ -82,22 +100,27 @@ class Hierachy(object):
         for i, j in product(range(self.k_max), repeat=2):
             g = gamma[i, j]
             if not np.allclose(g, 0.0):
-                term = [(i, 0.5j * self.hbar * g * self.numberer(i))]
+                term = [(i, -g * self._numberer(i))]
                 if i != j:
-                    at = self.creator(i)
-                    a = self.annihilator(j)
-                    term.extend([(i, at), (j, a)])
+                    n_i = self._sqrt_numberer(i)
+                    n_j = self._sqrt_numberer(j)
+                    raiser = self._raiser(i)
+                    lower = self._lower(j)
+                    term.extend([(i, raiser @ n_i), (j, n_j @ lower)])
                 ans.append(term)
         return ans
 
     def _diff_k(self, k):
         c_k = self.corr.symm_coeff[k] + 1.0j * self.corr.asymm_coeff[k]
-        at = self.creator(k)
-        a = self.annihilator(k)
+        numberer = self._numberer(k)
+        raiser = self._raiser(k)
+        lower = self._lower(k)
 
         return [
-            [(self._p, self.op), (k, a)],
-            [(self._p, c_k * self.op), (k, at)],
+            [(self._i, -1.0j / self.hbar * np.transpose(self.op)), (k, lower)],
+            [(self._j, 1.0j / self.hbar * self.op), (k, lower)],
+            [(self._i, -1.0j / self.hbar * c_k * np.transpose(self.op)), (k, raiser @ numberer)],
+            [(self._j, 1.0j / self.hbar * np.conj(c_k) * self.op), (k, raiser @ numberer)],
         ]
 
     def diff(self):
@@ -105,12 +128,12 @@ class Hierachy(object):
         
         Acting on 0-th index.
         """
-        derivatives = self._diff_h() + self._diff_n()
+        derivative = self._diff_ij() + self._diff_n()
 
         for k in range(self.k_max):
-            derivatives.extend(self._diff_k(k))
+            derivative.extend(self._diff_k(k))
 
-        return derivatives
+        return derivative
 
 
 if __name__ == '__main__':
