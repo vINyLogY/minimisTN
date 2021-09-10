@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # coding: utf-8
 from __future__ import absolute_import, division, print_function
+from minitn.tensor import Tensor
 from minitn.heom.network import simple_heom, tensor_train_template
 
 import numpy as np
@@ -8,6 +9,7 @@ from minitn.heom.eom import Hierachy
 from minitn.heom.noise import Correlation
 from minitn.heom.propagate import ProjectorSplitting
 from minitn.algorithms.ml import MultiLayer
+from minitn.lib.logging import Logger
 
 import pyheom
 
@@ -33,8 +35,8 @@ H = np.array([[omega_1, omega_2], [omega_2, 0.0]])
 V = np.array([[0.0, 0.0], [0.0, 1.0]])
 
 # init state
-rho_0 = np.zeros((n_state, n_state))
-rho_0[0, 0] = 1
+p0 = 1.0
+rho_0 = np.array([[p0, 0.0], [0.0, 1.0 - p0]])
 
 dt_unit = 0.001
 callback_interval = 100
@@ -60,49 +62,7 @@ def test_simple():
     for term in heom.diff():
         all_terms.append([(leaves_dict[str(fst)], snd) for fst, snd in term])
 
-    solver = ProjectorSplitting(root, all_terms)
-    solver.ode_method = 'RK45'
-    solver.snd_order = False
-    solver.atol = 1.e-7
-    solver.rtol = 1.e-7
-
-    # Define the obersevable of interest
-    dat = []
-    for n, (time, r) in enumerate(solver.propagator(
-            steps=count,
-            ode_inter=dt_unit,
-    )):
-        try:
-            if n % callback_interval == 0:
-                rho = np.reshape(r.array, (-1, 4))
-                flat_data = [time] + list(rho[0])
-                dat.append(flat_data)
-                print("Time: {};    Tr rho_0: {}".format(time, rho[0, 0] + rho[0, -1]))
-        except:
-            break
-
-    return np.array(dat)
-
-
-def test_train():
-    # Type settings
-    corr = Correlation(k_max=max_terms)
-    corr.symm_coeff = np.diag(corr_dict['s'].toarray())
-    corr.asymm_coeff = np.diag(corr_dict['a'].toarray())
-    corr.exp_coeff = np.diag(corr_dict['gamma'].toarray())
-    corr.delta_coeff = 0.0  # delta_coeff
-    corr.print()
-
-    n_dims = [max_tier] * max_terms
-    heom = Hierachy(n_dims, H, V, corr)
-
-    # Adopt MCTDH
-    root = tensor_train_template(rho_0, n_dims)[0]
-    leaves_dict = {leaf.name: leaf for leaf in root.leaves()}
-    all_terms = []
-    for term in heom.diff():
-        all_terms.append([(leaves_dict[str(fst)], snd) for fst, snd in term])
-
+    #solver = ProjectorSplitting(root, all_terms)
     solver = MultiLayer(root, all_terms)
     solver.ode_method = 'RK45'
     solver.snd_order = False
@@ -125,6 +85,49 @@ def test_train():
             break
 
     return np.array(dat)
+
+
+def test_train(fname=None):
+    # Type settings
+    corr = Correlation(k_max=max_terms)
+    corr.symm_coeff = np.diag(corr_dict['s'].toarray())
+    corr.asymm_coeff = np.diag(corr_dict['a'].toarray())
+    corr.exp_coeff = np.diag(corr_dict['gamma'].toarray())
+    corr.delta_coeff = 0.0  # delta_coeff
+    corr.print()
+
+    n_dims = [max_tier] * max_terms
+    heom = Hierachy(n_dims, H, V, corr)
+
+    # Adopt TT
+    tensor_train = tensor_train_template(rho_0, n_dims)
+    root = tensor_train[0]
+    leaves_dict = {leaf.name: leaf for leaf in root.leaves()}
+    all_terms = []
+    for term in heom.diff():
+        all_terms.append([(leaves_dict[str(fst)], snd) for fst, snd in term])
+
+    solver = MultiLayer(root, all_terms)
+    #solver = ProjectorSplitting(root, all_terms)
+    solver.ode_method = 'RK45'
+    solver.snd_order = False
+    solver.atol = 1.e-7
+    solver.rtol = 1.e-7
+    solver.ps_method = 'split-unite'
+
+    projector = np.zeros((max_tier, 1))
+    projector[0] = 1.0
+    logger = Logger(filename=fname, level='info').logger
+    for n, (time, _) in enumerate(solver.propagator(steps=count, ode_inter=dt_unit, split=True)):
+        if n % callback_interval == 0:
+            head = root.array
+            for t in tensor_train[1:]:
+                spf = Tensor.partial_product(t.array, 1, projector, 0)
+                head = Tensor.partial_product(head, head.ndim - 1, spf, 0)
+
+            rho = np.reshape(head, (4, -1))[:, 0]
+            logger.info("{} {} {} {} {}".format(time, rho[0], rho[1], rho[2], rho[3]))
+    return
 
 
 def gen_ref():
@@ -155,23 +158,22 @@ if __name__ == '__main__':
 
     f_dir = os.path.abspath(os.path.dirname(__file__))
     os.chdir(os.path.join(f_dir, 'drude'))
-    prefix = "HEOM"
+    prefix = "HEOM_TT_ps"
 
     tst_fname = '{}_tst.dat'.format(prefix)
-    ref_fname = 'HEOM_ref.dat'.format(prefix)
+    # tst_fname = 'test_drude.log'
+    ref_fname = '{}_ref.dat'.format(prefix)
 
     try:
         tst = np.loadtxt(tst_fname, dtype=complex)
     except:
-        tst = test_simple()
-        #tst = test_train()
-        np.savetxt(tst_fname, tst)
+        #tst = test_simple()
+        tst = test_train(fname=tst_fname)
+        tst = np.loadtxt(tst_fname, dtype=complex)
 
-    try:
-        ref = np.loadtxt(ref_fname, dtype=complex)
-    except:
-        ref = gen_ref()
-        np.savetxt(ref_fname, ref)
+    # generate reference data from pyheom
+    ref = gen_ref()
+    np.savetxt(ref_fname, ref)
 
     plt.plot(tst[:, 0], tst[:, 1], '-', label="$P_0$ ({})".format(prefix))
     plt.plot(tst[:, 0], tst[:, -1], '-', label="$P_1$ ({})".format(prefix))
@@ -181,8 +183,9 @@ if __name__ == '__main__':
     plt.plot(ref[:, 0], ref[:, 1], '--', label="$P_0$ (ref.)".format(prefix))
     plt.plot(ref[:, 0], ref[:, -1], '--', label="$P_1$ (ref.)".format(prefix))
     plt.plot(ref[:, 0], np.real(ref[:, 2]), '--', label="$\Re r$ (ref.)".format(prefix))
-    plt.plot(ref[:, 0], np.imag(ref[:, 2]), '--', label="$\Im r$ (ref.)".format(prefix))
+    plt.plot(ref[:, 0], -np.imag(ref[:, 2]), '--', label="$\Im r$ (ref.)".format(prefix))
+
     plt.legend()
-    plt.title('Drude model w/ pyheom')
+    plt.title('Drude model (TT)')
     plt.xlim(0, dt_unit * count)
     plt.savefig('{}.png'.format(prefix))

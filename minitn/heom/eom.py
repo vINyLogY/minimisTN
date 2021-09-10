@@ -47,8 +47,8 @@ class Hierachy(object):
         assert sys_op.ndim == 2
         assert sys_op.shape == sys_hamiltonian.shape
         self.n_states = sys_op.shape[0]
-        self.op = sys_op
-        self.h = sys_hamiltonian
+        self.op = np.array(sys_op, dtype=DTYPE)
+        self.h = np.array(sys_hamiltonian, dtype=DTYPE)
 
     def gen_extended_rho(self, rho):
         """Get rho_n from rho with the conversion:
@@ -69,18 +69,18 @@ class Hierachy(object):
     def _raiser(self, k):
         """Acting on 0-th index"""
         dim = self.n_dims[k]
-        return np.eye(dim, k=1)
+        return np.eye(dim, k=1, dtype=DTYPE)
 
     def _lower(self, k):
         """Acting on 0-th index"""
         dim = self.n_dims[k]
-        return np.eye(dim, k=-1)
+        return np.eye(dim, k=-1, dtype=DTYPE)
 
     def _numberer(self, k, start=0):
-        return np.diag(np.arange(start, start + self.n_dims[k]))
+        return np.diag(np.arange(start, start + self.n_dims[k], dtype=DTYPE))
 
     def _sqrt_numberer(self, k, start=0):
-        return np.diag(np.sqrt(np.arange(start, start + self.n_dims[k])))
+        return np.diag(np.sqrt(np.arange(start, start + self.n_dims[k], dtype=DTYPE)))
 
     def _diff_ij(self):
         # delta = self.corr.delta_coeff
@@ -110,14 +110,15 @@ class Hierachy(object):
 
     def _diff_k(self, k):
         c_k = self.corr.symm_coeff[k] + 1.0j * self.corr.asymm_coeff[k]
+        print("k: {}; c_k: {}".format(k, c_k))
         numberer = self._sqrt_numberer(k)
         raiser = self._raiser(k)
         lower = self._lower(k)
 
         return [
-            [(self._i, -1.0j / self.hbar * np.transpose(self.op)), (k, numberer @ lower)],
+            [(self._i, -1.0j / self.hbar * self.op), (k, numberer @ lower)],
             [(self._j, 1.0j / self.hbar * self.op), (k, numberer @ lower)],
-            [(self._i, -1.0j / self.hbar * c_k * np.transpose(self.op)), (k, raiser @ numberer)],
+            [(self._i, -1.0j / self.hbar * c_k * self.op), (k, raiser @ numberer)],
             [(self._j, 1.0j / self.hbar * np.conj(c_k) * self.op), (k, raiser @ numberer)],
         ]
 

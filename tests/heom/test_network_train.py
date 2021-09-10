@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # coding: utf-8
 from __future__ import absolute_import, division, print_function
-from minitn.heom.propagate import ProjectorSplitting
 
 import os
 from builtins import filter, map, range, zip
@@ -12,6 +11,7 @@ import numpy as np
 from minitn.heom.eom import Hierachy
 from minitn.heom.noise import Correlation
 from minitn.algorithms.ml import MultiLayer
+from minitn.heom.propagate import ProjectorSplitting
 from minitn.heom.network import simple_heom, tensor_train_template
 from minitn.tensor import Leaf, Tensor
 
@@ -57,17 +57,16 @@ def test_drude_train():
     rho_0 = np.zeros((2, 2))
     rho_0[0, 0] = 1
 
-    # Simple HEOM
+    # TT HEOM
     tensor_train = tensor_train_template(rho_0, [max_tier] * max_terms, rank=max_tier)
     root = tensor_train[0]
-    #root.check_completness(strict=True)
 
     leaves_dict = {leaf.name: leaf for leaf in root.leaves()}
     all_terms = []
     for term in heom.diff():
         all_terms.append([(leaves_dict[str(fst)], snd) for fst, snd in term])
 
-    solver = ProjectorSplitting(root, all_terms)
+    solver = MultiLayer(root, all_terms)
     solver.ode_method = 'RK45'
     solver.snd_order = False
     solver.max_ode_steps = 100000
@@ -81,27 +80,15 @@ def test_drude_train():
             steps=20000,
             ode_inter=0.01,
     )):
-        if n % 2 == 0:
+        head = root.array
+        for t in tensor_train[1:]:
+            spf = Tensor.partial_product(t.array, 1, projector, 0)
+            head = Tensor.partial_product(head, head.ndim - 1, spf, 0)
 
-            head = root.array
-            for t in tensor_train[1:]:
-                head = Tensor.partial_product(head, head.ndim - 1, t.array, 0)
-
-            print(head.shape)
-
-            rho = np.reshape(head, (4, -1))[:, 0]
-            flat_data = [time] + list(rho)
-            dat.append(flat_data)
-            print("Time {} | Pop_1 {} | Total {}".format(time, rho[0], rho[0] + rho[-1]))
-
-            # Try
-            head2 = root.array
-            for t in tensor_train[1:]:
-                spf = Tensor.partial_product(t.array, 1, projector, 0)
-                head2 = Tensor.partial_product(head2, head2.ndim - 1, spf, 0)
-
-            rho2 = np.reshape(head2, (4, -1))[:, 0]
-            print(np.allclose(rho2, rho))
+        rho = np.reshape(head, (4, -1))[:, 0]
+        flat_data = [time] + list(rho)
+        dat.append(flat_data)
+        print("Time {} | Pop_1 {} | Total {}".format(time, rho[0], rho[0] + rho[-1]))
 
     return np.array(dat)
 
