@@ -11,13 +11,13 @@ import numpy as np
 from minitn.heom.eom import Hierachy
 from minitn.heom.noise import Correlation
 from minitn.algorithms.ml import MultiLayer
-from minitn.heom.network import simple_heom, tensor_train_template
+from minitn.heom.network import simple_heom, tensor_tree_template
 from minitn.tensor import Leaf, Tensor
 
 import pyheom
 
 f_dir = os.path.abspath(os.path.dirname(__file__))
-os.chdir(os.path.join(f_dir, 'tensor_train'))
+os.chdir(os.path.join(f_dir, 'tensor_tree'))
 
 
 def test_drude_tree():
@@ -59,17 +59,35 @@ def test_drude_tree():
     rho_0 = np.zeros((2, 2))
     rho_0[0, 0] = 1
 
-    # TODO
+    root = tensor_tree_template(rho_0, [max_tier] * max_terms, rank=max_tier//2)
+
+    solver = MultiLayer(root, heom.diff(), use_str_name=True)
+    solver.ode_method = 'RK45'
+    solver.snd_order = False
+    solver.max_ode_steps = 100000
+
+    dat = []
+    for n, (time, r) in enumerate(solver.propagator(
+        steps=20000,
+        ode_inter=0.01,
+    )):
+        if n % 100 == 0:
+            
+            head = root.array
+
+            print(head.shape)
+
+            rho = Tensor.partial_product(r.array, 0, r[0][0].array, 0)
+            rho = np.reshape(rho, (-1, 4))
+
+            flat_data = [time] + list(rho[0])
+            dat.append(flat_data)
+            print("Time: {} | Pop 0: {} | Total: {}".format(flat_data[0], flat_data[1], flat_data[1] + flat_data[-1]))
+
+    return np.array(dat)
 
 
 if __name__ == '__main__':
-    from matplotlib import pyplot as plt
     #logging.basicConfig(level=logging.DEBUG)
 
     a2 = test_drude_tree()
-    np.savetxt('test2.dat', a2)
-    #a2 = np.loadtxt('test2.dat', dtype=complex)
-    plt.plot(a2[:, 0], a2[:, 1], '--', label='P(0) (minitn)')
-    plt.plot(a2[:, 0], a2[:, 4], '--', label='P(1) (minitn)')
-    plt.legend()
-    plt.savefig('cmp.png')

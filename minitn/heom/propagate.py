@@ -20,7 +20,7 @@ from minitn.lib.numerical import DavidsonAlgorithm
 from minitn.tensor import Tensor, Leaf
 
 
-class MultiLayer(object):
+class ProjectorSplitting(object):
     r"""A mini version of ML-MCTDH propagation method.
     """
     # Coefficients and Superparameters...
@@ -33,7 +33,7 @@ class MultiLayer(object):
     rtol = 1.0e-8
     ps_method = 'split-unite'
 
-    def __init__(self, root, h_list, use_str_name=False):
+    def __init__(self, root:Tensor, h_list):
         """
         Parameters
         ----------
@@ -44,28 +44,12 @@ class MultiLayer(object):
         f_list : [[(Leaf, float  ->  array)]]
             h_list is a list of `term`, where `term` is a list of tuple like
             `(Leaf, array)`.  This is time dependent part of Hamiltonian.
-        use_str_name : bool
-            whether to use str to replace Leaf above. Default is False.
         """
         self.root = root
         self.h_list = h_list
 
         # For propogation purpose
         self.time = 0.0
-
-        # Type check
-        for term in h_list:
-            for pair in term:
-                if not isinstance(pair[0], Leaf) and not use_str_name:
-                    raise TypeError('0-th ary in tuple must be of type Leaf!')
-                if np.array(pair[1]).ndim != 2:
-                    raise TypeError('1-th ary in tuple must be 2-D ndarray!')
-        if use_str_name:
-            leaves_dict = {leaf.name: leaf for leaf in root.leaves()}
-            for term in h_list:
-                for _ in range(len(term)):
-                    fst, snd = term.pop(0)
-                    term.append((leaves_dict[str(fst)], snd))
 
         # Some pre-calculated data
         self.env_ = {}    # {(int, Tensor, int): ndarray}
@@ -165,6 +149,8 @@ class MultiLayer(object):
         return
 
     def move(self, t, i, op=None, unite_first=False):
+        # if __debug__:
+        #     print("[DEBUG] Moving {} along axis {}".format(t, i))
         end, _ = t[i]
         self.remove_env(t, end)
         if unite_first:
@@ -183,7 +169,7 @@ class MultiLayer(object):
         step(ode_inter=half, backward=True)
         return 
 
-    def split_step(self, ode_inter=0.01, backward=False):
+    def one_site_step(self, ode_inter=0.01, backward=False):
         self._form_env()
         prop = partial(self._single_prop, tau=ode_inter)
         inv_prop = partial(self._single_prop, tau=(-ode_inter))
@@ -207,7 +193,7 @@ class MultiLayer(object):
             prop(self.root)
         return
 
-    def unite_step(self, ode_inter=0.01, backward=False):
+    def two_site_step(self, ode_inter=0.01, backward=False):
         self._form_env()
         prop = partial(self._single_prop, tau=ode_inter)
         inv_prop = partial(self._single_prop, tau=(-ode_inter))
@@ -252,9 +238,9 @@ class MultiLayer(object):
         """
         identifier = self.ps_method.upper()
         if identifier.startswith('U'):
-            step = self.unite_step
+            step = self.two_site_step
         elif identifier.startswith('S'):
-            step = self.split_step
+            step = self.one_site_step
         else:
             raise ValueError("No PS method '{}'!".format(self.ps_method))
         if self.snd_order and not identifier.startswith('R'):
@@ -267,7 +253,14 @@ class MultiLayer(object):
             time = start + n * ode_inter
             self.time = time 
             yield (time, root)
-            try:
-                step(ode_inter=ode_inter)
-            except:
-                break
+            step(ode_inter=ode_inter)
+
+
+class PnC(object):
+    """A Propagation-Compression method
+
+    Inspired by TD-DMRG (?)
+    """
+    pass
+
+
