@@ -29,11 +29,12 @@ count = 50000
 # Bath
 # C = g**2 (coth (beta omega / 2)) cos wt - ig**2 sin wt
 max_terms = 2
-max_tier = 100
+max_tier = 30
 
 omega = 0.05
 g = 0.1
-beta = 1.0
+global beta
+beta = 0.1
 
 corr = Correlation(k_max=max_terms)
 temp_factor = 1.0 / np.tanh(beta * omega / 2)
@@ -68,6 +69,7 @@ def test_delta(fname=None):
     for n, (time, r) in enumerate(solver.propagator(
             steps=count,
             ode_inter=dt_unit,
+            #split=False,
     )):
         if n % callback_interval == 0:
             rho = np.reshape(r.array, (-1, 4))
@@ -80,10 +82,12 @@ def test_delta(fname=None):
 if __name__ == '__main__':
     import os
     from matplotlib import pyplot as plt
+    import sys
+    max_tier = int(sys.argv[1])
 
     f_dir = os.path.abspath(os.path.dirname(__file__))
     os.chdir(os.path.join(f_dir, 'delta'))
-    prefix = "HEOM_delta_t{}".format(max_tier)
+    prefix = "HEOM_delta_psn_t{}".format(max_tier)
 
     tst_fname = '{}_tst.dat'.format(prefix)
 

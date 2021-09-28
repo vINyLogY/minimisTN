@@ -39,8 +39,8 @@ p0 = 1.0
 rho_0 = np.array([[p0, 0.0], [0.0, 1.0 - p0]])
 
 dt_unit = 0.001
-callback_interval = 100
-count = 50000
+callback_interval = 1000
+count = 500000
 
 
 def test_simple():
@@ -118,7 +118,7 @@ def test_train(fname=None):
     projector = np.zeros((max_tier, 1))
     projector[0] = 1.0
     logger = Logger(filename=fname, level='info').logger
-    for n, (time, _) in enumerate(solver.propagator(steps=count, ode_inter=dt_unit, split=True)):
+    for n, (time, _) in enumerate(solver.propagator(steps=count, ode_inter=dt_unit, split=False)):
         if n % callback_interval == 0:
             head = root.array
             for t in tensor_train[1:]:
@@ -158,7 +158,7 @@ if __name__ == '__main__':
 
     f_dir = os.path.abspath(os.path.dirname(__file__))
     os.chdir(os.path.join(f_dir, 'drude'))
-    prefix = "HEOM_TT_ps"
+    prefix = "HEOM_TT"
 
     tst_fname = '{}_tst.dat'.format(prefix)
     # tst_fname = 'test_drude.log'
