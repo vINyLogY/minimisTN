@@ -6,9 +6,8 @@ from minitn.heom.network import simple_heom, tensor_train_template
 
 import numpy as np
 from minitn.heom.eom import Hierachy
-from minitn.heom.noise import Correlation
-from minitn.heom.propagate import ProjectorSplitting
-from minitn.algorithms.ml import MultiLayer
+from minitn.heom.noise import Correlation, Drude
+from minitn.heom.propagate import MultiLayer
 from minitn.lib.logging import Logger
 
 import pyheom

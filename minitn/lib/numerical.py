@@ -8,7 +8,8 @@ import logging
 import math
 from builtins import map, range, zip
 
-import numpy as np
+
+from minitn.lib.backend import np
 from scipy.integrate import quad
 from scipy.linalg import eigh, norm, orth, svd
 from scipy.sparse.linalg import LinearOperator

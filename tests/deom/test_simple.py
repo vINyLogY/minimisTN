@@ -1,36 +1,40 @@
 #!/usr/bin/env python3
 # coding: utf-8
 from __future__ import absolute_import, division, print_function
-from minitn.tensor import Tensor
-from minitn.heom.network import simple_heom, tensor_train_template
 
-import numpy as np
+from minitn.heom.network import simple_heom
+
+from minitn.lib.backend import np
 from minitn.heom.eom import Hierachy
-from minitn.heom.noise import Correlation, Drude
+from minitn.heom.noise import Correlation
 from minitn.heom.propagate import MultiLayer
 from minitn.lib.logging import Logger
 
-import pyheom
-
 # Bath
+eta = 0.25  # reorganization energy (dimensionless)
+gamma_c = 0.25  # vibrational frequency (dimensionless)
 max_tier = 10
 max_terms = 3
-corr = Drude(lambda_=0.5, omega_0=1.0, k_max=max_terms, beta=1.0)
 
 # System
 n_state = 2
-epsilon = 1.0
-delta = 1.0
-H = np.array([[epsilon, delta], [delta, -epsilon]])
-V = np.array([[epsilon, 0.0], [0.0, -epsilon]])
+H = np.array([[1.0, 1.0], [1.0, -1.0]])
+#H = np.array([[0.0, 0.5], [0.5, 0.0]])
+V = np.array([[1.0, 0.0], [0.0, -1.0]])
 
 # init state
 p0 = 1.0
 rho_0 = np.array([[p0, 0.0], [0.0, 1.0 - p0]])
 
+corr = Correlation(k_max=max_terms)
+corr.symm_coeff = np.array([0.4973931166166882, 0.041010943929914466, 0.0765163269642356])
+corr.asymm_coeff = np.array([-0.0625, 0.0, 0.0])
+corr.exp_coeff = np.array([0.25, 6.305939144224808, 19.499618752922675])
+corr.delta_coeff = 0.0  # delta_coeff
+
 dt_unit = 0.001
-callback_interval = 10
-count = 15000
+callback_interval = 1000
+count = 500000
 
 
 def test_simple(fname=None):
@@ -51,8 +55,6 @@ def test_simple(fname=None):
     solver = MultiLayer(root, all_terms)
     solver.ode_method = 'RK45'
     solver.snd_order = False
-    solver.atol = 1.e-7
-    solver.rtol = 1.e-7
 
     # Define the obersevable of interest
     logger = Logger(filename=fname, level='info').logger
@@ -72,28 +74,11 @@ def test_simple(fname=None):
 
 if __name__ == '__main__':
     import os
-    from matplotlib import pyplot as plt
-
     f_dir = os.path.abspath(os.path.dirname(__file__))
-    os.chdir(os.path.join(f_dir, 'drude_yan2021'))
-    prefix = "HEOM_simple_d{:.1f}".format(delta)
+    os.chdir(os.path.join(f_dir, 'data'))
+    prefix = "HEOM_simple_t{}".format(max_tier)
 
     tst_fname = '{}_tst.dat'.format(prefix)
-    # tst_fname = 'test_drude.log'
     ref_fname = '{}_ref.dat'.format(prefix)
 
-    try:
-        tst = np.loadtxt(tst_fname, dtype=complex)
-    except:
-        test_simple(fname=tst_fname)
-        tst = np.loadtxt(tst_fname, dtype=complex)
-
-    plt.plot(tst[:, 0], tst[:, 1], '-', label="$P_0$ ({})".format(prefix))
-    plt.plot(tst[:, 0], tst[:, -1], '-', label="$P_1$ ({})".format(prefix))
-    plt.plot(tst[:, 0], np.real(tst[:, 2]), '-', label="$\Re r$ ({})".format(prefix))
-    plt.plot(tst[:, 0], np.imag(tst[:, 2]), '-', label="$\Im r$ ({})".format(prefix))
-
-    plt.legend()
-    plt.title('Drude model (w/ Yan2021)')
-    plt.xlim(0, dt_unit * count)
-    plt.savefig('{}.png'.format(prefix))
+    tst = test_simple(fname=tst_fname)

@@ -14,7 +14,7 @@ import logging
 from builtins import filter, map, range, zip
 from contextlib import contextmanager
 
-import numpy as np
+from minitn.lib.backend import np
 from scipy import linalg
 
 from minitn.lib.numerical import compressed_svd
@@ -22,6 +22,7 @@ from minitn.lib.tools import __
 
 _empty = object()
 DTYPE = np.complex128
+
 
 class Tensor(object):
     r"""
@@ -62,7 +63,7 @@ class Tensor(object):
 
         # Cache
         # TODO: REMOVE THIS
-        self._partial_env = {}    # {(int, matrix)}, saving mean field
+        self._partial_env = {}  # {(int, matrix)}, saving mean field
 
         # For some special methods
         self.aux = None
@@ -84,7 +85,7 @@ class Tensor(object):
         """
         name = root
         root = Tensor(name=name, axis=None)
-        order = {name: 0}    # {string: int}, which means {tensor: order}
+        order = {name: 0}  # {string: int}, which means {tensor: order}
         stack = [(name, root)]
         while stack:
             sr, r = stack.pop()
@@ -101,9 +102,7 @@ class Tensor(object):
         return root
 
     def set_array(self, array):
-        self._array = (
-            np.array(array, dtype=DTYPE) if array is not None else None
-        )
+        self._array = (np.array(array, dtype=DTYPE) if array is not None else None)
         return
 
     def reset(self):
@@ -118,14 +117,14 @@ class Tensor(object):
         if self._array is None:
             return None
         else:
-            return np.array(self._array, dtype=DTYPE)    # Return a copy
+            return np.array(self._array, dtype=DTYPE)  # Return a copy
 
     @property
     def shape(self):
         if self._array is None:
             return None
         else:
-            return list(self._array.shape)    # Return a copy
+            return list(self._array.shape)  # Return a copy
 
     @property
     def order(self):
@@ -145,10 +144,7 @@ class Tensor(object):
         # Logging info
         for k, tensor in ((i, a), (j, b)):
             if k in tensor._access:
-                logging.info(__(
-                    'Overwrite the {0}-th linkage info of {1}',
-                    k, tensor
-                ))
+                logging.info(__('Overwrite the {0}-th linkage info of {1}', k, tensor))
 
         a._access[i] = (b, j)
         b._access[j] = (a, i)
@@ -180,26 +176,18 @@ class Tensor(object):
         strict : bool
             Whether to check the compatibility of arrays.
         """
-        child, j = self._access[i]    # raise KeyError if no such linkage
+        child, j = self._access[i]  # raise KeyError if no such linkage
         condition = (child._access[j] == (self, i))
         if strict:
             condition = condition and (
                 (isinstance(self, Leaf) and self._array is None) or
-                (isinstance(child, Leaf) and child._array is None) or (
-                    not (self._array is None or child._array is None) and
-                    self.shape[i] == child.shape[j]
-                )
-            )
+                (isinstance(child, Leaf) and child._array is None) or
+                (not (self._array is None or child._array is None) and self.shape[i] == child.shape[j]))
         if condition:
-            logging.debug(__(
-                'Checked {0}-th linkage info of {1}{2}',
-                i, self, ' (strict)' if strict else ''
-            ))
+            logging.debug(__('Checked {0}-th linkage info of {1}{2}', i, self, ' (strict)' if strict else ''))
             return
         else:
-            raise RuntimeError(
-                'Wrong {0}-th linkage info of {1}'.format(i, self)
-            )
+            raise RuntimeError('Wrong {0}-th linkage info of {1}'.format(i, self))
 
     def check_completness(self, strict=False):
         """
@@ -215,10 +203,7 @@ class Tensor(object):
         else:
             for i in range(self.order):
                 self.check_linkage(i, strict=strict)
-            logging.info(__(
-                'Checked linkage completeness of {0}{1}',
-                self, ' (strict)' if strict else ''
-            ))
+            logging.info(__('Checked linkage completeness of {0}{1}', self, ' (strict)' if strict else ''))
             return
 
     def __getitem__(self, key):
@@ -248,9 +233,7 @@ class Tensor(object):
             if not fast:
                 self.check_linkage(i)
         except KeyError:
-            logging.info(__(
-                'No {0}-th linkage info of {1}', i, self
-            ))
+            logging.info(__('No {0}-th linkage info of {1}', i, self))
         else:
             child, j = self._access[i]
             self.unlink(self, i, child, j)
@@ -273,7 +256,10 @@ class Tensor(object):
 
     @property
     def linkages(self):
-        def key(x): return x[0]
+
+        def key(x):
+            return x[0]
+
         linkages_list = [(i, t, j) for i, (t, j) in self._access.items()]
         return sorted(linkages_list, key=key)
 
@@ -329,8 +315,8 @@ class Tensor(object):
         -------
         ans : {2-d ndarray, None}
         """
-        if proper:    # Only calculate non-proper subtree directly
-                      # to support the Leaf
+        if proper:  # Only calculate non-proper subtree directly
+            # to support the Leaf
             child, j = self._access[i]
             return child.partial_env(j, proper=False, use_aux=use_aux)
 
@@ -342,14 +328,10 @@ class Tensor(object):
                 return self._partial_env[i]
             # Main algorithm
             else:
-                env_ = [
-                    (i_, tensor.partial_env(j, proper=False, use_aux=use_aux))
-                    for i_, tensor, j in self.children(axis=i)
-                ]    # Recursively
+                env_ = [(i_, tensor.partial_env(j, proper=False, use_aux=use_aux))
+                        for i_, tensor, j in self.children(axis=i)]  # Recursively
                 # Make use of the normalization condition
-                if not use_aux and i == self.axis and self.normalized and (
-                    all(args[1] is None for args in env_)
-                ):
+                if not use_aux and i == self.axis and self.normalized and (all(args[1] is None for args in env_)):
                     ans = None
                 else:
                     temp = self.array
@@ -472,8 +454,7 @@ class Tensor(object):
             start = end
         return
 
-    def split_unite(self, i, operator=None, rank=None, err=None,
-                    normalized=None):
+    def split_unite(self, i, operator=None, rank=None, err=None, normalized=None):
         """
         Parameters
         ----------
@@ -488,15 +469,13 @@ class Tensor(object):
         end, j = self._access[i]
         if normalized is None:
             normalized = self.normalized and end.normalized
-        mid, _ = self.split(i, rank=rank, err=err, child=self,
-                            normalized=normalized)
+        mid, _ = self.split(i, rank=rank, err=err, child=self, normalized=normalized)
         if operator is not None:
             mid = operator(mid)
         end.unite(j, root=end, normalized=normalized)
         return self, mid, end
 
-    def unite_split(self, i, operator=None, rank=None, err=None,
-                    normalized=None):
+    def unite_split(self, i, operator=None, rank=None, err=None, normalized=None):
         """
         Parameters
         ----------
@@ -517,15 +496,13 @@ class Tensor(object):
         mid = self.unite(i, normalized=normalized)
         if operator is not None:
             mid = operator(mid)
-        mid.split(axes, indice=(j, i), root=end, child=self,
-                  rank=rank, err=err, normalized=normalized)
+        mid.split(axes, indice=(j, i), root=end, child=self, rank=rank, err=err, normalized=normalized)
         if __debug__:
             linkage_new = list(self.linkage_visitor(axis=None))
             assert linkage_old == linkage_new
         return self, mid, end
 
-    def split(self, axis, indice=None, root=None, child=None,
-              rank=None, err=None, normalized=False):
+    def split(self, axis, indice=None, root=None, child=None, rank=None, err=None, normalized=False):
         """Split the root Tensor to a certain axis/certain axes.
 
         Parameters
@@ -590,14 +567,12 @@ class Tensor(object):
         # Create/write new tensors.
         cls = type(self)
         if root is None:
-            root = cls(name=name1, array=root_array, axis=None,
-                       normalized=normalized)
+            root = cls(name=name1, array=root_array, axis=None, normalized=normalized)
         else:
             root.axis = None
             root.set_array(root_array)
         if child is None:
-            child = cls(name=name2, array=child_array, axis=index2,
-                        normalized=normalized)
+            child = cls(name=name2, array=child_array, axis=index2, normalized=normalized)
         else:
             child.axis = index2
             child.set_array(child_array)
@@ -636,9 +611,7 @@ class Tensor(object):
         t1, index1 = self, axis
         t2, index2 = self._access[axis]
         if t1.axis is not None and t2.axis is not None:
-            raise RuntimeError(
-                'Can only unite root Tensor with another Tensor!'
-            )
+            raise RuntimeError('Can only unite root Tensor with another Tensor!')
         shape1, shape2 = t1.shape, t2.shape
         shape1.pop(index1)
         shape2.pop(index2)
@@ -651,8 +624,7 @@ class Tensor(object):
         else:
             name = t1.name + '+' + t2.name
         if root is None:
-            root = cls(name=name, array=array, axis=None,
-                       normalized=normalized)
+            root = cls(name=name, array=array, axis=None, normalized=normalized)
         else:
             root.axis = None
             root.set_array(array)
@@ -720,10 +692,7 @@ class Tensor(object):
         """
         for n1, n2 in zip(r1.visitor(leaf=False), r2.visitor(leaf=False)):
             n1.aux = np.conj(n2.array)
-        angle = np.arccos(
-            r1.global_inner_product() /
-            (r1.global_norm() * r2.global_norm())
-        ) / np.pi * 180
+        angle = np.arccos(r1.global_inner_product() / (r1.global_norm() * r2.global_norm())) / np.pi * 180
         return angle
 
     def projector(self, comp=False):
@@ -782,8 +751,7 @@ class Tensor(object):
     def _partial_product(array1, i, array2, j):
         l1, l2 = array1.ndim, array2.ndim
         ans = np.tensordot(array1, array2, axes=([i], [j]))
-        ans = np.moveaxis(ans, list(range(l1 - 1, l1 + l2 - 2)),
-                          list(range(i, i + l2 - 1)))
+        ans = np.moveaxis(ans, list(range(l1 - 1, l1 + l2 - 2)), list(range(i, i + l2 - 1)))
         return ans
 
     @staticmethod
@@ -906,5 +874,6 @@ class Leaf(Tensor):
             raise RuntimeError('No proper mean field at Leaf {}'.format(self))
         else:
             return self.aux if use_aux else self.array
+
 
 # EOF

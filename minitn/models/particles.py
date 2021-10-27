@@ -7,7 +7,7 @@ from __future__ import absolute_import, division
 import logging
 from builtins import filter, map, range, zip
 
-import numpy as np
+from minitn.lib.backend import np
 from scipy import linalg
 from scipy.sparse.linalg import LinearOperator
 
@@ -18,6 +18,7 @@ class Phonon(object):
     """Relevent operators for SHO with the basis diagonalizing the
     hamiltionian.
     """
+
     def __init__(self, dim, omega, mass=1, hbar=1, dense=True):
         r"""The Hamiltonian for a SHO is::
 
@@ -33,8 +34,7 @@ class Phonon(object):
 
     def check_vec(self, vec):
         if vec.shape != (self.dim,):
-            raise TypeError("The shape of input vec is {}, but requires {}",
-                            vec.shape, (self.dim,))
+            raise TypeError("The shape of input vec is {}, but requires {}", vec.shape, (self.dim,))
         else:
             return
 
@@ -81,7 +81,10 @@ class Phonon(object):
         if self.dense:
             ans = coeff * (self.creation_operator + self.annihilation_operator)
         else:
-            def matvec(x): return coeff * (self.raising(x) + self.lowering(x))
+
+            def matvec(x):
+                return coeff * (self.raising(x) + self.lowering(x))
+
             ans = self.operator(matvec=matvec)
         return ans
 
@@ -91,7 +94,10 @@ class Phonon(object):
         if self.dense:
             ans = coeff * (self.creation_operator - self.annihilation_operator)
         else:
-            def matvec(x): return coeff * (self.raising(x) - self.lowering(x))
+
+            def matvec(x):
+                return coeff * (self.raising(x) - self.lowering(x))
+
             ans = self.operator(matvec=matvec)
         return ans
 
@@ -100,7 +106,10 @@ class Phonon(object):
         if self.dense:
             ans = np.diag(np.arange(self.dim))
         else:
-            def matvec(x): return self.raising(self.lowering(x))
+
+            def matvec(x):
+                return self.raising(self.lowering(x))
+
             ans = self.operator(matvec=matvec)
         return ans
 
@@ -110,7 +119,9 @@ class Phonon(object):
         if self.dense:
             ans = np.diag(coeff * (0.5 + np.arange(self.dim)))
         else:
+
             def matvec(x):
                 return coeff * (self.raising(self.lowering(x)) + 0.5 * x)
+
             ans = self.operator(matvec=matvec)
         return ans

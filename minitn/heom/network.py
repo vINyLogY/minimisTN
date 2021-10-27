@@ -13,7 +13,7 @@ import logging
 from builtins import filter, map, range, zip
 from minitn.models.particles import Phonon
 
-import numpy as np
+from minitn.lib.backend import np
 from scipy import linalg
 
 from minitn.lib.tools import huffman_tree

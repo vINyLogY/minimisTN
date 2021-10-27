@@ -7,9 +7,9 @@ from builtins import filter, map, range, zip
 
 import numpy as np
 from minitn.heom.eom import Hierachy
-from minitn.heom.noise import Correlation
-from minitn.heom.propagate import ProjectorSplitting
-from minitn.algorithms.ml import MultiLayer
+from minitn.heom.noise import Correlation, Drude
+from minitn.heom.propagate import MultiLayer
+from minitn.lib.logging import Logger
 from minitn.lib.units import Quantity
 from minitn.lib.logging import Logger
 
@@ -57,8 +57,7 @@ def test_delta(fname=None):
     for term in heom.diff():
         all_terms.append([(leaves_dict[str(fst)], snd) for fst, snd in term])
 
-    solver = ProjectorSplitting(root, all_terms)
-    #solver = MultiLayer(root, all_terms)
+    solver = MultiLayer(root, all_terms)
     solver.ode_method = 'RK45'
     solver.snd_order = False
     solver.atol = 1.e-7

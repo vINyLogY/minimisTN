@@ -7,7 +7,8 @@ from __future__ import absolute_import, division
 import logging
 import math
 
-import numpy as np
+
+from minitn.lib.backend import np
 import sympy as sym
 
 if __debug__:

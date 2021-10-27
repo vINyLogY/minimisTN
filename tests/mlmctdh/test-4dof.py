@@ -17,13 +17,8 @@ References
 """
 from __future__ import absolute_import, division, print_function
 
-
 from model import ml
 import logging
 
-logging.basicConfig(
-    format='%(asctime)s-%(levelname)s: (In %(module)s)[%(funcName)s] %(message)s',
-    level=logging.INFO
-)
-ml(dof=4, eta=500, cutoff=2000, loc=None, steps=2000, ode_inter=0.1)
-
+logging.basicConfig(format='%(asctime)s-%(levelname)s: (In %(module)s)[%(funcName)s] %(message)s', level=logging.INFO)
+ml(dof=8, eta=500, cutoff=2000, loc=None, steps=2000, ode_inter=0.1)

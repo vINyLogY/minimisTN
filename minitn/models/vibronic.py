@@ -17,7 +17,7 @@ import logging
 from builtins import filter, map, range, zip
 from itertools import filterfalse, count
 
-import numpy as np
+from minitn.lib.backend import np
 from scipy import linalg
 from scipy.integrate import quad
 
@@ -95,6 +95,7 @@ class VibronicModel(object):
         """
         pass
 
+
 if __name__ == '__main__':
     # A model for photoinduced ET reactions in mixed-valence
     # systems in solution at zero temperature.
@@ -102,10 +103,7 @@ if __name__ == '__main__':
     from minitn.tensor import Leaf, Tensor
     from minitn.algorithms.ml import MultiLayer
     from minitn.lib.tools import plt, figure
-    logging.basicConfig(
-        format='(In %(module)s)[%(funcName)s] %(message)s',
-        level=logging.INFO
-    )
+    logging.basicConfig(format='(In %(module)s)[%(funcName)s] %(message)s', level=logging.INFO)
 
     raise NotImplementedError
 

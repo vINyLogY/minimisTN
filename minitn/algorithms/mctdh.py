@@ -14,7 +14,8 @@ from functools import partial
 from math import sqrt
 
 import matplotlib.pyplot as plt
-import numpy as np
+
+from minitn.lib.backend import np
 import scipy
 from scipy import fftpack, linalg
 from scipy.integrate import RK45
@@ -48,7 +49,15 @@ class MCTDH(PO_DVR):
 
     Note that the order of contraction is essential.
     """
-    def __init__(self, conf_list, shape_list, fast=False, hbar=1., m_e=1., ):
+
+    def __init__(
+        self,
+        conf_list,
+        shape_list,
+        fast=False,
+        hbar=1.,
+        m_e=1.,
+    ):
         r"""
         N-dimensional DVR using sine-DVR for 1-D::
 
@@ -62,9 +71,7 @@ class MCTDH(PO_DVR):
         hbar : float, optional
         fast : bool, optional
         """
-        super(MCTDH, self).__init__(
-            conf_list, fast=fast, hbar=hbar, m_e=m_e
-        )
+        super(MCTDH, self).__init__(conf_list, fast=fast, hbar=hbar, m_e=m_e)
         # shape[1] is m and shape[0] is n
         shape_a = [shape[1] for shape in shape_list]
         # add shape of A tensor to the end
@@ -98,24 +105,18 @@ class MCTDH(PO_DVR):
         """
         dvr_list = self.dvr_list
         if kinetic_only:
-            h_terms = [
-                [(i, dvr.t_mat())] for i, dvr in enumerate(self.dvr_list)
-            ]
+            h_terms = [[(i, dvr.t_mat())] for i, dvr in enumerate(self.dvr_list)]
         else:
-            h_terms = [
-                [(i, dvr.h_mat())] for i, dvr in enumerate(self.dvr_list)
-            ]
+            h_terms = [[(i, dvr.h_mat())] for i, dvr in enumerate(self.dvr_list)]
         if extra is not None:
             for term in extra:
-                t_i = [
-                    (i, np.diag(func(np.asarray(self.grid_points_list[i]))))
-                    for i, func in term
-                ]
+                t_i = [(i, np.diag(func(np.asarray(self.grid_points_list[i])))) for i, func in term]
                 h_terms.append(t_i)
         self.h_terms = h_terms
         return h_terms
 
     def update_mod_terms(self, vec=None, write=True):
+
         def _eval(op, vec):
             vec_h = np.conj(np.transpose(vec))
             mod_op = np.dot(vec_h, np.dot(op, vec))
@@ -176,6 +177,7 @@ class MCTDH(PO_DVR):
         -------
             (self.size, self.size) LinearOperator
         """
+
         class _EffHamiltonian(LinearOperator):
             """
             Parameters
@@ -183,6 +185,7 @@ class MCTDH(PO_DVR):
             instance : MCTDH
                 An MCTDH instance.
             """
+
             def __init__(self, instance):
                 self.size = instance.size
                 self.n_terms = len(instance.h_terms)
@@ -205,9 +208,7 @@ class MCTDH(PO_DVR):
         r : int
         vec : (self.size,) ndarray
         """
-        logging.debug(__(
-            'Hamiltonian term {}...', r
-        ))
+        logging.debug(__('Hamiltonian term {}...', r))
         h_term = self.h_terms[r]
         mod_term = self.mod_terms[r]
         steps = len(self.shape_list)
@@ -228,9 +229,7 @@ class MCTDH(PO_DVR):
         if not h_list:
             return np.zeros((mat.shape))
 
-        logging.debug(__(
-            '> OP on mat {}...', i
-        ))
+        logging.debug(__('> OP on mat {}...', i))
 
         n, m = mat.shape
         partial_transform = self._partial_transform
@@ -254,9 +253,7 @@ class MCTDH(PO_DVR):
         return ans
 
     def _coeff_op(self, tensor, mod_term):
-        logging.debug(__(
-            '> OP on A tensor...'
-        ))
+        logging.debug(__('> OP on A tensor...'))
         for i, mat in mod_term:
             tensor = MCTDH._partial_transform(i, tensor, mat)
         return tensor
@@ -360,21 +357,15 @@ class MCTDH(PO_DVR):
                     std_norm = sqrt(1.0)
                 else:
                     std_norm = sqrt(self.shape_list[i][1])
-                norm = (
-                    linalg.norm(vec_i) / std_norm
-                )
-                logging.debug(__(
-                    'norm {}: {}', i, norm
-                ))
+                norm = (linalg.norm(vec_i) / std_norm)
+                logging.debug(__('norm {}: {}', i, norm))
                 ans.append(vec_i / norm)
             ans = np.concatenate(ans, axis=None)
             return ans
 
         normalizer = _normalizer if renormalize else None
 
-        return func(
-            *args, updater=_updater, normalizer=normalizer, **kwargs
-        )
+        return func(*args, updater=_updater, normalizer=normalizer, **kwargs)
 
     def autocorrelation(self, *args, **kwargs):
         func = super(MCTDH, self).autocorrelation

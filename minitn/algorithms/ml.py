@@ -15,7 +15,7 @@ from functools import partial
 from itertools import count, combinations_with_replacement
 from contextlib import contextmanager
 
-import numpy as np
+from minitn.lib.backend import np
 from scipy import linalg, integrate, sparse
 
 from minitn.lib.tools import __

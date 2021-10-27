@@ -30,11 +30,8 @@ from minitn.algorithms.ml import MultiLayer
 from minitn.lib.tools import huffman_tree
 from minitn.lib.logging import Logger
 from minitn.lib.units import Quantity
-from minitn.structures.network import autocomplete
 from minitn.models.particles import Phonon
 from minitn.tensor import Leaf, Tensor
-
-
 
 DTYPE = np.complex128
 
@@ -60,6 +57,7 @@ def linear_discretization(spec_func, stop, num, start=0.0):
         corrospoding coupling in second quantization for all `i` in 
         `range(0, num)`.
     """
+
     def direct_quad(a, b):
         density = quad(spec_func, a, b)[0]
         omega = quad(lambda x: x * spec_func(x), a, b)[0] / density
@@ -76,7 +74,7 @@ def ml(dof=8, e=6500, v=0, eta=4000, cutoff=2000, scale=5, loc=None, steps=20000
     # define parameters
     e = Quantity(e, 'cm-1').value_in_au
     v = Quantity(v, 'cm-1').value_in_au
-    eta = Quantity(eta, 'cm-1').value_in_au 
+    eta = Quantity(eta, 'cm-1').value_in_au
     omega0 = Quantity(cutoff, 'cm-1').value_in_au
     primitive_dim = 100
     spf_dim = 20
@@ -88,7 +86,7 @@ def ml(dof=8, e=6500, v=0, eta=4000, cutoff=2000, scale=5, loc=None, steps=20000
             return eta
         else:
             return 0.0
-            
+
     # Define all Leaf tensors and hamiltonian we need
     h_list = []
     sys_leaf = Leaf(name='sys0')
@@ -109,8 +107,7 @@ def ml(dof=8, e=6500, v=0, eta=4000, cutoff=2000, scale=5, loc=None, steps=20000
         h_list.append([(ph_leaf, ph.hamiltonian)])
         # e-ph part
         op = ph.annihilation_operator + ph.creation_operator
-        h_list.append([(ph_leaf, g * op),
-                       (sys_leaf, projector)])
+        h_list.append([(ph_leaf, g * op), (sys_leaf, projector)])
 
     def ph_spf(n=0):
         n += 1
@@ -121,7 +118,7 @@ def ml(dof=8, e=6500, v=0, eta=4000, cutoff=2000, scale=5, loc=None, steps=20000
         graph[root].insert(0, sys_leaf)
     except KeyError:
         ph_leaf = root
-        root = Tensor( )
+        root = Tensor()
         graph[root] = [sys_leaf, ph_leaf]
     finally:
         root.name = 'wfn'
@@ -146,25 +143,22 @@ def ml(dof=8, e=6500, v=0, eta=4000, cutoff=2000, scale=5, loc=None, steps=20000
                 bond_dict[(s, i, t, j)] = primitive_dim
             else:
                 bond_dict[(s, i, t, j)] = spf_dim
-    autocomplete(solver.root, bond_dict)
+    solver.autocomplete(bond_dict)
     # set initial root array
     a, b = 1.0, 1.0
-    init_proj = np.array([
-        [a, 0.0],
-        [b, 0.0]
-    ]) / np.sqrt(a**2 + b**2)
+    init_proj = np.array([[a, 0.0], [b, 0.0]]) / np.sqrt(a**2 + b**2)
     root_array = Tensor.partial_product(root.array, 0, init_proj, 1)
     root.set_array(root_array)
 
     # Define the computation details
     solver.ode_method = 'RK45'
     solver.snd_order = True
-    root.is_normalized=True
+    root.is_normalized = True
     # Define the obersevable of interest
     logger.info('''# time/fs    rho00  rho01  rho10  rho11''')
     for time, _ in solver.propagator(
-        steps=steps,
-        ode_inter=Quantity(ode_inter, 'fs').value_in_au,
+            steps=steps,
+            ode_inter=Quantity(ode_inter, 'fs').value_in_au,
     ):
         t = Quantity(time).convert_to(unit='fs').value
         for tensor in root.visitor(axis=None):
@@ -174,4 +168,3 @@ def ml(dof=8, e=6500, v=0, eta=4000, cutoff=2000, scale=5, loc=None, steps=20000
             tensor.reset()
         flat_data = [t] + list(np.reshape(rho, -1))
         logger.info('{}    {}  {}  {}  {}'.format(*flat_data))
-

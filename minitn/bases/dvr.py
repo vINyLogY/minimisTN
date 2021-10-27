@@ -13,7 +13,8 @@ import time
 from builtins import filter, map, range, zip
 
 import matplotlib.pyplot as plt
-import numpy as np
+
+from minitn.lib.backend import np
 import scipy
 from scipy import fftpack
 from scipy.integrate import RK45
@@ -62,8 +63,7 @@ class DVR(object):
         class
     """
 
-    def __init__(self, basis=None, grid_points=None,
-                 t_mat=None, u_mat=None, hbar=1., m_e=1.):
+    def __init__(self, basis=None, grid_points=None, t_mat=None, u_mat=None, hbar=1., m_e=1.):
         r"""Some args could be ``None`` when initialized, but need to be
         specified later.
 
@@ -268,12 +268,14 @@ class DVR(object):
         -------
         float -> float
         """
+
         def _psi(x):
             psi = 0.0
             for j in range(self.n):
                 fbr_j = self.fbr_func(j)
                 psi += fbr_j(x) * vec[j]
             return psi
+
         return _psi
 
     def fbr_func(self, i):
@@ -368,8 +370,7 @@ class DVR(object):
             plt.savefig('eigenstates-{}.pdf'.format(self.comment))
         return
 
-    def plot_func(self, func_list, x_min, x_max,
-                  y_min=0., y_max=0., npts=None):
+    def plot_func(self, func_list, x_min, x_max, y_min=0., y_max=0., npts=None):
         r"""Plot functions.
 
         Parameters
@@ -478,8 +479,7 @@ class CasDVR(DVR):
         class
     """
 
-    def __init__(self, basis, cut_off=None, trans_func_pair=(None, None),
-                 num_prec=None, hbar=1., m_e=1.):
+    def __init__(self, basis, cut_off=None, trans_func_pair=(None, None), num_prec=None, hbar=1., m_e=1.):
         super(CasDVR, self).__init__(basis=basis, hbar=hbar, m_e=m_e)
         self.cut_off = cut_off
         self.trans_func_pair = trans_func_pair
@@ -497,8 +497,7 @@ class CasDVR(DVR):
             f = symbolic.id_op()
         x = symbolic.x
         op = symbolic.prod_op(f(x))
-        Q = symbolic.matrix_repr(
-            op, self.basis, cut_off=self.cut_off, num_prec=self.num_prec)
+        Q = symbolic.matrix_repr(op, self.basis, cut_off=self.cut_off, num_prec=self.num_prec)
         return Q
 
     def _sym_calc_grid_points(self, x_i):
@@ -522,10 +521,9 @@ class CasDVR(DVR):
         (n, n) np.ndarray
             A 2-d matrix.
         """
-        factor = - self.hbar ** 2 / (2 * self.m_e)
+        factor = -self.hbar**2 / (2 * self.m_e)
         op = symbolic.diff(2)
-        t_matrix = symbolic.matrix_repr(
-            op, self.basis, cut_off=self.cut_off, num_prec=self.num_prec)
+        t_matrix = symbolic.matrix_repr(op, self.basis, cut_off=self.cut_off, num_prec=self.num_prec)
         t_matrix = factor * self.fbr2dvr_mat(t_matrix)
         return t_matrix
 
@@ -588,14 +586,11 @@ class SineDVR(DVR):
     def _calculate_dvr(self):
         # calculate grid points
         step_length = self.length / (self.n + 1)
-        self.grid_points = np.array(
-            [self.a + step_length * i for i in range(1, self.n + 1)])
+        self.grid_points = np.array([self.a + step_length * i for i in range(1, self.n + 1)])
         # calculate U matrix
         j = np.arange(1, self.n + 1)[:, None]
         a = np.arange(1, self.n + 1)[None, :]
-        self._u_mat = (
-            np.sqrt(2 / (self.n + 1)) * np.sin(j * a * np.pi / (self.n + 1))
-        )
+        self._u_mat = (np.sqrt(2 / (self.n + 1)) * np.sin(j * a * np.pi / (self.n + 1)))
         return self.grid_points, self._u_mat
 
     def t_mat(self):
@@ -606,9 +601,9 @@ class SineDVR(DVR):
         (n, n) np.ndarray
             A 2-d matrix.
         """
-        factor = - self.hbar ** 2 / (2 * self.m_e)
+        factor = -self.hbar**2 / (2 * self.m_e)
         j = np.arange(1, self.n + 1)
-        t_matrix = np.diag(- (j * np.pi / self.length) ** 2)
+        t_matrix = np.diag(-(j * np.pi / self.length)**2)
         t_matrix = factor * self.fbr2dvr_mat(t_matrix)
         return t_matrix
 
@@ -623,13 +618,10 @@ class SineDVR(DVR):
         -------
         func : float -> float
         """
-        func = numerical.BasisFunction.particle_in_box(
-            i + 1, self.length, self.a
-        )
+        func = numerical.BasisFunction.particle_in_box(i + 1, self.length, self.a)
         return func
 
-    def plot_eigen(self, x_min=None, x_max=None,
-                   npts=None, n_plot=None, scale=2.):
+    def plot_eigen(self, x_min=None, x_max=None, npts=None, n_plot=None, scale=2.):
         """Plot the eigenstate together with energy and potential curve.
 
         Parameters
@@ -647,12 +639,10 @@ class SineDVR(DVR):
         """
         min_ = self.a if x_min is None else x_min
         max_ = self.b if x_max is None else x_max
-        super(SineDVR, self).plot_eigen(
-            min_, max_, npts=npts, n_plot=n_plot, scale=scale)
+        super(SineDVR, self).plot_eigen(min_, max_, npts=npts, n_plot=n_plot, scale=scale)
         return
 
-    def plot_func(self, func_list,
-                  x_min=None, x_max=None, y_min=0., y_max=0., npts=None):
+    def plot_func(self, func_list, x_min=None, x_max=None, y_min=0., y_max=0., npts=None):
         """Plot functions.
 
         Parameters
@@ -670,8 +660,7 @@ class SineDVR(DVR):
         """
         min_ = self.a if x_min is None else x_min
         max_ = self.b if x_max is None else x_max
-        super(SineDVR, self).plot_func(
-            func_list, min_, max_, y_min=y_min, y_max=y_max, npts=npts)
+        super(SineDVR, self).plot_func(func_list, min_, max_, y_min=y_min, y_max=y_max, npts=npts)
         return
 
     def plot_dvr(self, x_min=None, x_max=None, npts=None, indices=None):
@@ -688,8 +677,7 @@ class SineDVR(DVR):
         """
         min_ = self.a if x_min is None else x_min
         max_ = self.b if x_max is None else x_max
-        super(SineDVR, self).plot_dvr(
-            min_, max_, npts=npts, indices=indices)
+        super(SineDVR, self).plot_dvr(min_, max_, npts=npts, indices=indices)
         return
 
 
@@ -728,9 +716,7 @@ class FastSineDVR(SineDVR):
 
     def __init__(self, lower_bound, upper_bound, n_dvr, hbar=1., m_e=1.):
         # Same as SineDVR
-        super(FastSineDVR, self).__init__(
-            lower_bound, upper_bound, n_dvr, hbar=hbar, m_e=m_e
-        )
+        super(FastSineDVR, self).__init__(lower_bound, upper_bound, n_dvr, hbar=hbar, m_e=m_e)
 
     def h_mat(self):
         """Return the Hamiltonian energy matrix in DVR.
@@ -740,6 +726,7 @@ class FastSineDVR(SineDVR):
         Hamitonian : LinearOperator
             A 2-d matrix.
         """
+
         class _Hamiltonian(LinearOperator):
             """
             Parameters
@@ -768,7 +755,7 @@ class FastSineDVR(SineDVR):
             return self._h_mat
         v = self.v_func(self.grid_points)
         j = np.arange(1, self.n + 1)
-        t = (self.hbar * j * np.pi / self.length) ** 2 / (2 * self.m_e)
+        t = (self.hbar * j * np.pi / self.length)**2 / (2 * self.m_e)
         return _Hamiltonian(v, t)
 
     def propagator(self, tau=0.1, method='Trotter'):
@@ -813,9 +800,7 @@ class PO_DVR(object):
             lower_bound, upper_bound, n_dvr = conf_list[i]
             self.n_list.append(n_dvr)
             self.bound_list.append((lower_bound, upper_bound))
-            sp_dvr = DVR_1d(
-                lower_bound, upper_bound, n_dvr, hbar=hbar, m_e=m_e
-            )
+            sp_dvr = DVR_1d(lower_bound, upper_bound, n_dvr, hbar=hbar, m_e=m_e)
             self.dvr_list.append(sp_dvr)
         self.dim = np.prod(self.n_list)
         self.grid_points_list = [dvr_i.grid_points for dvr_i in self.dvr_list]
@@ -866,6 +851,7 @@ class PO_DVR(object):
         -------
         (N, N) LinearOperator
         """
+
         class _Hamiltonian(LinearOperator):
             """All parameters are in DVR.
 
@@ -889,11 +875,7 @@ class PO_DVR(object):
                 ans = np.zeros_like(v)
                 for i, h_i in enumerate(self.h_list):
                     v_i = np.swapaxes(v, -1, i)
-                    size_i = (
-                        self.io_sizes[:i] +
-                        self.io_sizes[i + 1:] +
-                        [self.io_sizes[i]]
-                    )
+                    size_i = (self.io_sizes[:i] + self.io_sizes[i + 1:] + [self.io_sizes[i]])
                     v_i = np.reshape(v_i, (-1, self.io_sizes[i]))
                     tmp = np.array(list(map(h_i.dot, v_i)))
                     tmp = np.reshape(tmp, size_i)
@@ -958,7 +940,9 @@ class PO_DVR(object):
         Suppose dim 0, 1, 2 correspond to x, y, z.
         Ignore constant factor.
         """
+
         class _Mu(LinearOperator):
+
             def __init__(self, diag_mu):
                 self._diag = diag_mu
                 shape = [len(diag_mu)] * 2
@@ -970,10 +954,14 @@ class PO_DVR(object):
         diag_mu = self._calc_diag(lambda args: 1. - args[dim])
         return _Mu(diag_mu)
 
-    def propagation(
-        self, init=None, start=0., stop=5., max_inter=0.01,
-        const_energy=None, updater=None, normalizer=None
-    ):
+    def propagation(self,
+                    init=None,
+                    start=0.,
+                    stop=5.,
+                    max_inter=0.01,
+                    const_energy=None,
+                    updater=None,
+                    normalizer=None):
         """A generator doing the propagation.
 
         Parameters
@@ -1011,10 +999,7 @@ class PO_DVR(object):
             y = real + 1.0j * imag
             return y
 
-        solver = RK45(
-            propagator, start, init, stop,
-            max_step=max_inter
-        )
+        solver = RK45(propagator, start, init, stop, max_step=max_inter)
         while True:
             # Normalization
             if normalizer is not None:
@@ -1024,16 +1009,11 @@ class PO_DVR(object):
             y = solver.y
             real, imag = y.real, y.imag
             e = self.energy_expection(y)
-            logging.info(__(
-                "t: {:.3f}, E: {:.8f}, |v|^2: {:.8f}",
-                t, e, scipy.linalg.norm(y) ** 2
-            ))
+            logging.info(__("t: {:.3f}, E: {:.8f}, |v|^2: {:.8f}", t, e, scipy.linalg.norm(y)**2))
             if abs(e - e0) > 1.e-8:
                 logging.warning('Energy is not conserved. ')
                 if const_energy and abs(e - e0) > const_energy:
-                    logging.warning(__(
-                        'Propagation stopped at t = {:.3f}.', solver.t
-                    ))
+                    logging.warning(__('Propagation stopped at t = {:.3f}.', solver.t))
                     raise StopIteration
             yield t, (real, imag)
             try:
@@ -1045,16 +1025,16 @@ class PO_DVR(object):
                 if updater is not None:
                     updater(solver)
 
-    def plot_propagation(self, init=None, start=0., stop=1.,
-                         max_inter=0.01, filt=1.e-6, sample=20):
+    def plot_propagation(self, init=None, start=0., stop=1., max_inter=0.01, filt=1.e-6, sample=20):
         """Plot propagation.
         """
+
         def string(t):
             return '{:08d}'.format(int(t))
+
         if init is None:
             init = self.init_state()
-        it = self.propagation(
-            init=init, start=start, stop=stop, max_inter=max_inter)
+        it = self.propagation(init=init, start=start, stop=stop, max_inter=max_inter)
         plotter = self.plot_wf(init, string(0))
         plotter.next()
         for i, (t, vec) in enumerate(it):
@@ -1099,8 +1079,7 @@ class PO_DVR(object):
             else:
                 vec, msg = received
 
-    def autocorrelation(self, init=None, stop=5., max_inter=0.01,
-                        dot=None, **kwargs):
+    def autocorrelation(self, init=None, stop=5., max_inter=0.01, dot=None, **kwargs):
         """Time autocorrelation function generator.
 
         Yields
@@ -1109,9 +1088,7 @@ class PO_DVR(object):
             (t, auto)
         """
         t_2 = stop / 2
-        it = self.propagation(
-            init=init, start=0., stop=stop / 2, max_inter=max_inter, **kwargs
-        )
+        it = self.propagation(init=init, start=0., stop=stop / 2, max_inter=max_inter, **kwargs)
         if dot is None:
             dot = np.dot
         for i, (tau, (real, imag)) in enumerate(it):
@@ -1121,8 +1098,7 @@ class PO_DVR(object):
             auto = dot(real, real) - dot(imag, imag) + 2.0j * dot(real, imag)
             yield t, auto
 
-    def spectrum(self, init=None, length=5., max_inter=0.01, window=None,
-                 **kwargs):
+    def spectrum(self, init=None, length=5., max_inter=0.01, window=None, **kwargs):
         """Power spectrum.
 
         Parameters
@@ -1138,9 +1114,7 @@ class PO_DVR(object):
         freq : [float]
         sigma : [complex]
         """
-        t, auto = zip(*self.autocorrelation(
-            init=init, stop=length, max_inter=max_inter, **kwargs
-        ))
+        t, auto = zip(*self.autocorrelation(init=init, stop=length, max_inter=max_inter, **kwargs))
         n = len(t)
         tau = (t[-1] - t[0]) / (n - 1)
         uniform = all(abs(t_i - i * tau) < 1.e-8 for i, t_i in enumerate(t))

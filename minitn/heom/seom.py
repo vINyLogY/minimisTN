@@ -12,7 +12,7 @@ import logging
 from builtins import filter, map, range, zip
 from itertools import product
 
-import numpy as np
+from minitn.lib.backend import np
 from scipy import linalg
 
 from minitn.lib.tools import __

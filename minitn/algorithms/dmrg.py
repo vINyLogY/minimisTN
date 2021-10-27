@@ -32,7 +32,7 @@ from __future__ import absolute_import, division
 import logging
 import math
 
-import numpy as np
+from minitn.lib.backend import np
 from scipy.sparse.linalg import LinearOperator, eigsh
 
 
@@ -57,7 +57,7 @@ def fm_state(N, anti=False):
     down = np.zeros((2, 1, 1))
     down[1, 0, 0] = 1
     if anti:
-        mps = [up, down] * int(N/2)
+        mps = [up, down] * int(N / 2)
     else:
         mps = [up] * N
     return mps
@@ -93,31 +93,17 @@ def heisenberg(N, J=1.0, Jz=1.0, h=0):
     # Local operators
     I = np.eye(2)
     Z = np.zeros((2, 2))
-    Sz = np.array([[0.5,  0.0],
-                   [0.0, -0.5]])
-    Sp = np.array([[0., 0.],
-                   [1., 0.]])
-    Sm = np.array([[0., 1.],
-                   [0., 0.]])
+    Sz = np.array([[0.5, 0.0], [0.0, -0.5]])
+    Sp = np.array([[0., 0.], [1., 0.]])
+    Sm = np.array([[0., 1.], [0., 0.]])
     # left-hand edge: 1*5
-    Wfirst = np.array([[-h*Sz,  (J/2.)*Sm, (J/2.)*Sp, (Jz/2.)*Sz, I]])
+    Wfirst = np.array([[-h * Sz, (J / 2.) * Sm, (J / 2.) * Sp, (Jz / 2.) * Sz, I]])
     # mid: 5*5
-    W = np.array([
-        [I,     Z,         Z,         Z,          Z],
-        [Sp,    Z,         Z,         Z,          Z],
-        [Sm,    Z,         Z,         Z,          Z],
-        [Sz,    Z,         Z,         Z,          Z],
-        [-h*Sz, (J/2.)*Sm, (J/2.)*Sp, (Jz/2.)*Sz, I]
-    ])
+    W = np.array([[I, Z, Z, Z, Z], [Sp, Z, Z, Z, Z], [Sm, Z, Z, Z, Z], [Sz, Z, Z, Z, Z],
+                  [-h * Sz, (J / 2.) * Sm, (J / 2.) * Sp, (Jz / 2.) * Sz, I]])
     # right-hand edge: 5*1
-    Wlast = np.array([
-        [I],
-        [Sp],
-        [Sm],
-        [Sz],
-        [-h*Sz]
-    ])
-    mpo = [Wfirst] + ([W] * (N-2)) + [Wlast]
+    Wlast = np.array([[I], [Sp], [Sm], [Sz], [-h * Sz]])
+    mpo = [Wfirst] + ([W] * (N - 2)) + [Wlast]
     return mpo
 
 
@@ -290,12 +276,12 @@ def dmrg1(mpo, initial_mps, trunc=10, sweeps=8):
     def _move_right(mat, mat_next, _trunc):
         shape = np.shape(mat)
         # SVD on mat[si, j]
-        mat = np.reshape(mat, (shape[0]*shape[1], shape[2]))
+        mat = np.reshape(mat, (shape[0] * shape[1], shape[2]))
         U, S, V = np.linalg.svd(mat, full_matrices=0)
 
         # truncated to compress.
         U, S, V, compress_error = compress_svd(U, S, V, _trunc)
-        mat = np.reshape(U, (shape[0], shape[1], -1))    # U[si, m]
+        mat = np.reshape(U, (shape[0], shape[1], -1))  # U[si, m]
         SV = np.matmul(np.diag(S), V)
         mat_next = np.einsum('mj,tjk->tmk', SV, mat_next)
 
@@ -303,14 +289,15 @@ def dmrg1(mpo, initial_mps, trunc=10, sweeps=8):
 
     def _move_left(mat, mat_prev, _trunc):
         shape = np.shape(mat)
-        mat = np.reshape(np.transpose(mat, (1, 0, 2)),    # mat[i, s, j]
-                         (shape[1], shape[0]*shape[2]))    # SVD on mat[i, sj]
+        mat = np.reshape(
+            np.transpose(mat, (1, 0, 2)),  # mat[i, s, j]
+            (shape[1], shape[0] * shape[2]))  # SVD on mat[i, sj]
         U, S, V = np.linalg.svd(mat, full_matrices=0)
 
         # truncated to compress.
         U, S, V, compress_error = compress_svd(U, S, V, _trunc)
-        mat = np.reshape(V, (-1, shape[0], shape[2]))    # V[m, sj]
-        mat = np.transpose(mat, (1, 0, 2))    # mat[s, m, j]
+        mat = np.reshape(V, (-1, shape[0], shape[2]))  # V[m, sj]
+        mat = np.transpose(mat, (1, 0, 2))  # mat[s, m, j]
         US = np.matmul(U, np.diag(S))
         mat_prev = np.einsum('rhi,im->rhm', mat_prev, US)
 
@@ -318,9 +305,8 @@ def dmrg1(mpo, initial_mps, trunc=10, sweeps=8):
 
     def _contract_Rs(mpo, mps):
         R_list = [np.array([[[1.0]]])]
-        for i in range(len(mpo)-1, 0, -1):
-            R_list.append(contract_from_right(
-                R_list[-1], mps[i], mpo[i], mps[i]))
+        for i in range(len(mpo) - 1, 0, -1):
+            R_list.append(contract_from_right(R_list[-1], mps[i], mpo[i], mps[i]))
 
         return R_list
 
@@ -329,33 +315,29 @@ def dmrg1(mpo, initial_mps, trunc=10, sweeps=8):
     R_list = _contract_Rs(mpo, mps)
 
     for sweep in range(sweeps // 2):
-        for i in range(len(mpo) - 1):    # right sweep
+        for i in range(len(mpo) - 1):  # right sweep
             L = L_list[-1]
             R = R_list.pop()
             H = EnvTensor(L, mpo[i], R)
-            E, mps[i] = opt_one_site(H, mps[i])   # diag
-            mps[i], mps[i+1] = _move_right(mps[i], mps[i+1], trunc)  # SVD
-            L_list.append(contract_from_left(
-                L_list[-1], mps[i], mpo[i], mps[i]))
+            E, mps[i] = opt_one_site(H, mps[i])  # diag
+            mps[i], mps[i + 1] = _move_right(mps[i], mps[i + 1], trunc)  # SVD
+            L_list.append(contract_from_left(L_list[-1], mps[i], mpo[i], mps[i]))
 
             if _debug:
-                logging.debug(
-                    "Sweep {}, Sites {}, E1 {:16.12f}, E2 {:16.12f}".format(
-                        sweep*2, i, E, mat_element(mps, mpo, mps)))
+                logging.debug("Sweep {}, Sites {}, E1 {:16.12f}, E2 {:16.12f}".format(
+                    sweep * 2, i, E, mat_element(mps, mpo, mps)))
 
-        for i in range(len(mps) - 1, 0, -1):    # left sweep
+        for i in range(len(mps) - 1, 0, -1):  # left sweep
             R = R_list[-1]
             L = L_list.pop()
             H = EnvTensor(L, mpo[i], R)
-            E, mps[i] = opt_one_site(H, mps[i])   # diag
-            mps[i], mps[i-1] = _move_left(mps[i], mps[i-1], trunc)  # SVD
-            R_list.append(contract_from_right(
-                R_list[-1], mps[i], mpo[i], mps[i]))
+            E, mps[i] = opt_one_site(H, mps[i])  # diag
+            mps[i], mps[i - 1] = _move_left(mps[i], mps[i - 1], trunc)  # SVD
+            R_list.append(contract_from_right(R_list[-1], mps[i], mpo[i], mps[i]))
 
             if _debug:
-                logging.debug(
-                    "Sweep {}, Sites {}, E1 {:16.12f}, E2 {:16.12f}".format(
-                        sweep*2 + 1, i, E, mat_element(mps, mpo, mps)))
+                logging.debug("Sweep {}, Sites {}, E1 {:16.12f}, E2 {:16.12f}".format(
+                    sweep * 2 + 1, i, E, mat_element(mps, mpo, mps)))
 
     return mps
 
@@ -404,10 +386,12 @@ def coarse_grain_mpo(W, X):
      """
 
     R = np.einsum("abst,bcuv->acsutv", W, X)
-    sh = [W.shape[0],    # a
-          X.shape[1],    # c
-          W.shape[2] * X.shape[2],    # su
-          W.shape[3] * X.shape[3]]    # tv
+    sh = [
+        W.shape[0],  # a
+        X.shape[1],  # c
+        W.shape[2] * X.shape[2],  # su
+        W.shape[3] * X.shape[3]
+    ]  # tv
     return np.reshape(R, sh)
 
 
@@ -440,22 +424,22 @@ def fine_grain_mps(C, dims, direction, _trunc=False):
     If direction == '>', A is (left-)canonical;
     if direction == '<', B is (right-)canonical.
     """
-    sh = dims + [C.shape[1], C.shape[2]]    # [s, t, i, k]
+    sh = dims + [C.shape[1], C.shape[2]]  # [s, t, i, k]
     mat = np.reshape(C, sh)
-    mat = np.transpose(mat, (0, 2, 1, 3))    # mat[s, i, t, k]
-    mat = np.reshape(mat, (sh[0] * sh[2], sh[1] * sh[3]))        # mat[si, tk]
+    mat = np.transpose(mat, (0, 2, 1, 3))  # mat[s, i, t, k]
+    mat = np.reshape(mat, (sh[0] * sh[2], sh[1] * sh[3]))  # mat[si, tk]
     U, S, V = np.linalg.svd(mat, full_matrices=0)
     if _trunc:
         U, S, V, compress_error = compress_svd(U, S, V, _trunc)
     if direction == '>':
         A = U
-        B = np.matmul(np.diag(S), V)    # [m, tk]
+        B = np.matmul(np.diag(S), V)  # [m, tk]
     elif direction == '<':
         A = np.matmul(U, np.diag(S))
         B = V
-    A = np.reshape(A, (sh[0], sh[2], -1))    # [s, i, m]
-    B = np.reshape(B, (-1, sh[1], sh[3]))    # [m, t, k]
-    B = np.transpose(B, (1, 0, 2))    # [t, m, k]
+    A = np.reshape(A, (sh[0], sh[2], -1))  # [s, i, m]
+    B = np.reshape(B, (-1, sh[1], sh[3]))  # [m, t, k]
+    B = np.transpose(B, (1, 0, 2))  # [t, m, k]
 
     return A, B
 
@@ -481,15 +465,14 @@ def dmrg2(mpo, initial_mps, trunc=10, sweeps=8):
 
     def _contract_Rs(mpo, mps):
         R_list = [np.array([[[1.0]]])]
-        for i in range(len(mpo)-1, 1, -1):    # contract from end to site 2
-            R_list.append(contract_from_right(
-                R_list[-1], mps[i], mpo[i], mps[i]))
+        for i in range(len(mpo) - 1, 1, -1):  # contract from end to site 2
+            R_list.append(contract_from_right(R_list[-1], mps[i], mpo[i], mps[i]))
         return R_list
 
     def _contract_cg_mpo_list(mpo):
         cg_mpo_list = []
-        for i in range(len(mpo)-1):
-            cg_mpo_list.append(coarse_grain_mpo(mpo[i], mpo[i+1]))
+        for i in range(len(mpo) - 1):
+            cg_mpo_list.append(coarse_grain_mpo(mpo[i], mpo[i + 1]))
         return cg_mpo_list
 
     mps = initial_mps
@@ -498,43 +481,37 @@ def dmrg2(mpo, initial_mps, trunc=10, sweeps=8):
     # cg_mpo_list = _contract_cg_mpo_list(mpo)
 
     for sweep in range(sweeps // 2):
-        for i in range(len(mpo)-2):    # right sweep
+        for i in range(len(mpo) - 2):  # right sweep
             L = L_list[-1]
             R = R_list.pop()
-            fg_dims = [mps[i].shape[0], mps[i+1].shape[0]]
-            cg_mps = coarse_grain_mps(mps[i], mps[i+1])
-            cg_mpo = coarse_grain_mpo(mpo[i], mpo[i+1])
+            fg_dims = [mps[i].shape[0], mps[i + 1].shape[0]]
+            cg_mps = coarse_grain_mps(mps[i], mps[i + 1])
+            cg_mpo = coarse_grain_mpo(mpo[i], mpo[i + 1])
             H = EnvTensor(L, cg_mpo, R)
             E, cg_mps = opt_one_site(H, cg_mps)
-            mps[i], mps[i+1] = fine_grain_mps(cg_mps, fg_dims, '>', trunc)
+            mps[i], mps[i + 1] = fine_grain_mps(cg_mps, fg_dims, '>', trunc)
 
-            L_list.append(contract_from_left(
-                L_list[-1], mps[i], mpo[i], mps[i]))
+            L_list.append(contract_from_left(L_list[-1], mps[i], mpo[i], mps[i]))
 
             if _debug:
-                logging.debug(
-                    "Sweep {}, Sites {}, {}, E1 {:16.12f}, E2 {:16.12f}"
-                    .format(sweep*2, i, i+1, E, mat_element(mps, mpo, mps))
-                )
+                logging.debug("Sweep {}, Sites {}, {}, E1 {:16.12f}, E2 {:16.12f}".format(
+                    sweep * 2, i, i + 1, E, mat_element(mps, mpo, mps)))
 
-        for i in range(len(mps)-1, 1, -1):    # left sweep
+        for i in range(len(mps) - 1, 1, -1):  # left sweep
             R = R_list[-1]
             L = L_list.pop()
-            fg_dims = [mps[i-1].shape[0], mps[i].shape[0]]
-            cg_mps = coarse_grain_mps(mps[i-1], mps[i])
-            cg_mpo = coarse_grain_mpo(mpo[i-1], mpo[i])
+            fg_dims = [mps[i - 1].shape[0], mps[i].shape[0]]
+            cg_mps = coarse_grain_mps(mps[i - 1], mps[i])
+            cg_mpo = coarse_grain_mpo(mpo[i - 1], mpo[i])
             H = EnvTensor(L, cg_mpo, R)
             E, cg_mps = opt_one_site(H, cg_mps)
-            mps[i-1], mps[i] = fine_grain_mps(cg_mps, fg_dims, '<', trunc)
+            mps[i - 1], mps[i] = fine_grain_mps(cg_mps, fg_dims, '<', trunc)
 
-            R_list.append(contract_from_right(
-                R_list[-1], mps[i], mpo[i], mps[i]))
+            R_list.append(contract_from_right(R_list[-1], mps[i], mpo[i], mps[i]))
 
             if _debug:
-                logging.debug(
-                    "Sweep {}, Sites {}, {}, E1 {:16.12f}, E2 {:16.12f}"
-                    .format(sweep*2+1, i-1, i, E, mat_element(mps, mpo, mps))
-                )
+                logging.debug("Sweep {}, Sites {}, {}, E1 {:16.12f}, E2 {:16.12f}".format(
+                    sweep * 2 + 1, i - 1, i, E, mat_element(mps, mpo, mps)))
 
     return mps
 

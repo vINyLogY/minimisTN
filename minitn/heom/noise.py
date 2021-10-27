@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 # coding: utf-8
-
 r"""Functions to discretized a spectral density (and other things about bath).
 
 References
@@ -14,18 +13,20 @@ from __future__ import absolute_import, division, print_function
 import logging
 from builtins import filter, map, range, zip
 
-import numpy as np
+from minitn.lib.backend import np
 
 from minitn.lib.tools import __, lazyproperty
 
 
-
 class SpectrumFactory:
+
     @staticmethod
     def drude(lambda_, omega_0):
+
         def _drude(omega):
             res = 2.0 * lambda_ * (omega * omega_0) / (omega**2 + omega_0**2)
             return res
+
         return _drude
 
 
@@ -55,14 +56,12 @@ class Correlation(object):
             (S_delta = {};)
             A: {};
             gamma: {}.
-        """.format(self.symm_coeff,
-                   self.delta_coeff,
-                   self.asymm_coeff,
-                   self.exp_coeff)
+        """.format(self.symm_coeff, self.delta_coeff, self.asymm_coeff, self.exp_coeff)
         print(string)
 
 
 class Drude(Correlation):
+
     def __init__(self, lambda_, omega_0, k_max, beta):
         """
         Parameters
@@ -76,43 +75,44 @@ class Drude(Correlation):
         self.spectrum = SpectrumFactory.drude(lambda_, omega_0)
         return
 
-
     @lazyproperty
     def exp_coeff(self):
         """Masturaba Frequencies"""
+
         def _gamma(k):
             if k == 0:
                 gamma = self.omega_0
             else:
                 gamma = 2.0 * np.pi * k / (self.beta * self.hbar)
             return gamma
+
         return np.array([_gamma(k) for k in range(self.k_max)])
 
     @lazyproperty
     def symm_coeff(self):
         v, l, bh = self.omega_0, self.lambda_, self.beta * self.hbar
+
         def _s(k):
             if k == 0:
                 s = v * l / np.tan(bh * v / 2.0)
             else:
                 s = 2.0 * self.spectrum(self.exp_coeff[k]) / bh
             return s
+
         return np.array([_s(k) for k in range(self.k_max)])
 
     @lazyproperty
     def asymm_coeff(self):
+
         def _a(k):
             if k == 0:
                 a = -self.omega_0 * self.lambda_
             else:
                 a = 0
             return a
+
         return np.array([_a(k) for k in range(self.k_max)])
 
     @lazyproperty
     def delta_coeff(self):
-        # t1 = 2.0 * self.lambda_ / (self.beta * self.hbar**2)
-        # t2 = np.sum([(self.symm_coeff + 1.0j * self.asymm_coeff) / (self.hbar * self.exp_coeff)])
-        # return t1 - t2
         return 0.0
-
