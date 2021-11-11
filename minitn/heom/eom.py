@@ -69,12 +69,12 @@ class Hierachy(object):
     def _raiser(self, k):
         """Acting on 0-th index"""
         dim = self.n_dims[k]
-        return np.eye(dim, k=1, dtype=DTYPE)
+        return np.eye(dim, k=-1, dtype=DTYPE)
 
     def _lower(self, k):
         """Acting on 0-th index"""
         dim = self.n_dims[k]
-        return np.eye(dim, k=-1, dtype=DTYPE)
+        return np.eye(dim, k=1, dtype=DTYPE)
 
     def _numberer(self, k, start=0):
         return np.diag(np.arange(start, start + self.n_dims[k], dtype=DTYPE))
