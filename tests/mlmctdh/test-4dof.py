@@ -21,4 +21,4 @@ from model import ml
 import logging
 
 logging.basicConfig(format='%(asctime)s-%(levelname)s: (In %(module)s)[%(funcName)s] %(message)s', level=logging.INFO)
-ml(dof=8, eta=500, cutoff=2000, loc=None, steps=2000, ode_inter=0.1)
+ml(dof=4, e=6500, v=0, eta=500, cutoff=2000, steps=2000, ode_inter=0.1)

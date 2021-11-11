@@ -70,17 +70,22 @@ def linear_discretization(spec_func, stop, num, start=0.0):
     return ans
 
 
-def ml(dof=8, e=6500, v=0, eta=4000, cutoff=2000, scale=5, loc=None, steps=20000, ode_inter=0.1):
+def ml(dof, e, v, eta, cutoff, scale=5, loc=None, steps=2000, ode_inter=0.1):
+    f_ = 'dof{}-eta{}.log'.format(dof, eta)
+    logger = Logger(filename=f_).logger
+
     # define parameters
     e = Quantity(e, 'cm-1').value_in_au
     v = Quantity(v, 'cm-1').value_in_au
     eta = Quantity(eta, 'cm-1').value_in_au
     omega0 = Quantity(cutoff, 'cm-1').value_in_au
+    sys_hamiltonian = np.array([[-e / 2.0, v], [v, e / 2.0]], dtype=DTYPE)
+    projector = np.array([[0.0, 0.0], [0.0, 1.0]], dtype=DTYPE)  # S in H_SB = S x B
+
     primitive_dim = 100
     spf_dim = 20
-    f_ = 'dof{}-eta{}.log'.format(dof, eta)
-    logger = Logger(filename=f_).logger
 
+    # Spectrum function
     def spec_func(omega):
         if 0 < omega < omega0:
             return eta
@@ -90,9 +95,7 @@ def ml(dof=8, e=6500, v=0, eta=4000, cutoff=2000, scale=5, loc=None, steps=20000
     # Define all Leaf tensors and hamiltonian we need
     h_list = []
     sys_leaf = Leaf(name='sys0')
-    sys_hamiltonian = np.array([[0.0, v], [v, e]], dtype=DTYPE)
     h_list.append([(sys_leaf, sys_hamiltonian)])
-    projector = np.array([[0.0, 0.0], [0.0, 1.0]], dtype=DTYPE)
 
     ph_parameters = linear_discretization(spec_func, omega0, dof)
     if loc is not None:
