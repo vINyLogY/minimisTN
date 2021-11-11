@@ -469,7 +469,7 @@ class MultiLayer(object):
 
     def coefficient(self):
         imaginary = self.time is None
-        return -self.hbar if imaginary else 1.0 * self.hbar
+        return 1.0j * self.hbar if imaginary else self.hbar
 
     def direct_step(self, ode_inter=0.01, imaginary=False):
         visitor = self.root.visitor

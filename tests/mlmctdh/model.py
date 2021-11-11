@@ -95,7 +95,7 @@ def ml(dof, e, v, eta, cutoff, scale=5, loc=None, steps=2000, ode_inter=0.1):
     # Define all Leaf tensors and hamiltonian we need
     h_list = []
     sys_leaf = Leaf(name='sys0')
-    h_list.append([(sys_leaf, sys_hamiltonian)])
+    h_list.append([(sys_leaf, -1.0j * sys_hamiltonian)])
 
     ph_parameters = linear_discretization(spec_func, omega0, dof)
     if loc is not None:
@@ -107,10 +107,10 @@ def ml(dof, e, v, eta, cutoff, scale=5, loc=None, steps=2000, ode_inter=0.1):
         ph_leaf = Leaf(name='ph{}'.format(n))
         leaves.append(ph_leaf)
         # hamiltonian ph part
-        h_list.append([(ph_leaf, ph.hamiltonian)])
+        h_list.append([(ph_leaf, -1.0j * ph.hamiltonian)])
         # e-ph part
         op = ph.annihilation_operator + ph.creation_operator
-        h_list.append([(ph_leaf, g * op), (sys_leaf, projector)])
+        h_list.append([(ph_leaf, g * op), (sys_leaf, -1.0j * projector)])
 
     def ph_spf(n=0):
         n += 1
