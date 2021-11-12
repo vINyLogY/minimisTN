@@ -126,6 +126,8 @@ def ml(dof, e, v, eta, cutoff, scale=5, loc=None, steps=2000, ode_inter=0.1):
     finally:
         root.name = 'wfn'
         root.axis = None
+
+    print(graph)
     stack = [root]
     while stack:
         parent = stack.pop()
@@ -156,12 +158,14 @@ def ml(dof, e, v, eta, cutoff, scale=5, loc=None, steps=2000, ode_inter=0.1):
     # Define the computation details
     solver.ode_method = 'RK45'
     solver.snd_order = True
+    solver.cmf_steps = 1
     root.is_normalized = True
     # Define the obersevable of interest
     logger.info('''# time/fs    rho00  rho01  rho10  rho11''')
     for time, _ in solver.propagator(
             steps=steps,
             ode_inter=Quantity(ode_inter, 'fs').value_in_au,
+            split=True,
     ):
         t = Quantity(time).convert_to(unit='fs').value
         for tensor in root.visitor(axis=None):

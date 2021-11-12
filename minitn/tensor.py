@@ -659,9 +659,9 @@ class Tensor(object):
         """Normalize the array of self. Only work when self.normalized.
         Set `forced` to `True` to normalize any way.
         """
-        if not self.normalized and not forced:
-            return
         array = self.array
+        if array is None or (not self.normalized and not forced):
+            return
         axis = self.axis
         if axis is None:
             norm = np.array(self.local_norm())
