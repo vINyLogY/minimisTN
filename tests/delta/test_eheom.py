@@ -5,72 +5,133 @@ from minitn.heom.network import simple_heom
 
 from builtins import filter, map, range, zip
 
-import numpy as np
+from minitn.lib.backend import DTYPE, np
 from minitn.heom.hierachy import Hierachy
 from minitn.heom.corr import Correlation
 from minitn.heom.propagate import MultiLayer
 from minitn.lib.logging import Logger
-from minitn.lib.logging import Logger
+from minitn.lib.tools import huffman_tree
+from minitn.models.bath import linear_discretization, SpectralDensityFactory
+from minitn.models.sbm import SBM
+from minitn.lib.units import Quantity
+from minitn.tensor import Tensor, Leaf
 
 # System: pure dephasing
-n_state = 2
-omega_1 = 0.01
-H = np.array([[omega_1, 0.0], [0.0, 0.0]])
-V = np.array([[1.0, 0.0], [0.0, 0.0]])
-
-# init state
-rho_0 = np.array([[1.0, 0.0], [0.0, 0.0]])
-
-dt_unit = 0.001
-callback_interval = 100
-count = 50000
-
-# Bath
-# C = g**2 (coth (beta omega / 2)) cos wt - ig**2 sin wt
-max_terms = 2
+e = Quantity(6500, 'cm-1').value_in_au
+v = Quantity(500, 'cm-1').value_in_au
+eta = Quantity(500, 'cm-1').value_in_au
+omega0 = Quantity(2000, 'cm-1').value_in_au
+dof = 2
 max_tier = 20
 
-omega = 0.05
-g = 0.1
-beta = 0.1
+ph_parameters = linear_discretization(SpectralDensityFactory.plain(eta, omega0), omega0, dof)
 
-DTYPE = np.complex128
-corr = Correlation(k_max=max_terms)
-temp_factor = 1.0 / np.tanh(beta * omega / 2)
-corr.coeff = np.array([g**2 * (temp_factor - 1) / 2.0, g**2 * (temp_factor + 1) / 2.0], dtype=DTYPE)
-corr.conj_coeff = np.array([g**2 * (temp_factor + 1) / 2.0, g**2 * (temp_factor - 1) / 2.0], dtype=DTYPE)
-corr.derivative = np.array([1.0j * omega, -1.0j * omega])
-corr.print()
+model = SBM(sys_ham=np.array([[-e / 2.0, v], [v, e / 2.0]], dtype=DTYPE),
+            sys_op=np.array([[0.0, 0.0], [0.0, 1.0]], dtype=DTYPE),
+            ph_parameters=ph_parameters,
+            n_dims=(dof * [max_tier]))
+
+# init state
+A, B = 1.0, 1.0
+wfn_0 = np.array([A, B]) / np.sqrt(A**2 + B**2)
+rho_0 = np.tensordot(wfn_0, wfn_0, axes=0)
+
+# Propagation
+dt_unit = Quantity(0.1, 'fs').value_in_au
+callback_interval = 10
+count = 10000
 
 
-def test_delta(fname=None):
-
-    n_dims = [max_tier] * max_terms
-    heom = Hierachy(n_dims, H, V, corr)
-
-    # Adopt MCTDH
+def test_heom(fname=None):
+    n_dims = 2 * dof * [max_tier]
     root = simple_heom(rho_0, n_dims)
-    leaves_dict = {leaf.name: leaf for leaf in root.leaves()}
-    all_terms = []
-    for term in heom.diff():
-        all_terms.append([(leaves_dict[str(fst)], snd) for fst, snd in term])
+    leaves = root.leaves()
+    h_list = model.heom_h_list(leaves[-2], leaves[-1], leaves[:-2], beta=None)
 
-    solver = MultiLayer(root, all_terms)
+    solver = MultiLayer(root, h_list)
     solver.ode_method = 'RK45'
-    solver.snd_order = False
+    solver.cmf_steps = 1000
 
     # Define the obersevable of interest
     logger = Logger(filename=fname, level='info').logger
     for n, (time, r) in enumerate(solver.propagator(
             steps=count,
             ode_inter=dt_unit,
+            split=True,
     )):
         if n % callback_interval == 0:
             rho = np.reshape(r.array, (-1, 4))
-            logger.info("{} {} {} {} {}".format(time, rho[0, 0], rho[0, 1], rho[0, 2], rho[0, 3]))
-            #print("Time: {};    Tr rho_0: {}".format(time, rho[0, 0] + rho[0, -1]))
-
+            t = Quantity(time).convert_to(unit='fs').value
+            logger.info("{} {} {} {} {}".format(t, rho[0, 0], rho[0, 1], rho[0, 2], rho[0, 3]))
     return
+
+
+def test_mctdh(fname=None):
+    sys_leaf = Leaf(name='sys0')
+
+    ph_leaves = []
+    for n, (omega, g) in enumerate(ph_parameters, 1):
+        ph_leaf = Leaf(name='ph{}'.format(n))
+        ph_leaves.append(ph_leaf)
+
+    def ph_spf():
+        return Tensor(name='spf', axis=0)
+
+    graph, root = huffman_tree(ph_leaves, obj_new=ph_spf, n_branch=2)
+    try:
+        graph[root].insert(0, sys_leaf)
+    except KeyError:
+        ph_leaf = root
+        root = Tensor()
+        graph[root] = [sys_leaf, ph_leaf]
+    finally:
+        root.name = 'wfn'
+        root.axis = None
+
+    print(graph)
+    stack = [root]
+    while stack:
+        parent = stack.pop()
+        for child in graph[parent]:
+            parent.link_to(parent.order, child, 0)
+            if child in graph:
+                stack.append(child)
+
+    # Define the detailed parameters for the ML-MCTDH tree
+    h_list = model.wfn_h_list(sys_leaf, ph_leaves)
+    solver = MultiLayer(root, h_list)
+    bond_dict = {}
+    # Leaves
+    for s, i, t, j in root.linkage_visitor():
+        if t.name.startswith('sys'):
+            bond_dict[(s, i, t, j)] = 2
+        else:
+            if isinstance(t, Leaf):
+                bond_dict[(s, i, t, j)] = max_tier
+            else:
+                bond_dict[(s, i, t, j)] = max_tier // 2
+    solver.autocomplete(bond_dict)
+    # set initial root array
+    init_proj = np.array([[A, 0.0], [B, 0.0]]) / np.sqrt(A**2 + B**2)
+    root_array = Tensor.partial_product(root.array, 0, init_proj, 1)
+    root.set_array(root_array)
+
+    solver = MultiLayer(root, h_list)
+    solver.ode_method = 'RK45'
+    solver.cmf_steps = 1000
+
+    # Define the obersevable of interest
+    logger = Logger(filename=fname, level='info').logger
+    for n, (time, r) in enumerate(solver.propagator(
+            steps=count,
+            ode_inter=dt_unit,
+            split=True,
+    )):
+        if n % callback_interval == 0:
+            a = root.array
+            rho = Tensor.partial_trace(a, 0, a, 0)
+            t = Quantity(time).convert_to(unit='fs').value
+            logger.info("{}    {} {} {} {}".format(t, rho[0, 0], rho[0, 1], rho[1, 0], rho[1, 1]))
 
 
 if __name__ == '__main__':
@@ -79,24 +140,8 @@ if __name__ == '__main__':
 
     f_dir = os.path.abspath(os.path.dirname(__file__))
     os.chdir(os.path.join(f_dir, 'data'))
-    prefix = "HEOM_delta_t{}".format(max_tier)
+    prefix = "Delta-{}".format(max_tier)
 
-    tst_fname = '{}_tst.dat'.format(prefix)
+    test_heom(fname='{}_heom.dat'.format(prefix))
 
-    try:
-        tst = np.loadtxt(tst_fname, dtype=complex)
-    except:
-        test_delta(fname=tst_fname)
-        tst = np.loadtxt(tst_fname, dtype=complex)
-
-    plt.plot(tst[:, 0], np.abs(tst[:, 1]), '-', label="$P_0$ ({})".format(prefix))
-    plt.plot(tst[:, 0], np.abs(tst[:, -1]), '-', label="$P_1$ ({})".format(prefix))
-    plt.plot(tst[:, 0], np.real(tst[:, 2]), '--', label="$\Re r$ ({})".format(prefix))
-    plt.plot(tst[:, 0], np.imag(tst[:, 2]), '--', label="$\Im r$ ({})".format(prefix))
-    plt.plot(tst[:, 0], np.abs(tst[:, 2]), '--', label="$|r|$ ({})".format(prefix))
-
-    plt.legend(loc='best')
-    plt.title('Delta model')
-    plt.ylim(-2, 2)
-
-    plt.savefig('{}.pdf'.format(prefix))
+    # test_mctdh(fname='{}_wfn.dat'.format(prefix))

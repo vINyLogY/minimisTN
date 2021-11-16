@@ -1,0 +1,5 @@
+graph:{Tensor_spf1: [Leaf_ph1, Leaf_ph2], Tensor_spf1: [Leaf_ph3, Leaf_ph4], Tensor_wfn: [Leaf_sys0, Tensor_spf1, Tensor_spf1]}
+bond_dict:{(Tensor_wfn, 0, Leaf_sys0, 0): 2, (Tensor_wfn, 1, Tensor_spf1, 0): 20, (Tensor_spf1, 1, Leaf_ph3, 0): 100, (Tensor_spf1, 2, Leaf_ph4, 0): 100, (Tensor_wfn, 2, Tensor_spf1, 0): 20, (Tensor_spf1, 1, Leaf_ph1, 0): 100, (Tensor_spf1, 2, Leaf_ph2, 0): 100}
+# time    rho00  rho01  rho10  rho11
+0.0    (1+0j)  0j  0j  0j
+0.1    (1.0000000000000016-2.807544458505556e-18j)  0j  0j  0j
