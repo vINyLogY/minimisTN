@@ -340,10 +340,8 @@ class MultiLayer(object):
             ans += self.root.expection()
         if normalized:
             ans /= self.root.global_square()
-        np.testing.assert_almost_equal(np.imag(ans), 0)
-        return np.real(ans)
+        return ans
 
-    # @profile
     def _single_eom(self, tensor, n, cache=False):
         """C.f. `Multi-Configuration Time Dependent Hartree Theory: a Tensor
         Network Perspective`, p38. This method does not contain the `i hbar`

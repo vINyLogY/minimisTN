@@ -130,9 +130,10 @@ def ml(fname, e, v, primitive_dim, spf_dim, ph_parameters, steps=2000, ode_inter
         op = ph.annihilation_operator + ph.creation_operator
         h_list.append([(ph_leaf, g * op), (sys_leaf, -1.0j * projector)])
 
-    def ph_spf(n=0):
-        n += 1
-        return Tensor(name='spf{}'.format(n), axis=0, normalized=True)
+    def ph_spf():
+        t = Tensor(axis=0, normalized=True)
+        t.name = str(hex(id(t)))[-4:]
+        return t
 
     graph, root = huffman_tree(leaves, obj_new=ph_spf, n_branch=2)
     try:
@@ -159,7 +160,7 @@ def ml(fname, e, v, primitive_dim, spf_dim, ph_parameters, steps=2000, ode_inter
     bond_dict = {}
     # Leaves
     for s, i, t, j in root.linkage_visitor():
-        if t.name.startswith('sys'):
+        if t.name and t.name.startswith('sys'):
             bond_dict[(s, i, t, j)] = 2
         else:
             if isinstance(t, Leaf):
@@ -195,6 +196,10 @@ def ml(fname, e, v, primitive_dim, spf_dim, ph_parameters, steps=2000, ode_inter
         flat_data = [t] + list(np.reshape(rho, -1))
         logger.info('{}    {}  {}  {}  {}'.format(*flat_data))
 
+
+import os
+
+os.chdir(os.path.abspath(os.path.dirname(__file__)))
 
 alpha = 0.05
 omega_c = 20

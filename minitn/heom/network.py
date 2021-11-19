@@ -41,30 +41,14 @@ def simple_heom(init_rho, n_indices):
     # Let: rho_n[0, :, :] = rho and rho_n[n, :, :] = 0
     ext = np.zeros((np.prod(n_indices),))
     ext[0] = 1.0
-    new_shape = list(n_indices) + [n_state, n_state]
+    new_shape = [n_state, n_state] + list(n_indices)
     rho_n = np.reshape(np.tensordot(ext, init_rho, axes=0), new_shape)
 
     root = Tensor(name='root', array=rho_n, axis=None)
-    for k in range(len(new_shape)):  # +2: i and j
-        l = Leaf(name=k)
-        root[k] = (l, 0)
-
-    return root
-
-
-def simple_hseom(init_wfns, n_indices):
-    n_state = get_n_state(init_wfns)
-    # Let a[0, :, :] = wfn and a[n, :, :] = 0
-
-    ext = np.zeros((np.prod(n_indices),))
-    ext[0] = 1.0
-    new_shape = list(n_indices) + [n_state, n_state]
-
-    root_array = np.reshape(np.tensordot(ext, init_wfns, axes=0), new_shape)
-    root = Tensor(name='root', array=root_array, axis=None)
-    for k in range(len(new_shape)):  # +2: q and p
-        l = Leaf(name=k)
-        root[k] = (l, 0)
+    root[0] = (Leaf(name=0), 0)
+    root[1] = (Leaf(name=1), 0)
+    for k in range(2, 2 + len(n_indices)):  # +2: i and j
+        root[k] = (Leaf(name=k), 0)
 
     return root
 
@@ -95,7 +79,6 @@ def tensor_train_template(init_rho, pb_index, rank=2):
     ----------
     rho : np.ndarray
     """
-    n_state = get_n_state(init_rho)
     n_vec = np.zeros((rank,), dtype=DTYPE)
     n_vec[0] = 1.0
     root_array = np.tensordot(init_rho, n_vec, axes=0)
@@ -123,7 +106,7 @@ def tensor_train_template(init_rho, pb_index, rank=2):
         spf[1] = (l, 0)
         train.append(spf)
 
-    return train
+    return root
 
 
 def tensor_tree_template(init_rho, pb_index, rank=2):

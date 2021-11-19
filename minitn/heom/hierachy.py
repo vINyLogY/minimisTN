@@ -70,13 +70,13 @@ class Hierachy(object):
         """Acting on 0-th index"""
         dim = self.n_dims[k]
         sqrt_n = np.diag(np.sqrt(np.arange(dim, dtype=DTYPE)))
-        return np.eye(dim, k=-1, dtype=DTYPE) @ sqrt_n
+        return np.eye(dim, k=1, dtype=DTYPE) @ sqrt_n
 
     def _lower(self, k):
         """Acting on 0-th index"""
         dim = self.n_dims[k]
         sqrt_n = np.diag(np.sqrt(np.arange(dim, dtype=DTYPE)))
-        return sqrt_n @ np.eye(dim, k=1, dtype=DTYPE)
+        return sqrt_n @ np.eye(dim, k=-1, dtype=DTYPE)
 
     def _numberer(self, k):
         return np.diag(np.arange(self.n_dims[k], dtype=DTYPE))
@@ -86,6 +86,7 @@ class Hierachy(object):
         
         Acting on 0-th index.
         """
+        self.corr.print()
         i = self._i
         j = self._j
         derivative = [
@@ -95,7 +96,7 @@ class Hierachy(object):
 
         for k in range(self.k_max):
             dk = [
-                [(k, -self.corr.derivative[k] * self._numberer(k))],
+                [(k, self.corr.derivative[k] * self._numberer(k))],
                 [(i, -1.0j * self.op), (k, self.corr.coeff[k] * self._raiser(k) + self._lower(k))],
                 [(j, 1.0j * self.op), (k, self.corr.conj_coeff[k] * self._raiser(k) + self._lower(k))],
             ]

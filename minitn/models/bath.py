@@ -66,9 +66,9 @@ def generate_BCF(ph_parameters, beta=None):
     conj_coeff = []
     derivative = []
     for omega, g in ph_parameters:
-        temp_factor = 1.0 / np.tanh(beta * omega / 2) if beta is not None else 1
-        coeff.extend([g**2 * (temp_factor - 1) / 2.0, g**2 * (temp_factor + 1) / 2.0])
-        conj_coeff.extend([g**2 * (temp_factor + 1) / 2.0, g**2 * (temp_factor - 1) / 2.0])
+        temp_factor = 1.0 / np.tanh(beta * omega / 2) if beta is not None else 1.0
+        coeff.extend([g**2 / 2.0 * (temp_factor - 1.0), g**2 / 2.0 * (temp_factor + 1.0)])
+        conj_coeff.extend([g**2 / 2.0 * (temp_factor + 1.0), g**2 / 2.0 * (temp_factor - 1.0)])
         derivative.extend([1.0j * omega, -1.0j * omega])
     corr = Correlation(
         k_max=dim,
