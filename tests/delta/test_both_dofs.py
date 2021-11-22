@@ -22,16 +22,15 @@ e = Quantity(5000, 'cm-1').value_in_au
 v = Quantity(500, 'cm-1').value_in_au
 eta = Quantity(500, 'cm-1').value_in_au
 omega0 = Quantity(2000, 'cm-1').value_in_au
-dof = 1
+ph_parameters = [
+    (Quantity(250, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
+    (Quantity(750, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
+]
+dof = len(ph_parameters)
 max_tier = 10
 rank_heom = 1
 rank_wfn = 8
 prefix = '{}-DOF_2site_t{}_'.format(dof, max_tier)
-
-ph_parameters = [
-    #(Quantity(250, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
-    (Quantity(750, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
-]
 
 model = SBM(sys_ham=np.array([[-0.5 * e, v], [v, 0.5 * e]], dtype=DTYPE),
             sys_op=np.array([[-0.5, 0.0], [0.0, 0.5]], dtype=DTYPE),
@@ -61,7 +60,7 @@ def test_heom(fname=None):
     solver.ode_method = 'RK45'
     solver.cmf_steps = solver.max_ode_steps  # use constant mean-field
     solver.ps_method = 'unite-split'
-    solver.svd_err = 1.0e-8
+    solver.svd_err = 1.0e-10
 
     # Define the obersevable of interest
     logger = Logger(filename=prefix + fname, level='info').logger

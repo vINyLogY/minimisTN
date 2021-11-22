@@ -42,13 +42,14 @@ def simple_heom(init_rho, n_indices):
     ext = np.zeros((np.prod(n_indices),))
     ext[0] = 1.0
     new_shape = [n_state, n_state] + list(n_indices)
-    rho_n = np.reshape(np.tensordot(ext, init_rho, axes=0), new_shape)
+    rho_n = np.reshape(np.tensordot(init_rho, ext, axes=0), new_shape)
 
     root = Tensor(name='root', array=rho_n, axis=None)
-    root[0] = (Leaf(name=0), 0)
-    root[1] = (Leaf(name=1), 0)
-    for k in range(2, 2 + len(n_indices)):  # +2: i and j
-        root[k] = (Leaf(name=k), 0)
+    d = len(n_indices)
+    root[0] = (Leaf(name=d), 0)
+    root[1] = (Leaf(name=d + 1), 0)
+    for k in range(d):  # +2: i and j
+        root[k + 2] = (Leaf(name=k), 0)
 
     return root
 

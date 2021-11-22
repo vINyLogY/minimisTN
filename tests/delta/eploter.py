@@ -6,14 +6,14 @@ import sys
 f_dir = os.path.abspath(os.path.dirname(__file__))
 os.chdir(os.path.join(f_dir, 'data'))
 heom_list = [
-    "2-DOF_MPS_T10_en_heom.dat",
+    "1-DOF_simple_t10_en_heom.dat",
 ]
 heom_label_list = [
     "HEOM",
 ]
 
 wfn_list = [
-    "2-DOF_MPS_T10_en_wfn.dat",
+    "1-DOF_simple_t10_en_wfn.dat",
 ]
 wfn_label_list = [
     "WFN",

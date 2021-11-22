@@ -14,6 +14,7 @@ from __future__ import absolute_import, division, print_function
 
 import logging
 from builtins import filter, map, range, zip
+from typing import Optional
 
 from minitn.lib.backend import np, DTYPE
 from scipy.integrate import quad
@@ -56,28 +57,26 @@ def linear_discretization(spec_func, stop, num, start=0.0):
     return ans
 
 
-def generate_BCF(ph_parameters, beta=None):
+def generate_BCF(ph_parameters, bath_corr: Optional[Correlation] = None, beta=None):
     """
     Args:
         ph_parameters: [(frequency, coupling)]
     """
-    dim = 2 * len(ph_parameters)
-    coeff = []
-    conj_coeff = []
-    derivative = []
+    if bath_corr is not None:
+        coeff = list(bath_corr.coeff)
+        conj_coeff = list(bath_corr.conj_coeff)
+        derivative = list(bath_corr.derivative)
+    else:
+        coeff = []
+        conj_coeff = []
+        derivative = []
     for omega, g in ph_parameters:
         temp_factor = 1.0 / np.tanh(beta * omega / 2) if beta is not None else 1.0
         coeff.extend([g**2 / 2.0 * (temp_factor - 1.0), g**2 / 2.0 * (temp_factor + 1.0)])
         conj_coeff.extend([g**2 / 2.0 * (temp_factor + 1.0), g**2 / 2.0 * (temp_factor - 1.0)])
         derivative.extend([1.0j * omega, -1.0j * omega])
-    corr = Correlation(
-        k_max=dim,
-        beta=beta,
-        coeff=coeff,
-        conj_coeff=conj_coeff,
-        derivative=derivative,
-    )
-    return corr
+
+    return coeff, conj_coeff, derivative
 
 
 class SpectralDensityFactory(object):

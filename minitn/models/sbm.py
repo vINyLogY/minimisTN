@@ -28,23 +28,26 @@ DTYPE = np.complex128
 
 class SBM(object):
 
-    def __init__(self, sys_ham, sys_op, ph_parameters, n_dims) -> None:
+    def __init__(self, sys_ham, sys_op, ph_parameters, ph_dims, bath_corr=None, bath_dims=None) -> None:
         """
         Args:
         ph_parameters: [(frequency, coupling)]
+        bcf_parameters: [(coeff, coeff_conj, derivative)]
         n_dims: [int]
         """
         self.h = sys_ham
         self.op = sys_op
         self.ph_parameters = ph_parameters
-        self.n_dims = n_dims
+        self.ph_dims = ph_dims
+        self.bath_corr = bath_corr
+        self.bath_dims = bath_dims
         return
 
     def wfn_h_list(self, sys_index, ph_indices):
         h_list = []
         h_list.append([(sys_index, -1.0j * self.h)])
 
-        for ph_index, (omega, g), d in zip(ph_indices, self.ph_parameters, self.n_dims):
+        for ph_index, (omega, g), d in zip(ph_indices, self.ph_parameters, self.ph_dims):
             ph = Phonon(d, omega)
             # hamiltonian ph part
             h_list.append([(ph_index, -1.0j * ph.hamiltonian)])
@@ -56,11 +59,6 @@ class SBM(object):
 
     def heom_h_list(self, sys_i, sys_j, ph_indices: list, beta=None):
         corr = generate_BCF(self.ph_parameters, beta=beta)
-        n_tiers = list(np.repeat(self.n_dims, 2))
-        diff = Hierachy(n_tiers, self.h, self.op, corr).diff()
-        index_conv = list(ph_indices) + [sys_i, sys_j]
-        h_list = []
-        for term in diff:
-            h_list.append([(index_conv[fst], snd) for fst, snd in term])
-
-        return h_list
+        n_tiers = list(np.repeat(self.ph_dims, 2))
+        diff = Hierachy(n_tiers, self.h, self.op, corr).h_list(sys_i, sys_j, ph_indices)
+        return diff

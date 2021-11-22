@@ -50,6 +50,15 @@ class Hierachy(object):
         self.op = np.array(sys_op, dtype=DTYPE)
         self.h = np.array(sys_hamiltonian, dtype=DTYPE)
 
+    def h_list(self, sys_i, sys_j, ph_indices):
+        diff = self.diff()
+        index_convension = list(ph_indices) + [sys_i, sys_j]
+        h_list = []
+        for term in diff:
+            h_list.append([(index_convension[fst], snd) for fst, snd in term])
+
+        return h_list
+
     def gen_extended_rho(self, rho):
         """Get rho_n from rho with the conversion:
             rho[n_0, ..., n_(k-1), i, j]
