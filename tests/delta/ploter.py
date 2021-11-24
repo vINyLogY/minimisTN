@@ -6,28 +6,30 @@ import sys
 f_dir = os.path.abspath(os.path.dirname(__file__))
 os.chdir(os.path.join(f_dir, 'data'))
 heom_list = [
-    "1-DOF_TT_t10_heom.dat",
-    "1-DOF_2site_t10_heom.dat",
+    "drude_boson_simple_t10_heom.dat",
+    "drude_simple_t10_heom.dat",
+    "boson_simple_t10_heom.dat",
+    "boson_simple_zt_t10_heom.dat",
 ]
 heom_label_list = [
-    "HEOM",
-    "HEOM2",
+    "Drude + Boson",
+    "Drude",
+    "Boson",
+    "Boson (ZT)",
 ]
 
 wfn_list = [
-    "1-DOF_simple_t10_wfn.dat",
-    #    "1-DOF_2site_t10_wfn.dat",
+    "boson_simple_zt_t10_wfn.dat",
 ]
 wfn_label_list = [
-    "WFN",
-    #    "WFN2",
+    "Boson (ZT)",
 ]
 
 for fname, label in zip(wfn_list, wfn_label_list):
     tst = np.loadtxt(fname, dtype=complex)
 
-    plt.plot(np.real(tst[:, 0]), np.real(tst[:, 1]), '-', label="$P_0$ ({})".format(label))
-    #plt.plot(tst[:, 0], np.abs(tst[:, -1]), '-', label="$P_1$ ({})".format(label))
+    plt.plot(np.real(tst[:, 0]), np.abs(tst[:, 1]), '-', label="$P_0$ ({})".format(label))
+    plt.plot(np.real(tst[:, 0]), np.abs(tst[:, -1]), '-', label="$P_1$ ({})".format(label))
     plt.plot(np.real(tst[:, 0]), np.real(tst[:, 2]), '-', label="$\Re r$ ({})".format(label))
     plt.plot(np.real(tst[:, 0]), np.imag(tst[:, 2]), '-', label="$\Im r$ ({})".format(label))
     #plt.plot(np.real(tst[:, 0]), np.abs(tst[:, 2]), '-', label="$|r|$ ({})".format(label))
@@ -35,14 +37,14 @@ for fname, label in zip(wfn_list, wfn_label_list):
 for fname, label in zip(heom_list, heom_label_list):
     tst = np.loadtxt(fname, dtype=complex)
 
-    plt.plot(np.real(tst[:, 0]), np.real(tst[:, 1]), '--', label="$P_0$ ({})".format(label))
-    #plt.plot(np.real(tst[:, 0]), np.real(tst[:, -1]), '-', label="$P_1$ ({})".format(label))
-    plt.plot(np.real(tst[:, 0]), np.real(tst[:, 2]), '--', label="$\Re r$ ({})".format(label))
-    plt.plot(np.real(tst[:, 0]), np.imag(tst[:, 2]), '--', label="$\Im r$ ({})".format(label))
-    #plt.plot(np.real(tst[:, 0]), np.abs(tst[:, 2]), '--', label="$|r|$ ({})".format(label))
+    plt.plot(np.real(tst[:, 0]), np.abs(tst[:, 1]), '-', label="$P_0$ ({})".format(label))
+    #plt.plot(np.real(tst[:, 0]), np.abs(tst[:, -1]), '-', label="$P_1$ ({})".format(label))
+    #plt.plot(np.real(tst[:, 0]), np.real(tst[:, 2]), '--', label="$\Re r$ ({})".format(label))
+    #plt.plot(np.real(tst[:, 0]), np.imag(tst[:, 2]), '--', label="$\Im r$ ({})".format(label))
+    plt.plot(np.real(tst[:, 0]), np.abs(tst[:, 2]), '--', label="$|r|$ ({})".format(label))
 
-plt.legend(loc='upper right')
-title = 'SBM with relaxation (2 sites)'
+plt.legend(loc='lower right')
+title = 'SBM with relaxation'
 plt.title(title)
 os.chdir(f_dir)
 plt.ylim(-1, 1)

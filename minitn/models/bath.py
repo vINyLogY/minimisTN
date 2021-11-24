@@ -62,76 +62,27 @@ def generate_BCF(ph_parameters, bath_corr: Optional[Correlation] = None, beta=No
     Args:
         ph_parameters: [(frequency, coupling)]
     """
-    if bath_corr is not None:
-        coeff = list(bath_corr.coeff)
-        conj_coeff = list(bath_corr.conj_coeff)
-        derivative = list(bath_corr.derivative)
-    else:
-        coeff = []
-        conj_coeff = []
-        derivative = []
+
+    coeff = []
+    conj_coeff = []
+    derivative = []
     for omega, g in ph_parameters:
         temp_factor = 1.0 / np.tanh(beta * omega / 2) if beta is not None else 1.0
         coeff.extend([g**2 / 2.0 * (temp_factor - 1.0), g**2 / 2.0 * (temp_factor + 1.0)])
         conj_coeff.extend([g**2 / 2.0 * (temp_factor + 1.0), g**2 / 2.0 * (temp_factor - 1.0)])
         derivative.extend([1.0j * omega, -1.0j * omega])
 
-    return coeff, conj_coeff, derivative
+    if bath_corr is not None:
+        coeff += list(bath_corr.coeff)
+        conj_coeff += list(bath_corr.conj_coeff)
+        derivative += list(bath_corr.derivative)
 
+    corr = Correlation(
+        k_max=len(coeff),
+        beta=beta,
+        coeff=coeff,
+        conj_coeff=conj_coeff,
+        derivative=derivative,
+    )
 
-class SpectralDensityFactory(object):
-
-    @staticmethod
-    def drude_lorentz(lambda_, omega):
-
-        def _drude(w):
-            c = 0.5
-            return c * (lambda_ * w * omega) / (w**2 + omega**2)
-
-        return _drude
-
-    @staticmethod
-    def plain(eta, omega):
-
-        def spec_func(w):
-            if 0 < w < omega:
-                return eta
-            else:
-                return 0.0
-
-        return spec_func
-
-    @staticmethod
-    def bimodal_spectral_density(lambda_g, omega_g, lambda_d, omega_d):
-        """C.f. J. Chem. Phys. 124, 034114 (2006). 
-        
-        Returns
-        -------
-            float  ->  float.
-        """
-
-        def _bimodal_spectral_density(omega):
-            gaussian = ((np.sqrt(np.pi) * lambda_g * omega) / (4. * omega_g) * np.exp(-(omega / (2. * omega_g))**2))
-            debye = ((lambda_d * omega * omega_d) / (2 * (omega_d**2 + omega**2)))
-            return gaussian + debye
-
-        return _bimodal_spectral_density
-
-
-if __name__ == '__main__':
-    from minitn.lib.tools import figure, plt
-    from minitn.lib.units import Quantity
-    j_w = SpectralDensityFactory.bimodal_spectral_density(
-        Quantity(2250, 'cm-1').value_in_au,
-        Quantity(500, 'cm-1').value_in_au,
-        Quantity(1250, 'cm-1').value_in_au,
-        Quantity(50, 'cm-1').value_in_au)
-    ans = linear_discretization(j_w, Quantity(2500, 'cm-1').value_in_au, 32)
-    x, y = zip(*ans)
-    x = list(map(lambda w: Quantity(w).convert_to('cm-1').value, x))
-    for i, j in zip(x, y):
-        msg = '{:.1f} & {:.5f} \\\\'.format(i, j * 1e5)
-        print(msg)
-    with figure():
-        plt.plot(x, y, 'o')
-        plt.show()
+    return corr

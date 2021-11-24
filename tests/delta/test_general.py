@@ -1,41 +1,47 @@
 #!/usr/bin/env python3
 # coding: utf-8
 from __future__ import absolute_import, division, print_function
-from logging import info
-from minitn.heom.network import simple_heom, tensor_train_template
 
 from builtins import filter, map, range, zip
+from minitn.heom.corr import Drude
 
-from minitn.lib.backend import DTYPE, np
-from minitn.heom.hierachy import Hierachy
-from minitn.heom.corr import Correlation
+from minitn.heom.network import simple_heom, tensor_train_template
 from minitn.heom.propagate import MultiLayer
+from minitn.lib.backend import DTYPE, np
 from minitn.lib.logging import Logger
 from minitn.lib.tools import huffman_tree
-from minitn.models.bath import linear_discretization, SpectralDensityFactory
-from minitn.models.sbm import SBM
 from minitn.lib.units import Quantity
-from minitn.tensor import Tensor, Leaf
+from minitn.models.sbm import SBM
+from minitn.tensor import Leaf, Tensor
 
 # System: pure dephasing
 e = Quantity(5000, 'cm-1').value_in_au
 v = Quantity(500, 'cm-1').value_in_au
-eta = Quantity(500, 'cm-1').value_in_au
-omega0 = Quantity(2000, 'cm-1').value_in_au
-ph_parameters = [
-    (Quantity(250, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
-    (Quantity(750, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
-]
-dof = len(ph_parameters)
-max_tier = 10
+max_tier = 12
 rank_heom = 1
 rank_wfn = 8
-prefix = '{}-DOF_2site_t{}_'.format(dof, max_tier)
+beta = None
+prefix = 'boson_zt_t{}_'.format(max_tier)
 
-model = SBM(sys_ham=np.array([[-0.5 * e, v], [v, 0.5 * e]], dtype=DTYPE),
-            sys_op=np.array([[-0.5, 0.0], [0.0, 0.5]], dtype=DTYPE),
-            ph_parameters=ph_parameters,
-            n_dims=(dof * [max_tier]))
+ph_parameters = [
+    (Quantity(800, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
+]
+dof = 1
+
+drude = Drude(
+    gamma=Quantity(20, 'cm-1').value_in_au,
+    lambda_=Quantity(400, 'cm-1').value_in_au,
+    beta=beta,
+)
+
+model = SBM(
+    sys_ham=np.array([[-0.5 * e, v], [v, 0.5 * e]], dtype=DTYPE),
+    sys_op=np.array([[-0.5, 0.0], [0.0, 0.5]], dtype=DTYPE),
+    ph_parameters=ph_parameters,
+    ph_dims=(dof * [max_tier]),
+    #bath_corr=drude,
+    #bath_dims=[max_tier],
+)
 
 # init state
 A, B = 1.0, 1.0
@@ -49,18 +55,20 @@ count = 10_000
 
 
 def test_heom(fname=None):
-    n_dims = 2 * dof * [max_tier]
+    ph_dims = list(np.repeat(model.ph_dims, 2))
+    n_dims = ph_dims if model.bath_dims is None else ph_dims + model.bath_dims
+    print(n_dims)
 
-    root = tensor_train_template(rho_0, n_dims, rank=rank_heom)
-    #root = simple_heom(rho_0, n_dims)
+    #root = tensor_train_template(rho_0, n_dims, rank=rank_heom)
+    root = simple_heom(rho_0, n_dims)
     leaves = root.leaves()
-    h_list = model.heom_h_list(leaves[0], leaves[1], leaves[2:], beta=None)
+    h_list = model.heom_h_list(leaves[0], leaves[1], leaves[2:], beta=beta)
 
     solver = MultiLayer(root, h_list)
     solver.ode_method = 'RK45'
     solver.cmf_steps = solver.max_ode_steps  # use constant mean-field
     solver.ps_method = 'unite-split'
-    solver.svd_err = 1.0e-10
+    solver.svd_err = 1.0e-12
 
     # Define the obersevable of interest
     logger = Logger(filename=prefix + fname, level='info').logger
@@ -136,7 +144,7 @@ def test_mctdh(fname=None):
     solver = MultiLayer(root, h_list)
     solver.ode_method = 'RK45'
     solver.cmf_steps = solver.max_ode_steps  # constant mean-field
-    solver.ps_method = 'unite-split'
+    solver.ps_method = 'split'
     solver.svd_err = 1.0e-14
 
     # Define the obersevable of interest
@@ -158,6 +166,7 @@ def test_mctdh(fname=None):
 if __name__ == '__main__':
     import os
     import sys
+
     from matplotlib import pyplot as plt
 
     f_dir = os.path.abspath(os.path.dirname(__file__))

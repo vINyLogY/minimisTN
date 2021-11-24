@@ -57,8 +57,10 @@ class SBM(object):
 
         return h_list
 
-    def heom_h_list(self, sys_i, sys_j, ph_indices: list, beta=None):
-        corr = generate_BCF(self.ph_parameters, beta=beta)
+    def heom_h_list(self, sys_i, sys_j, bath_indices: list, beta=None):
+        corr = generate_BCF(self.ph_parameters, bath_corr=self.bath_corr, beta=beta)
         n_tiers = list(np.repeat(self.ph_dims, 2))
-        diff = Hierachy(n_tiers, self.h, self.op, corr).h_list(sys_i, sys_j, ph_indices)
+        if self.bath_dims is not None:
+            n_tiers += self.bath_dims
+        diff = Hierachy(n_tiers, self.h, self.op, corr).h_list(sys_i, sys_j, bath_indices)
         return diff
