@@ -21,13 +21,13 @@ max_tier = 20
 rank_heom = 10
 rank_wfn = 8
 beta = None
-prefix = 'drude_boson_zt_t{}_'.format(max_tier)
+prefix = 'drude_zt_t{}_'.format(max_tier)
 
 ph_parameters = [
-    (Quantity(400, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
-    (Quantity(800, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
-    (Quantity(1200, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
-    (Quantity(1600, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
+    #(Quantity(400, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
+    #(Quantity(800, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
+    #(Quantity(1200, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
+    #(Quantity(1600, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
 ]
 dof = len(ph_parameters)
 
@@ -52,8 +52,8 @@ wfn_0 = np.array([A, B]) / np.sqrt(A**2 + B**2)
 rho_0 = np.tensordot(wfn_0, wfn_0, axes=0)
 
 # Propagation
-dt_unit = Quantity(0.001, 'fs').value_in_au
-callback_interval = 100
+dt_unit = Quantity(0.01, 'fs').value_in_au
+callback_interval = 10
 count = 10_000
 
 

@@ -31,7 +31,7 @@ def get_n_state(rho):
 
 def simple_heom(init_rho, n_indices):
     """Get rho_n from rho with the conversion:
-        rho[n_0, ..., n_(k-1), i, j]
+        rho[i, j, n_0, ..., n_(k-1)]
 
     Parameters
     ----------

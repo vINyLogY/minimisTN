@@ -52,8 +52,8 @@ wfn_0 = np.array([A, B]) / np.sqrt(A**2 + B**2)
 rho_0 = np.tensordot(wfn_0, wfn_0, axes=0)
 
 # Propagation
-dt_unit = Quantity(0.001, 'fs').value_in_au
-callback_interval = 100
+dt_unit = Quantity(0.01, 'fs').value_in_au
+callback_interval = 10
 count = 10_000
 
 
