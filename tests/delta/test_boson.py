@@ -20,8 +20,8 @@ v = Quantity(500, 'cm-1').value_in_au
 max_tier = 20
 rank_heom = 10
 rank_wfn = 8
-beta = None
-prefix = 'boson_zt_t{}_'.format(max_tier)
+beta = Quantity(1/300, 'K-1').value_in_au
+prefix = 'boson_300K_t{}_'.format(max_tier)
 
 ph_parameters = [
     (Quantity(400, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
@@ -52,9 +52,9 @@ wfn_0 = np.array([A, B]) / np.sqrt(A**2 + B**2)
 rho_0 = np.tensordot(wfn_0, wfn_0, axes=0)
 
 # Propagation
-dt_unit = Quantity(0.01, 'fs').value_in_au
-callback_interval = 10
-count = 10_000
+dt_unit = Quantity(0.001, 'fs').value_in_au
+callback_interval = 100
+count = 100_000
 
 
 def test_heom(fname=None):

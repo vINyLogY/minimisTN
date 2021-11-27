@@ -6,8 +6,8 @@ import sys
 f_dir = os.path.abspath(os.path.dirname(__file__))
 os.chdir(os.path.join(f_dir, 'data'))
 heom_list = [
-    "drude_zt_t15_heom.dat",
-    "boson_zt_t15_heom.dat",
+    "drude_300K_t20_heom.dat",
+    "boson_300K_t20_heom.dat",
 ]
 heom_label_list = [
     "Drude",
@@ -15,7 +15,7 @@ heom_label_list = [
 ]
 
 wfn_list = [
-    "drude_boson_zt_t15_heom.dat",
+    "drude_boson_300K_t20_heom.dat",
 ]
 wfn_label_list = [
     "Drude + Boson",
@@ -24,7 +24,7 @@ wfn_label_list = [
 for fname, label in zip(wfn_list, wfn_label_list):
     tst = np.loadtxt(fname, dtype=complex)
 
-    plt.plot(np.real(tst[:, 0]), np.abs(tst[:, 1]), 'k-', label="$P_0$ ({})".format(label))
+    plt.plot(np.real(tst[:, 0]), np.real(tst[:, 1]), 'k-', label="$P_0$ ({})".format(label))
     #plt.plot(np.real(tst[:, 0]), np.abs(tst[:, -1]), '-', label="$P_1$ ({})".format(label))
     #plt.plot(np.real(tst[:, 0]), np.real(tst[:, 2]), '-', label="$\Re r$ ({})".format(label))
     #plt.plot(np.real(tst[:, 0]), np.imag(tst[:, 2]), '-', label="$\Im r$ ({})".format(label))
@@ -33,7 +33,7 @@ for fname, label in zip(wfn_list, wfn_label_list):
 for fname, label in zip(heom_list, heom_label_list):
     tst = np.loadtxt(fname, dtype=complex)
 
-    plt.plot(np.real(tst[:, 0]), np.abs(tst[:, 1]), '--', label="$P_0$ ({})".format(label))
+    plt.plot(np.real(tst[:, 0]), np.real(tst[:, 1]), '--', label="$P_0$ ({})".format(label))
     #plt.plot(np.real(tst[:, 0]), np.abs(tst[:, -1]), '-', label="$P_1$ ({})".format(label))
     #plt.plot(np.real(tst[:, 0]), np.real(tst[:, 2]), '--', label="$\Re r$ ({})".format(label))
     #plt.plot(np.real(tst[:, 0]), np.imag(tst[:, 2]), '--', label="$\Im r$ ({})".format(label))
@@ -43,5 +43,5 @@ plt.legend(loc='lower right')
 title = 'SBM with relaxation'
 plt.title(title)
 os.chdir(f_dir)
-#plt.ylim(-1, 1)
+plt.ylim(-1, 1)
 plt.savefig('{}.png'.format(title))
