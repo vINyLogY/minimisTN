@@ -3,7 +3,6 @@
 from __future__ import absolute_import, division, print_function
 
 from builtins import filter, map, range, zip
-from minitn.heom.corr import Drude
 
 from minitn.heom.network import simple_heom, tensor_train_template
 from minitn.heom.propagate import MultiLayer
@@ -17,33 +16,22 @@ from minitn.tensor import Leaf, Tensor
 # System: pure dephasing
 e = Quantity(5000, 'cm-1').value_in_au
 v = Quantity(500, 'cm-1').value_in_au
-max_tier = 20
-rank_heom = 10
+dof = 1
+max_tier = 12
+rank_heom = 1
 rank_wfn = 8
-beta = None
-prefix = 'drude_boson_zt_t{}_'.format(max_tier)
+prefix = '{}-DOF_2site_t{}_'.format(dof, max_tier)
 
 ph_parameters = [
-    (Quantity(400, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
-    (Quantity(800, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
-    (Quantity(1200, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
-    (Quantity(1600, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
+    #(Quantity(250, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
+    (Quantity(750, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
 ]
-dof = len(ph_parameters)
-
-drude = Drude(
-    gamma=Quantity(20, 'cm-1').value_in_au,
-    lambda_=Quantity(400, 'cm-1').value_in_au,
-    beta=beta,
-)
 
 model = SBM(
     sys_ham=np.array([[-0.5 * e, v], [v, 0.5 * e]], dtype=DTYPE),
     sys_op=np.array([[-0.5, 0.0], [0.0, 0.5]], dtype=DTYPE),
     ph_parameters=ph_parameters,
     ph_dims=(dof * [max_tier]),
-    bath_corr=drude,
-    bath_dims=[max_tier],
 )
 
 # init state
@@ -58,20 +46,17 @@ count = 10_000
 
 
 def test_heom(fname=None):
-    ph_dims = list(np.repeat(model.ph_dims, 2))
-    n_dims = ph_dims if model.bath_dims is None else ph_dims + model.bath_dims
-    print(n_dims)
+    n_dims = 2 * dof * [max_tier]
 
-    root = tensor_train_template(rho_0, n_dims, rank=rank_heom)
-    #root = simple_heom(rho_0, n_dims)
+    root = simple_heom(rho_0, n_dims)
     leaves = root.leaves()
-    h_list = model.heom_h_list(leaves[0], leaves[1], leaves[2:], beta=beta)
+    h_list = model.heom_h_list(leaves[0], leaves[1], leaves[2:], beta=None)
 
     solver = MultiLayer(root, h_list)
     solver.ode_method = 'RK45'
     solver.cmf_steps = solver.max_ode_steps  # use constant mean-field
     solver.ps_method = 'split'
-    #solver.svd_err = 1.0e-10
+    solver.svd_err = 1.0e-12
 
     # Define the obersevable of interest
     logger = Logger(filename=prefix + fname, level='info').logger
@@ -79,7 +64,7 @@ def test_heom(fname=None):
     for n, (time, r) in enumerate(solver.propagator(
             steps=count,
             ode_inter=dt_unit,
-            split=True,
+            split=False,
     )):
         # renormalized by the trace of rho
         norm = np.trace(np.reshape(np.reshape(r.array, (4, -1))[:, 0], (2, 2)))
@@ -176,4 +161,4 @@ if __name__ == '__main__':
     os.chdir(os.path.join(f_dir, 'data'))
 
     test_heom(fname='heom.dat')
-    #test_mctdh(fname='wfn.dat')
+    test_mctdh(fname='wfn.dat')

@@ -5,7 +5,7 @@ from __future__ import absolute_import, division, print_function
 from builtins import filter, map, range, zip
 from minitn.heom.corr import Drude
 
-from minitn.heom.network import tensor_train_template
+from minitn.heom.network import tensor_tree_template
 from minitn.heom.propagate import MultiLayer
 from minitn.lib.backend import DTYPE, np
 from minitn.lib.logging import Logger
@@ -17,17 +17,17 @@ from minitn.tensor import Leaf, Tensor
 # System: pure dephasing
 e = Quantity(5000, 'cm-1').value_in_au
 v = Quantity(500, 'cm-1').value_in_au
-max_tier = 5
-rank_heom = 5
-rank_wfn = 5
-beta = Quantity(1 / 300, 'K-1').value_in_au
-prefix = 'boson_300K_t{}_'.format(max_tier)
+max_tier = 20
+rank_heom = 10
+rank_wfn = 8
+beta = None
+prefix = 'drude_boson_tree_zt_t{}_'.format(max_tier)
 
 ph_parameters = [
     #(Quantity(400, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
     #(Quantity(800, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
     #(Quantity(1200, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
-    #(Quantity(1600, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
+    (Quantity(1600, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
 ]
 dof = len(ph_parameters)
 
@@ -52,8 +52,8 @@ wfn_0 = np.array([A, B]) / np.sqrt(A**2 + B**2)
 rho_0 = np.tensordot(wfn_0, wfn_0, axes=0)
 
 # Propagation
-dt_unit = Quantity(0.01, 'fs').value_in_au
-callback_interval = 10
+dt_unit = Quantity(0.001, 'fs').value_in_au
+callback_interval = 100
 count = 10_000
 
 
@@ -62,16 +62,15 @@ def test_heom(fname=None):
     n_dims = ph_dims if model.bath_dims is None else ph_dims + model.bath_dims
     print(n_dims)
 
-    root = tensor_train_template(rho_0, n_dims, rank=rank_heom)
-    #root = simple_heom(rho_0, n_dims)
+    root = tensor_tree_template(rho_0, n_dims, rank=rank_heom)
     leaves = root.leaves()
     h_list = model.heom_h_list(leaves[0], leaves[1], leaves[2:], beta=beta)
 
     solver = MultiLayer(root, h_list)
     solver.ode_method = 'RK45'
     solver.cmf_steps = solver.max_ode_steps  # use constant mean-field
-    solver.ps_method = 'unite'
-    solver.svd_err = 1.0e-12
+    solver.ps_method = 'split'
+    #solver.svd_err = 1.0e-10
 
     # Define the obersevable of interest
     logger = Logger(filename=prefix + fname, level='info').logger

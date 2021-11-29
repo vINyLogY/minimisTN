@@ -73,7 +73,7 @@ def get_ext_wfns(n_states, wfns, op, search_method='krylov'):
         raise NotImplementedError
 
 
-def tensor_train_template(init_rho, pb_index, rank=2):
+def tensor_train_template(init_rho, pb_index, rank=1):
     """Get rho_n from rho in a Tensor Train representation.
 
     Parameters
@@ -110,7 +110,7 @@ def tensor_train_template(init_rho, pb_index, rank=2):
     return root
 
 
-def tensor_tree_template(init_rho, pb_index, rank=2):
+def tensor_tree_template(init_rho, pb_index, rank=1, nbranch=2):
     """Get rho_n from rho in a Tensor Tree representation.
 
     Parameters
@@ -139,14 +139,20 @@ def tensor_tree_template(init_rho, pb_index, rank=2):
             return name
 
     importance = list(reversed(range(len(pb_index))))
-    graph, spf_root = huffman_tree(leaves, importances=importance, obj_new=new_spf, n_branch=3)
+    graph, spf_root = huffman_tree(
+        leaves,
+        importances=importance,
+        obj_new=new_spf,
+        n_branch=nbranch,
+    )
 
     root = 'root'
-    graph[root] = [spf_root, str(max_terms), str(max_terms + 1)]
+    graph[root] = [str(max_terms), str(max_terms + 1), spf_root]
 
     print(graph, root)
 
     root = Tensor.generate(graph, root)
+    root.set_array(root_array)
     bond_dict = {}
     # Leaves
     l_range = list(pb_index) + [n_state] * 2

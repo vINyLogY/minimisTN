@@ -6,19 +6,17 @@ import sys
 f_dir = os.path.abspath(os.path.dirname(__file__))
 os.chdir(os.path.join(f_dir, 'data'))
 heom_list = [
-    "drude_300K_t20_heom.dat",
-    "boson_300K_t20_heom.dat",
+    "1-DOF_2site_t12_heom.dat",
 ]
 heom_label_list = [
-    "Drude",
-    "Boson",
+    "HEOM",
 ]
 
 wfn_list = [
-    "drude_boson_300K_t20_heom.dat",
+    "1-DOF_2site_t12_wfn.dat",
 ]
 wfn_label_list = [
-    "Drude + Boson",
+    "WFN",
 ]
 
 for fname, label in zip(wfn_list, wfn_label_list):
