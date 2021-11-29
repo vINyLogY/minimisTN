@@ -6,8 +6,8 @@ import sys
 f_dir = os.path.abspath(os.path.dirname(__file__))
 os.chdir(os.path.join(f_dir, 'data'))
 heom_list = [
-    "drude_zt_t15_heom.dat",
-    "boson_zt_t15_heom.dat",
+    "drude_300K_t20_heom.dat",
+    "boson_300K_t20_heom.dat",
 ]
 heom_label_list = [
     "Drude",
@@ -15,7 +15,7 @@ heom_label_list = [
 ]
 
 wfn_list = [
-    "drude_boson_zt_t15_heom.dat",
+    "drude_boson_300K_t20_heom.dat",
 ]
 wfn_label_list = [
     "Drude + Boson",
@@ -39,9 +39,10 @@ for fname, label in zip(heom_list, heom_label_list):
     #plt.plot(np.real(tst[:, 0]), np.imag(tst[:, 2]), '--', label="$\Im r$ ({})".format(label))
     plt.plot(np.real(tst[:, 0]), np.abs(tst[:, 2]), '--', label="$|r|$ ({})".format(label))
 
-plt.legend(loc='lower right')
+plt.legend(loc='upper left')
 title = 'SBM with relaxation'
 plt.title(title)
 os.chdir(f_dir)
-#plt.ylim(-1, 1)
+plt.ylim(0, 1)
+plt.xlim(0, 20)
 plt.savefig('{}.png'.format(title))
