@@ -21,7 +21,7 @@ max_tier = 5
 rank_heom = 5
 rank_wfn = 5
 beta = Quantity(1 / 300, 'K-1').value_in_au
-prefix = 'boson_300K_t{}_'.format(max_tier)
+prefix = 'drude_300K_t{}_'.format(max_tier)
 
 ph_parameters = [
     #(Quantity(400, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
