@@ -39,9 +39,12 @@ for fname, label in zip(heom_list, heom_label_list):
     #plt.plot(np.real(tst[:, 0]), np.imag(tst[:, 2]), '--', label="$\Im r$ ({})".format(label))
     plt.plot(np.real(tst[:, 0]), np.abs(tst[:, 2]), '--', label="$|r|$ ({})".format(label))
 
-plt.legend(loc='lower right')
+plt.legend(loc='upper left')
 title = 'SBM with relaxation'
 plt.title(title)
 os.chdir(f_dir)
-plt.ylim(-1, 1)
+
+plt.ylim(0, 1)
+plt.xlim(0, 20)
+
 plt.savefig('{}.png'.format(title))
