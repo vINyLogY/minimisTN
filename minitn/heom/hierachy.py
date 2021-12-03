@@ -104,10 +104,12 @@ class Hierachy(object):
         ]
 
         for k in range(self.k_max):
+            sqrt_c = np.sqrt(complex(self.corr.coeff[k]))
+            conj_sqrt_c = np.sqrt(complex(self.corr.conj_coeff[k]))
             dk = [
                 [(k, self.corr.derivative[k] * self._numberer(k))],
-                [(i, -1.0j * self.op), (k, self.corr.coeff[k] * self._raiser(k) + self._lower(k))],
-                [(j, 1.0j * self.op), (k, self.corr.conj_coeff[k] * self._raiser(k) + self._lower(k))],
+                [(i, -1.0j * self.op), (k, sqrt_c * self._raiser(k) + sqrt_c * self._lower(k))],
+                [(j, 1.0j * self.op), (k, conj_sqrt_c * self._raiser(k) + conj_sqrt_c * self._lower(k))],
             ]
             derivative.extend(dk)
 

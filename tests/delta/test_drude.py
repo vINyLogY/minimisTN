@@ -21,7 +21,7 @@ max_tier = 5
 rank_heom = 5
 rank_wfn = 5
 beta = Quantity(1 / 300, 'K-1').value_in_au
-prefix = 'drude_300K_t{}_'.format(max_tier)
+prefix = 'drude_scale_300K_t{}_'.format(max_tier)
 
 ph_parameters = [
     #(Quantity(400, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
@@ -79,7 +79,7 @@ def test_heom(fname=None):
     for n, (time, r) in enumerate(solver.propagator(
             steps=count,
             ode_inter=dt_unit,
-            split=True,
+            split=False,
     )):
         # renormalized by the trace of rho
         norm = np.trace(np.reshape(np.reshape(r.array, (4, -1))[:, 0], (2, 2)))

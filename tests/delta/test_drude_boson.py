@@ -17,11 +17,11 @@ from minitn.tensor import Leaf, Tensor
 # System: pure dephasing
 e = Quantity(5000, 'cm-1').value_in_au
 v = Quantity(500, 'cm-1').value_in_au
-max_tier = 5
-rank_heom = 5
+max_tier = 10
+rank_heom = max_tier
 rank_wfn = 5
 beta = Quantity(1 / 300, 'K-1').value_in_au
-prefix = 'drude_boson_300K_t{}_'.format(max_tier)
+prefix = 'drude_boson_scaled_300K_t{}_'.format(max_tier)
 
 ph_parameters = [
     (Quantity(400, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
@@ -54,7 +54,7 @@ rho_0 = np.tensordot(wfn_0, wfn_0, axes=0)
 # Propagation
 dt_unit = Quantity(0.01, 'fs').value_in_au
 callback_interval = 10
-count = 10_000
+count = 100_000
 
 
 def test_heom(fname=None):
