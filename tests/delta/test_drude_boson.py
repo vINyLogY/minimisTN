@@ -17,10 +17,12 @@ from minitn.tensor import Leaf, Tensor
 # System: pure dephasing
 e = Quantity(5000, 'cm-1').value_in_au
 v = Quantity(500, 'cm-1').value_in_au
+
 max_tier = 10
 rank_heom = max_tier
-rank_wfn = 5
+rank_wfn = max_tier
 beta = Quantity(1 / 300, 'K-1').value_in_au
+
 
 ph_parameters = [
     (Quantity(400, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
