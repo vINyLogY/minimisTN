@@ -17,11 +17,11 @@ from minitn.tensor import Leaf, Tensor
 # System: pure dephasing
 e = Quantity(5000, 'cm-1').value_in_au
 v = Quantity(500, 'cm-1').value_in_au
-max_tier = 15
+max_tier = 40
 rank_heom = max_tier
 rank_wfn = max_tier
 beta = Quantity(1 / 300, 'K-1').value_in_au
-prefix = 'drude_scale_300K_t{}_'.format(max_tier)
+prefix = 'drude_100_300K_t{}_'.format(max_tier)
 
 
 ph_parameters = [
@@ -71,7 +71,7 @@ def test_heom(fname=None):
     solver = MultiLayer(root, h_list)
     solver.ode_method = 'RK45'
     solver.cmf_steps = solver.max_ode_steps  # use constant mean-field
-    solver.ps_method = 'unite'
+    solver.ps_method = 'split'
     solver.svd_err = 1.0e-12
 
     # Define the obersevable of interest

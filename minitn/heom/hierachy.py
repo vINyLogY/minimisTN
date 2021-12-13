@@ -112,7 +112,7 @@ class Hierachy(object):
             #fk = np.sqrt(ck) + np.sqrt(cck)  # Type-2 Coefficient
             #fk = np.sqrt(ck + cck)  # Type-1 Coefficient
             #fk = 1.0  # Type-0 Coefficient
-            fk = 0.1  # ???
+            fk = 0.01  # ???
 
             dk = [
                 [(k, self.corr.derivative[k] * self._numberer(k))],

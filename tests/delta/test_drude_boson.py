@@ -18,7 +18,7 @@ from minitn.tensor import Leaf, Tensor
 e = Quantity(5000, 'cm-1').value_in_au
 v = Quantity(500, 'cm-1').value_in_au
 
-max_tier = 10
+max_tier = 40
 rank_heom = max_tier
 rank_wfn = max_tier
 beta = Quantity(1 / 300, 'K-1').value_in_au
@@ -31,7 +31,7 @@ ph_parameters = [
     (Quantity(1600, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
 ]
 dof = len(ph_parameters)
-prefix = 'drude_boson_dof{}_scaled_300K_t{}_'.format(dof, max_tier)
+prefix =  'drudeboson_100_dof{}_300K_t{}_'.format(dof, max_tier)
 
 drude = Drude(
     gamma=Quantity(20, 'cm-1').value_in_au,
