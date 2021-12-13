@@ -5,18 +5,14 @@ import sys
 
 f_dir = os.path.abspath(os.path.dirname(__file__))
 os.chdir(os.path.join(f_dir, 'data'))
-heom_list = [
-    "drude_scale_300K_t5_heom.dat",
-]
-heom_label_list = [
-    "Drude scaled",
-]
+heom_list = ["drude_scale_300K_t5_heom.dat", "drude_boson_dof1_scaled_300K_t5_heom.dat"]
+heom_label_list = ["Drude 5", "Mixed 5"]
 
 wfn_list = [
-    "drude_scale_300K_t5_heom.dat",
+    "drude_boson_dof1_scaled_300K_t10_heom.dat",
 ]
 wfn_label_list = [
-    "Drude unscaled",
+    "Mixed 10",
 ]
 
 for fname, label in zip(wfn_list, wfn_label_list):
@@ -42,5 +38,5 @@ title = 'SBM with relaxation (Drude)'
 plt.title(title)
 os.chdir(f_dir)
 plt.ylim(0, 1)
-#plt.xlim(0, 20)
+plt.xlim(0, 100)
 plt.savefig('{}.png'.format(title))

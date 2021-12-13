@@ -18,18 +18,19 @@ from minitn.tensor import Leaf, Tensor
 e = Quantity(5000, 'cm-1').value_in_au
 v = Quantity(500, 'cm-1').value_in_au
 max_tier = 15
-rank_heom = 15
-rank_wfn = 5
+rank_heom = max_tier
+rank_wfn = max_tier
 beta = Quantity(1 / 300, 'K-1').value_in_au
-prefix = 'boson_scale_300K_t{}_'.format(max_tier)
+#beta = None
 
 ph_parameters = [
-    #(Quantity(400, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
-    #(Quantity(800, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
-    #(Quantity(1200, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
+    (Quantity(400, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
+    (Quantity(800, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
+    (Quantity(1200, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
     (Quantity(1600, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
 ]
 dof = len(ph_parameters)
+prefix = 'boson_fk_type3_dof{}_ZT_t{}_'.format(dof, max_tier)
 
 drude = Drude(
     gamma=Quantity(20, 'cm-1').value_in_au,
@@ -69,8 +70,8 @@ def test_heom(fname=None):
     solver = MultiLayer(root, h_list)
     solver.ode_method = 'RK45'
     solver.cmf_steps = solver.max_ode_steps  # use constant mean-field
-    solver.ps_method = 'unite'
-    solver.svd_err = 1.0e-12
+    solver.ps_method = 'split'
+    #solver.svd_err = 1.0e-14
 
     # Define the obersevable of interest
     logger = Logger(filename=prefix + fname, level='info').logger
@@ -93,6 +94,7 @@ def test_heom(fname=None):
 
 
 def test_mctdh(fname=None):
+    assert beta is None
     sys_leaf = Leaf(name='sys0')
 
     ph_leaves = []
