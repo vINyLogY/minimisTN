@@ -12,6 +12,8 @@ import logging
 from builtins import filter, map, range, zip
 from itertools import product
 
+from numpy import sqrt
+
 from minitn.lib.backend import np
 
 from minitn.lib.tools import __
@@ -104,10 +106,18 @@ class Hierachy(object):
         ]
 
         for k in range(self.k_max):
+            ck = complex(self.corr.coeff[k])
+            cck = complex(self.corr.conj_coeff[k])
+
+            #fk = np.sqrt(ck) + np.sqrt(cck)  # Type-2 Coefficient
+            #fk = np.sqrt(ck + cck)  # Type-1 Coefficient
+            #fk = 1.0  # Type-0 Coefficient
+            fk = 0.1  # ???
+
             dk = [
                 [(k, self.corr.derivative[k] * self._numberer(k))],
-                [(i, -1.0j * self.op), (k, self.corr.coeff[k] * self._raiser(k) + self._lower(k))],
-                [(j, 1.0j * self.op), (k, self.corr.conj_coeff[k] * self._raiser(k) + self._lower(k))],
+                [(i, -1.0j * self.op), (k, ck / fk * self._raiser(k) + fk * self._lower(k))],
+                [(j, 1.0j * self.op), (k, cck / fk * self._raiser(k) + fk * self._lower(k))],
             ]
             derivative.extend(dk)
 

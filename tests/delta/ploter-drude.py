@@ -5,27 +5,20 @@ import sys
 
 f_dir = os.path.abspath(os.path.dirname(__file__))
 os.chdir(os.path.join(f_dir, 'data'))
-heom_list = [
-    "boson_scale_300K_t5_heom.dat",
-    "drude_scale_300K_t5_heom.dat",
-]
-heom_label_list = [
-    "Boson 5",
-]
+heom_list = ["drude_scale_300K_t5_heom.dat", "drude_boson_dof1_scaled_300K_t5_heom.dat"]
+heom_label_list = ["Drude 5", "Mixed 5"]
 
 wfn_list = [
-    "boson_scale_300K_t15_heom.dat",
-    #"drude_boson_300K_t5_heom.dat",
+    "drude_boson_dof1_scaled_300K_t10_heom.dat",
 ]
 wfn_label_list = [
-    "Boson 15",
-    #"Drude + Boson",
+    "Mixed 10",
 ]
 
 for fname, label in zip(wfn_list, wfn_label_list):
     tst = np.loadtxt(fname, dtype=complex)
 
-    plt.plot(np.real(tst[:, 0]), np.real(tst[:, 1]), 'k-', label="$P_0$ ({})".format(label))
+    plt.plot(np.real(tst[:, 0]), np.abs(tst[:, 1]), 'k-', label="$P_0$ ({})".format(label))
     #plt.plot(np.real(tst[:, 0]), np.abs(tst[:, -1]), '-', label="$P_1$ ({})".format(label))
     #plt.plot(np.real(tst[:, 0]), np.real(tst[:, 2]), '-', label="$\Re r$ ({})".format(label))
     #plt.plot(np.real(tst[:, 0]), np.imag(tst[:, 2]), '-', label="$\Im r$ ({})".format(label))
@@ -34,18 +27,16 @@ for fname, label in zip(wfn_list, wfn_label_list):
 for fname, label in zip(heom_list, heom_label_list):
     tst = np.loadtxt(fname, dtype=complex)
 
-    plt.plot(np.real(tst[:, 0]), np.real(tst[:, 1]), '--', label="$P_0$ ({})".format(label))
+    plt.plot(np.real(tst[:, 0]), np.abs(tst[:, 1]), '--', label="$P_0$ ({})".format(label))
     #plt.plot(np.real(tst[:, 0]), np.abs(tst[:, -1]), '-', label="$P_1$ ({})".format(label))
     #plt.plot(np.real(tst[:, 0]), np.real(tst[:, 2]), '--', label="$\Re r$ ({})".format(label))
     #plt.plot(np.real(tst[:, 0]), np.imag(tst[:, 2]), '--', label="$\Im r$ ({})".format(label))
     plt.plot(np.real(tst[:, 0]), np.abs(tst[:, 2]), '--', label="$|r|$ ({})".format(label))
 
 plt.legend(loc='upper left')
-title = 'SBM with relaxation'
+title = 'SBM with relaxation (Drude)'
 plt.title(title)
 os.chdir(f_dir)
-
 plt.ylim(0, 1)
-plt.xlim(0, 20)
-
+plt.xlim(0, 100)
 plt.savefig('{}.png'.format(title))

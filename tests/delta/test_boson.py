@@ -5,7 +5,7 @@ from __future__ import absolute_import, division, print_function
 from builtins import filter, map, range, zip
 from minitn.heom.corr import Drude
 
-from minitn.heom.network import simple_heom, tensor_train_template
+from minitn.heom.network import tensor_train_template
 from minitn.heom.propagate import MultiLayer
 from minitn.lib.backend import DTYPE, np
 from minitn.lib.logging import Logger
@@ -17,11 +17,13 @@ from minitn.tensor import Leaf, Tensor
 # System: pure dephasing
 e = Quantity(5000, 'cm-1').value_in_au
 v = Quantity(500, 'cm-1').value_in_au
-max_tier = 20
-rank_heom = 10
-rank_wfn = 8
-beta = Quantity(1/300, 'K-1').value_in_au
-prefix = 'boson_300K_t{}_'.format(max_tier)
+
+max_tier = 15
+rank_heom = max_tier
+rank_wfn = max_tier
+beta = Quantity(1 / 300, 'K-1').value_in_au
+#beta = None
+
 
 ph_parameters = [
     (Quantity(400, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
@@ -30,6 +32,7 @@ ph_parameters = [
     (Quantity(1600, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
 ]
 dof = len(ph_parameters)
+prefix = 'boson_fk_type3_dof{}_ZT_t{}_'.format(dof, max_tier)
 
 drude = Drude(
     gamma=Quantity(20, 'cm-1').value_in_au,
@@ -52,8 +55,8 @@ wfn_0 = np.array([A, B]) / np.sqrt(A**2 + B**2)
 rho_0 = np.tensordot(wfn_0, wfn_0, axes=0)
 
 # Propagation
-dt_unit = Quantity(0.001, 'fs').value_in_au
-callback_interval = 100
+dt_unit = Quantity(0.01, 'fs').value_in_au
+callback_interval = 10
 count = 100_000
 
 
@@ -63,7 +66,6 @@ def test_heom(fname=None):
     print(n_dims)
 
     root = tensor_train_template(rho_0, n_dims, rank=rank_heom)
-    #root = simple_heom(rho_0, n_dims)
     leaves = root.leaves()
     h_list = model.heom_h_list(leaves[0], leaves[1], leaves[2:], beta=beta)
 
@@ -71,7 +73,7 @@ def test_heom(fname=None):
     solver.ode_method = 'RK45'
     solver.cmf_steps = solver.max_ode_steps  # use constant mean-field
     solver.ps_method = 'split'
-    #solver.svd_err = 1.0e-10
+    #solver.svd_err = 1.0e-14
 
     # Define the obersevable of interest
     logger = Logger(filename=prefix + fname, level='info').logger
@@ -94,6 +96,7 @@ def test_heom(fname=None):
 
 
 def test_mctdh(fname=None):
+    assert beta is None
     sys_leaf = Leaf(name='sys0')
 
     ph_leaves = []

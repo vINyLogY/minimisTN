@@ -5,7 +5,7 @@ from __future__ import absolute_import, division, print_function
 from builtins import filter, map, range, zip
 from minitn.heom.corr import Drude
 
-from minitn.heom.network import simple_heom, tensor_train_template
+from minitn.heom.network import tensor_train_template
 from minitn.heom.propagate import MultiLayer
 from minitn.lib.backend import DTYPE, np
 from minitn.lib.logging import Logger
@@ -17,11 +17,12 @@ from minitn.tensor import Leaf, Tensor
 # System: pure dephasing
 e = Quantity(5000, 'cm-1').value_in_au
 v = Quantity(500, 'cm-1').value_in_au
-max_tier = 20
-rank_heom = 10
-rank_wfn = 8
-beta =  Quantity(1/300, 'K-1').value_in_au
-prefix = 'drude_300K_t{}_'.format(max_tier)
+max_tier = 15
+rank_heom = max_tier
+rank_wfn = max_tier
+beta = Quantity(1 / 300, 'K-1').value_in_au
+prefix = 'drude_scale_300K_t{}_'.format(max_tier)
+
 
 ph_parameters = [
     #(Quantity(400, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
@@ -70,8 +71,8 @@ def test_heom(fname=None):
     solver = MultiLayer(root, h_list)
     solver.ode_method = 'RK45'
     solver.cmf_steps = solver.max_ode_steps  # use constant mean-field
-    solver.ps_method = 'split'
-    #solver.svd_err = 1.0e-10
+    solver.ps_method = 'unite'
+    solver.svd_err = 1.0e-12
 
     # Define the obersevable of interest
     logger = Logger(filename=prefix + fname, level='info').logger
@@ -79,7 +80,7 @@ def test_heom(fname=None):
     for n, (time, r) in enumerate(solver.propagator(
             steps=count,
             ode_inter=dt_unit,
-            split=True,
+            split=False,
     )):
         # renormalized by the trace of rho
         norm = np.trace(np.reshape(np.reshape(r.array, (4, -1))[:, 0], (2, 2)))
