@@ -57,10 +57,35 @@ class SBM(object):
 
         return h_list
 
-    def heom_h_list(self, sys_i, sys_j, bath_indices: list, beta=None):
+    def do_l_list(self, sys_i, sys_j, ph_is, ph_js):
+        l_list = []
+        l_list.append([(sys_i, -1.0j * self.h)])
+        l_list.append([(sys_j, 1.0j * self.h)])
+
+        for ph_i, (omega, g), d in zip(ph_is, self.ph_parameters, self.ph_dims):
+            ph = Phonon(d, omega)
+            # hamiltonian ph part
+            l_list.append([(ph_i, -1.0j * ph.hamiltonian)])
+            # e-ph part
+            op = ph.annihilation_operator + ph.creation_operator
+            l_list.append([(ph_i, g * op), (sys_i, -1.0j * self.op)])
+
+        for ph_j, (omega, g), d in zip(ph_js, self.ph_parameters, self.ph_dims):
+            ph = Phonon(d, omega)
+            # hamiltonian ph part
+            l_list.append([(ph_j, 1.0j * ph.hamiltonian)])
+            # e-ph part
+            op = ph.annihilation_operator + ph.creation_operator
+            l_list.append([(ph_j, g * op), (sys_j, 1.0j * self.op)])
+
+        return l_list
+
+    def heom_h_list(self, sys_i, sys_j, bath_indices: list, beta=None, f_type=None):
         corr = generate_BCF(self.ph_parameters, bath_corr=self.bath_corr, beta=beta)
         n_tiers = list(np.repeat(self.ph_dims, 2))
         if self.bath_dims is not None:
             n_tiers += self.bath_dims
-        diff = Hierachy(n_tiers, self.h, self.op, corr).h_list(sys_i, sys_j, bath_indices)
+        heom = Hierachy(n_tiers, self.h, self.op, corr)
+        heom.f_type = f_type
+        diff = heom.h_list(sys_i, sys_j, bath_indices)
         return diff
