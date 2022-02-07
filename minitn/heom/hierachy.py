@@ -117,9 +117,12 @@ class Hierachy(object):
                 fk = np.sqrt(ck) + np.sqrt(cck)
             elif f_type == 3:
                 fk = 0.5
+            elif isinstance(f_type, float):
+                fk = f_type
             else:
                 fk = 1.0
 
+            print(f"f_k (Type-{f_type}) = {fk}")
             dk = [
                 [(k, self.corr.derivative[k] * self._numberer(k))],
                 [(i, -1.0j * self.op), (k, ck / fk * self._raiser(k) + fk * self._lower(k))],

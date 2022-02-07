@@ -5,7 +5,7 @@ from __future__ import absolute_import, division, print_function
 from builtins import filter, map, range, zip
 from minitn.heom.corr import Drude
 
-from minitn.heom.network import tensor_train_template
+from minitn.heom.network import simple_heom
 from minitn.heom.propagate import MultiLayer
 from minitn.lib.backend import DTYPE, np
 from minitn.lib.logging import Logger
@@ -32,7 +32,7 @@ ph_parameters = [
     (Quantity(1600, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
 ]
 dof = len(ph_parameters)
-prefix = 'boson_tucker_dof{}_{}K_t{}_{}_'.format(dof, temperature, max_tier, ps_method)
+prefix = 'boson_direct_dof{}_{}K_t{}_{}_'.format(dof, temperature, max_tier, ps_method)
 
 drude = Drude(
     gamma=Quantity(20, 'cm-1').value_in_au,
@@ -66,7 +66,7 @@ def test_heom(fname=None, f_type=0):
     n_dims = ph_dims if model.bath_dims is None else ph_dims + model.bath_dims
     print(n_dims)
 
-    root = tensor_train_template(rho_0, n_dims, rank=rank_heom)
+    root = simple_heom(rho_0, n_dims)
     leaves = root.leaves()
     h_list = model.heom_h_list(leaves[0], leaves[1], leaves[2:], beta=beta, f_type=f_type)
 
@@ -177,6 +177,6 @@ if __name__ == '__main__':
     f_dir = os.path.abspath(os.path.dirname(__file__))
     os.chdir(os.path.join(f_dir, '2022data', 'diff_fk'))
 
-    for f_type in [0.1, 0.01, 0.001, 0.0001]:
+    for f_type in [1.0, 0.1, 0.01, 0.001, 0.0001]:
         test_heom(fname='heom.dat', f_type=f_type)
     #test_mctdh(fname='wfn.dat')
