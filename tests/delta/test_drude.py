@@ -11,7 +11,7 @@ from minitn.lib.backend import DTYPE, np
 from minitn.lib.logging import Logger
 from minitn.lib.tools import huffman_tree
 from minitn.lib.units import Quantity
-from minitn.models.sbm import SBM
+from minitn.models.sbm import SpinBoson
 from minitn.tensor import Leaf, Tensor
 
 # System: pure dephasing
@@ -39,7 +39,7 @@ drude = Drude(
     beta=beta,
 )
 
-model = SBM(
+model = SpinBoson(
     sys_ham=np.array([[-0.5 * e, v], [v, 0.5 * e]], dtype=DTYPE),
     sys_op=np.array([[-0.5, 0.0], [0.0, 0.5]], dtype=DTYPE),
     ph_parameters=ph_parameters,

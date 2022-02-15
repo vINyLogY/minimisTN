@@ -11,13 +11,15 @@ from minitn.lib.backend import DTYPE, np
 from minitn.lib.logging import Logger
 from minitn.lib.tools import huffman_tree
 from minitn.lib.units import Quantity
-from minitn.models.sbm import SBM
+from minitn.models.sbm import SpinBoson
 from minitn.tensor import Leaf, Tensor
+
+from scipy import linalg
 
 # System:
 e = Quantity(5000, 'cm-1').value_in_au
 v = Quantity(500, 'cm-1').value_in_au
-max_tier = 20
+max_tier = 10
 rank_heom = max_tier
 wfn_rank = max_tier
 ps_method = 'split'
@@ -40,7 +42,7 @@ drude = Drude(
     beta=beta,
 )
 
-model = SBM(
+model = SpinBoson(
     sys_ham=np.array([[-0.5 * e, v], [v, 0.5 * e]], dtype=DTYPE),
     sys_op=np.array([[-0.5, 0.0], [0.0, 0.5]], dtype=DTYPE),
     ph_parameters=ph_parameters,
@@ -57,10 +59,10 @@ rho_0 = np.tensordot(wfn_0, wfn_0, axes=0)
 # Propagation
 dt_unit = Quantity(0.01, 'fs').value_in_au
 callback_interval = 10
-count = 50_00
+count = 1_00
 
 
-def test_heom(fname=None, f_type=0):
+def test_diag(fname=None, f_type=0):
     fname = 'type{}'.format(f_type) + fname
     ph_dims = list(np.repeat(model.ph_dims, 2))
     n_dims = ph_dims if model.bath_dims is None else ph_dims + model.bath_dims
@@ -68,28 +70,10 @@ def test_heom(fname=None, f_type=0):
 
     root = simple_heom(rho_0, n_dims)
     leaves = root.leaves()
-    h_list = model.heom_h_list(leaves[0], leaves[1], leaves[2:], beta=beta, f_type=f_type)
+    ham = model.dense_h(leaves[0], leaves[1], leaves[2:], beta=beta, f_type=f_type)
 
-    solver = MultiLayer(root, h_list)
-    solver.ode_method = 'RK45'
-    solver.cmf_steps = solver.max_ode_steps  # use constant mean-field
-    solver.ps_method = ps_method
-    #solver.svd_err = 1.0e-14
-
-    # Define the obersevable of interest
-    logger = Logger(filename=prefix + fname, level='info').logger
-    for n, (time, r) in enumerate(solver.propagator(
-            steps=count,
-            ode_inter=dt_unit,
-            split=True,
-    )):
-        # renormalized by the trace of rho
-        norm = np.trace(np.reshape(np.reshape(r.array, (4, -1))[:, 0], (2, 2)))
-        r.set_array(r.array / norm)
-        if n % callback_interval == 0:
-            t = Quantity(time).convert_to(unit='fs').value
-            rho = np.reshape(r.array, (4, -1))[:, 0]
-            logger.info("{}    {} {} {} {}".format(t, rho[0], rho[1], rho[2], rho[3]))
+    w = linalg.eigvals(ham)
+    np.savetxt(f"{fname}-spec.txt", w)
 
     return
 
@@ -177,6 +161,6 @@ if __name__ == '__main__':
     f_dir = os.path.abspath(os.path.dirname(__file__))
     os.chdir(os.path.join(f_dir, '2022data', 'diff_fk'))
 
-    for f_type in [1.0, 0.1, 0.01, 0.001, 0.0001]:
-        test_heom(fname='heom.dat', f_type=f_type)
+    for f_type in [0, 0.5, 0.1, 0.01, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9]:
+        test_diag(fname='heom.dat', f_type=f_type)
     #test_mctdh(fname='wfn.dat')
