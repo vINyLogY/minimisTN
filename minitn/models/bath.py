@@ -57,7 +57,9 @@ def linear_discretization(spec_func, stop, num, start=0.0):
     return ans
 
 
-def generate_BCF(ph_parameters, bath_corr: Optional[Correlation] = None, beta=None):
+def generate_BCF(ph_parameters,
+                 bath_corr: Optional[Correlation] = None,
+                 beta=None):
     """
     Args:
         ph_parameters: [(frequency, coupling)]
@@ -67,12 +69,17 @@ def generate_BCF(ph_parameters, bath_corr: Optional[Correlation] = None, beta=No
     conj_coeff = []
     derivative = []
     for omega, g in ph_parameters:
-        temp_factor = 1.0 / np.tanh(beta * omega / 2) if beta is not None else 1.0
-        coeff.extend([g**2 / 2.0 * (temp_factor - 1.0), g**2 / 2.0 * (temp_factor + 1.0)])
-        conj_coeff.extend([g**2 / 2.0 * (temp_factor + 1.0), g**2 / 2.0 * (temp_factor - 1.0)])
+        temp_factor = 1.0 / np.tanh(beta * omega /
+                                    2) if beta is not None else 1.0
+        coeff.extend([
+            g**2 / 2.0 * (temp_factor - 1.0), g**2 / 2.0 * (temp_factor + 1.0)
+        ])
+        conj_coeff.extend([
+            g**2 / 2.0 * (temp_factor + 1.0), g**2 / 2.0 * (temp_factor - 1.0)
+        ])
         derivative.extend([1.0j * omega, -1.0j * omega])
 
-    if bath_corr is not None:
+    if bath_corr:
         coeff += list(bath_corr.coeff)
         conj_coeff += list(bath_corr.conj_coeff)
         derivative += list(bath_corr.derivative)

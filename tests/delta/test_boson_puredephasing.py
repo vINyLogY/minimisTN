@@ -18,39 +18,36 @@ from scipy import linalg
 
 # System:
 e = Quantity(5000, 'cm-1').value_in_au
-v = Quantity(500, 'cm-1').value_in_au
+v = 0.0
 max_tier = 10
 rank_heom = max_tier
 wfn_rank = max_tier
-ps_method = 'unite'
-#decomp_method = None
-decomp_method = 'TT'
+ps_method = 'split'
+decomp_method = None
 temperature = 300
 beta = Quantity(1 / temperature, 'K-1').value_in_au if temperature else None
 # beta = None: ZT
 
 ph_parameters = [
-    #(Quantity(400, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
-    (Quantity(800, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
-    (Quantity(1200, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
     (Quantity(1600, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
 ]
 dof = len(ph_parameters)
-prefix = f'boson_{decomp_method}_dof{dof}_{temperature}K_t{max_tier}_{ps_method}_'
 
+k_max = 1
 drude = Drude(
     gamma=Quantity(20, 'cm-1').value_in_au,
     lambda_=Quantity(400, 'cm-1').value_in_au,
     beta=beta,
+    k_max=k_max,
 )
 
 model = SpinBoson(
-    sys_ham=np.array([[-0.5 * e, v], [v, 0.5 * e]], dtype=DTYPE),
-    sys_op=np.array([[-0.5, 0.0], [0.0, 0.5]], dtype=DTYPE),
+    sys_ham=np.array([[0.0, v], [v, e]], dtype=DTYPE),
+    sys_op=np.array([[0.0, 0.0], [0.0, 1.0]], dtype=DTYPE),
     ph_parameters=ph_parameters,
     ph_dims=(dof * [max_tier]),
     bath_corr=drude,
-    bath_dims=[max_tier],
+    bath_dims=[max_tier] * k_max,
 )
 
 # init state
@@ -61,7 +58,13 @@ rho_0 = np.tensordot(wfn_0, wfn_0, axes=0)
 # Propagation
 dt_unit = Quantity(0.01, 'fs').value_in_au
 callback_interval = 10
-count = 100_00
+count = 1000_00
+
+prefix = f'bosondrude_{decomp_method}_dof{dof}_bcf{k_max}_{temperature}K_t{max_tier}_{ps_method}_'
+
+#prefix = f'boson_{decomp_method}_dof{dof}_bcf{k_max}_{temperature}K_t{max_tier}_{ps_method}_'
+
+#prefix = f'drude_{decomp_method}_dof{dof}_bcf{k_max}_{temperature}K_t{max_tier}_{ps_method}_'
 
 
 def test_diag(fname=None, f_type=0):
@@ -108,7 +111,7 @@ def test_heom(fname=None, f_type=0):
     solver.ode_method = 'RK45'
     solver.cmf_steps = solver.max_ode_steps  # use constant mean-field
     solver.ps_method = ps_method
-    solver.svd_err = 1.0e-14  #only for unite propagation
+    #solver.svd_err = 1.0e-14  #only for unite propagation
 
     # Define the obersevable of interest
     logger = Logger(filename=fname, level='info').logger
@@ -207,13 +210,14 @@ def test_mctdh(fname=None):
 
 if __name__ == '__main__':
     import os
-    import sys
 
     from matplotlib import pyplot as plt
 
     f_dir = os.path.abspath(os.path.dirname(__file__))
-    os.chdir(os.path.join(f_dir, '2022data', 'diff_fk'))
+    os.chdir(os.path.join(f_dir, '2022data', 'puredephasing'))
 
-    for f_type in [0, 1, 2, 3]:
+    for f_type in [
+            0,
+    ]:
         #test_diag(fname='heom.dat', f_type=f_type)
         test_heom(fname='heom.dat', f_type=f_type)

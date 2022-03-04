@@ -15,30 +15,25 @@ from minitn.models.sbm import SpinBoson
 from minitn.tensor import Leaf, Tensor
 
 # System:
-e = Quantity(5000, 'cm-1').value_in_au
-v = Quantity(500, 'cm-1').value_in_au
+e = 0.0
+v = 1.0
 max_tier = 20
 rank_heom = max_tier
 wfn_rank = max_tier
 ps_method = 'split'
-temperature = 0
-beta = Quantity(1 / temperature, 'K-1').value_in_au if temperature else None
+temperature = 'FT'
+beta = 1.0 if temperature == 'FT' else None
 # beta = None: ZT
 
 ph_parameters = [
     #(Quantity(400, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
     #(Quantity(800, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
     #(Quantity(1200, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
-    (Quantity(1600, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
+    (1.0, 0.5),
 ]
 dof = len(ph_parameters)
-prefix = 'boson_tucker_dof{}_{}K_t{}_{}_'.format(dof, temperature, max_tier, ps_method)
-
-drude = Drude(
-    gamma=Quantity(20, 'cm-1').value_in_au,
-    lambda_=Quantity(400, 'cm-1').value_in_au,
-    beta=beta,
-)
+prefix = 'boson_tucker_dof{}_{}K_t{}_{}_'.format(dof, temperature, max_tier,
+                                                 ps_method)
 
 model = SpinBoson(
     sys_ham=np.array([[-0.5 * e, v], [v, 0.5 * e]], dtype=DTYPE),
@@ -50,7 +45,7 @@ model = SpinBoson(
 )
 
 # init state
-A, B = 1.0, 1.0
+A, B = 1.0, 0.0
 wfn_0 = np.array([A, B]) / np.sqrt(A**2 + B**2)
 rho_0 = np.tensordot(wfn_0, wfn_0, axes=0)
 
@@ -68,7 +63,11 @@ def test_heom(fname=None, f_type=0):
 
     root = tensor_train_template(rho_0, n_dims, rank=rank_heom)
     leaves = root.leaves()
-    h_list = model.heom_h_list(leaves[0], leaves[1], leaves[2:], beta=beta, f_type=f_type)
+    h_list = model.heom_h_list(leaves[0],
+                               leaves[1],
+                               leaves[2:],
+                               beta=beta,
+                               f_type=f_type)
 
     solver = MultiLayer(root, h_list)
     solver.ode_method = 'RK45'
@@ -78,18 +77,20 @@ def test_heom(fname=None, f_type=0):
 
     # Define the obersevable of interest
     logger = Logger(filename=prefix + fname, level='info').logger
-    for n, (time, r) in enumerate(solver.propagator(
-            steps=count,
-            ode_inter=dt_unit,
-            split=True,
-    )):
+    for n, (time, r) in enumerate(
+            solver.propagator(
+                steps=count,
+                ode_inter=dt_unit,
+                split=True,
+            )):
         # renormalized by the trace of rho
         norm = np.trace(np.reshape(np.reshape(r.array, (4, -1))[:, 0], (2, 2)))
         r.set_array(r.array / norm)
         if n % callback_interval == 0:
             t = Quantity(time).convert_to(unit='fs').value
             rho = np.reshape(r.array, (4, -1))[:, 0]
-            logger.info("{}    {} {} {} {}".format(t, rho[0], rho[1], rho[2], rho[3]))
+            logger.info("{}    {} {} {} {}".format(t, rho[0], rho[1], rho[2],
+                                                   rho[3]))
 
     return
 
@@ -155,15 +156,17 @@ def test_mctdh(fname=None):
     # Define the obersevable of interest
     logger = Logger(filename=prefix + fname, level='info').logger
     logger2 = Logger(filename=prefix + 'en_' + fname, level='info').logger
-    for n, (time, r) in enumerate(solver.propagator(
-            steps=count,
-            ode_inter=dt_unit,
-            split=True,
-    )):
+    for n, (time, r) in enumerate(
+            solver.propagator(
+                steps=count,
+                ode_inter=dt_unit,
+                split=True,
+            )):
         if n % callback_interval == 0:
             t = Quantity(time).convert_to(unit='fs').value
             rho = r.partial_env(0, proper=False)
-            logger.info("{}    {} {} {} {}".format(t, rho[0, 0], rho[0, 1], rho[1, 0], rho[1, 1]))
+            logger.info("{}    {} {} {} {}".format(t, rho[0, 0], rho[0, 1],
+                                                   rho[1, 0], rho[1, 1]))
             en = np.trace(rho @ model.h)
             logger2.info('{}    {}'.format(t, en))
 

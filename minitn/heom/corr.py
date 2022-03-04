@@ -53,20 +53,33 @@ class Correlation(object):
 class Drude(Correlation):
 
     def __init__(self, gamma, lambda_, k_max=1, beta=None):
-        if k_max != 1:
-            raise NotImplementedError
+
         if beta is None:
-            s = 0.0
+            s = [0.0] * k_max
         else:
             # Naive high temperature
-            s = 2 * lambda_ / beta
-        a = -gamma * lambda_
+            s = [gamma * lambda_ / np.tan(beta * gamma / 2)]
+            a = [-gamma * lambda_]
+            g = [-gamma]
+            if k_max > 1:
+                s += [
+                    -8.0 * np.pi * k * gamma * lambda_ / ((beta * gamma)**2 -
+                                                          (2.0 * np.pi * k)**2)
+                    for k in range(1, k_max)
+                ]
+                a += [0.0] * (k_max - 1)
+                g += [-2 * np.pi * k / beta for k in range(1, k_max)]
+
+        s = np.array(s, dtype=DTYPE)
+        a = np.array(a, dtype=DTYPE)
+        g = np.array(g, dtype=DTYPE)
+
         super().__init__(
             k_max=k_max,
             beta=beta,
-            coeff=np.array([s + 1.0j * a]),
-            conj_coeff=np.array([s - 1.0j * a]),
-            derivative=np.array([-gamma]),
+            coeff=(s + 1.0j * a),
+            conj_coeff=(s - 1.0j * a),
+            derivative=g,
         )
         self.gamma = gamma
         self.lambda_ = lambda_

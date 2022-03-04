@@ -13,6 +13,7 @@ from minitn.lib.tools import huffman_tree
 from minitn.lib.units import Quantity
 from minitn.models.sbm import SpinBoson
 from minitn.tensor import Leaf, Tensor
+import os, sys
 
 from scipy import linalg
 
@@ -29,14 +30,17 @@ beta = 1.0 if temperature == 'FT' else None
 ph_parameters = []
 k_max = 0
 
+lambda_ = 2.0
+omega = 0.5
+gamma = float(sys.argv[1])
+
 dof = len(ph_parameters)
-prefix = 'boson_direct_dof{}_{}_t{}_{}_'.format(k_max, temperature, max_tier,
-                                                ps_method)
+prefix = f'boson_direct_l{lambda_}_o{omega}_g{gamma}_t{max_tier}'
 
 bath = Brownian(
     lambda_=2.0,
-    omega=0.5,
-    gamma=0.4,
+    omega=omega,
+    gamma=gamma,
     k_max=0,
     beta=beta,
 )
@@ -58,11 +62,11 @@ rho_0 = np.tensordot(wfn_0, wfn_0, axes=0)
 # Propagation
 dt_unit = 0.01
 callback_interval = 10
-count = 10000
+count = 30000
 
 
 def test_diag(fname=None, f_type=0):
-    fname = prefix + 'type{}'.format(f_type) + fname
+    fname = prefix + '_f{}_'.format(f_type) + fname
     ph_dims = list(np.repeat(model.ph_dims, 2))
     n_dims = ph_dims if model.bath_dims is None else ph_dims + model.bath_dims
     print(n_dims)
@@ -76,13 +80,13 @@ def test_diag(fname=None, f_type=0):
                         f_type=f_type)
 
     w = linalg.eigvals(ham)
-    np.savetxt(f"{fname}-spec.txt", w)
+    np.savetxt(f"{fname}", w)
 
     return
 
 
 def test_heom(fname=None, f_type=0):
-    fname = 'type{}'.format(f_type) + fname
+    fname = prefix + '_f{}_'.format(f_type) + fname
     ph_dims = list(np.repeat(model.ph_dims, 2))
     n_dims = ph_dims if model.bath_dims is None else ph_dims + model.bath_dims
     print(n_dims)
@@ -102,7 +106,7 @@ def test_heom(fname=None, f_type=0):
     #solver.svd_err = 1.0e-14
 
     # Define the obersevable of interest
-    logger = Logger(filename=prefix + fname, level='info').logger
+    logger = Logger(filename=fname, level='info').logger
     for n, (time, r) in enumerate(
             solver.propagator(
                 steps=count,
@@ -122,13 +126,9 @@ def test_heom(fname=None, f_type=0):
 
 if __name__ == '__main__':
     import os
-    import sys
-
-    from matplotlib import pyplot as plt
 
     f_dir = os.path.abspath(os.path.dirname(__file__))
     os.chdir(os.path.join(f_dir, '2022data', 'brownian'))
 
-    for f_type in [10.0, 0.1, 0.01, 100.0]:
-        test_diag(fname='brownian_spec.dat', f_type=f_type)
-        test_heom(fname='brownian_heom.dat', f_type=f_type)
+    test_diag(fname='brownian_spec.dat', f_type=0)
+    test_heom(fname='brownian_heom.dat', f_type=0)
