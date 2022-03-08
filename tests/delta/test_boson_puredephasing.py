@@ -15,6 +15,7 @@ from minitn.models.sbm import SpinBoson
 from minitn.tensor import Leaf, Tensor
 
 from scipy import linalg
+import sys
 
 # System:
 e = Quantity(5000, 'cm-1').value_in_au
@@ -29,14 +30,14 @@ beta = Quantity(1 / temperature, 'K-1').value_in_au if temperature else None
 # beta = None: ZT
 
 ph_parameters = [
-    (Quantity(1600, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
+    #(Quantity(1600, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
 ]
 dof = len(ph_parameters)
 
-k_max = 1
+k_max = int(sys.argv[1])
 drude = Drude(
     gamma=Quantity(20, 'cm-1').value_in_au,
-    lambda_=Quantity(400, 'cm-1').value_in_au,
+    lambda_=Quantity(500, 'cm-1').value_in_au,
     beta=beta,
     k_max=k_max,
 )

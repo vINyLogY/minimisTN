@@ -78,18 +78,20 @@ def test_heom(fname=None):
     # Define the obersevable of interest
     logger = Logger(filename=prefix + fname, level='info').logger
     logger2 = Logger(filename=prefix + "en_" + fname, level='info').logger
-    for n, (time, r) in enumerate(solver.propagator(
-            steps=count,
-            ode_inter=dt_unit,
-            split=split,
-    )):
+    for n, (time, r) in enumerate(
+            solver.propagator(
+                steps=count,
+                ode_inter=dt_unit,
+                split=split,
+            )):
         # renormalized by the trace of rho
         norm = np.trace(np.reshape(np.reshape(r.array, (4, -1))[:, 0], (2, 2)))
         r.set_array(r.array / norm)
         if n % callback_interval == 0:
             t = Quantity(time).convert_to(unit='fs').value
             rho = np.reshape(r.array, (4, -1))[:, 0]
-            logger.info("{}    {} {} {} {}".format(t, rho[0], rho[1], rho[2], rho[3]))
+            logger.info("{}    {} {} {} {}".format(t, rho[0], rho[1], rho[2],
+                                                   rho[3]))
             en = np.trace(np.reshape(rho, (2, 2)) @ model.h)
             logger2.info('{}    {}'.format(t, en))
     return
@@ -155,15 +157,17 @@ def test_mctdh(fname=None):
     # Define the obersevable of interest
     logger = Logger(filename=prefix + fname, level='info').logger
     logger2 = Logger(filename=prefix + 'en_' + fname, level='info').logger
-    for n, (time, r) in enumerate(solver.propagator(
-            steps=count,
-            ode_inter=dt_unit,
-            split=True,
-    )):
+    for n, (time, r) in enumerate(
+            solver.propagator(
+                steps=count,
+                ode_inter=dt_unit,
+                split=True,
+            )):
         if n % callback_interval == 0:
             t = Quantity(time).convert_to(unit='fs').value
             rho = r.partial_env(0, proper=False)
-            logger.info("{}    {} {} {} {}".format(t, rho[0, 0], rho[0, 1], rho[1, 0], rho[1, 1]))
+            logger.info("{}    {} {} {} {}".format(t, rho[0, 0], rho[0, 1],
+                                                   rho[1, 0], rho[1, 1]))
             en = np.trace(rho @ model.h)
             logger2.info('{}    {}'.format(t, en))
 

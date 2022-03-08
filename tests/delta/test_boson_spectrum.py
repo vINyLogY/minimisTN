@@ -3,6 +3,7 @@
 from __future__ import absolute_import, division, print_function
 
 from builtins import filter, map, range, zip
+
 from minitn.heom.corr import Drude
 
 from minitn.heom.network import simple_heom, tensor_train_template
@@ -22,7 +23,7 @@ v = Quantity(500, 'cm-1').value_in_au
 max_tier = 10
 rank_heom = max_tier
 wfn_rank = max_tier
-ps_method = 'unite'
+ps_method = 'split'
 #decomp_method = None
 decomp_method = 'TT'
 temperature = 300
@@ -31,18 +32,19 @@ beta = Quantity(1 / temperature, 'K-1').value_in_au if temperature else None
 
 ph_parameters = [
     #(Quantity(400, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
-    (Quantity(800, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
+    #(Quantity(800, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
     (Quantity(1200, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
     (Quantity(1600, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
 ]
 dof = len(ph_parameters)
-prefix = f'boson_{decomp_method}_dof{dof}_{temperature}K_t{max_tier}_{ps_method}_'
 
-drude = Drude(
-    gamma=Quantity(20, 'cm-1').value_in_au,
-    lambda_=Quantity(400, 'cm-1').value_in_au,
-    beta=beta,
-)
+k_max = 2
+prefix = f'drudeboson_{decomp_method}_dof{dof}_bcf{k_max}_{temperature}K_t{max_tier}_{ps_method}_'
+
+drude = Drude(gamma=Quantity(20, 'cm-1').value_in_au,
+              lambda_=Quantity(400, 'cm-1').value_in_au,
+              beta=beta,
+              k_max=k_max)
 
 model = SpinBoson(
     sys_ham=np.array([[-0.5 * e, v], [v, 0.5 * e]], dtype=DTYPE),
@@ -50,7 +52,7 @@ model = SpinBoson(
     ph_parameters=ph_parameters,
     ph_dims=(dof * [max_tier]),
     bath_corr=drude,
-    bath_dims=[max_tier],
+    bath_dims=[max_tier] * k_max,
 )
 
 # init state
@@ -214,6 +216,6 @@ if __name__ == '__main__':
     f_dir = os.path.abspath(os.path.dirname(__file__))
     os.chdir(os.path.join(f_dir, '2022data', 'diff_fk'))
 
-    for f_type in [0, 1, 2, 3]:
+    for f_type in [0]:
         #test_diag(fname='heom.dat', f_type=f_type)
         test_heom(fname='heom.dat', f_type=f_type)

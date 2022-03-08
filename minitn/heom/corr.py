@@ -8,7 +8,9 @@ using eigenbasis of ∂/∂t.
 from __future__ import absolute_import, division, print_function
 
 from builtins import filter, map, range, zip
-from typing import Optional
+from typing import Optional, Tuple
+
+from sympy import beta
 
 from minitn.lib.backend import np, DTYPE
 from minitn.lib.tools import __, lazyproperty
@@ -52,38 +54,94 @@ class Correlation(object):
 
 class Drude(Correlation):
 
-    def __init__(self, gamma, lambda_, k_max=1, beta=None):
+    def __init__(self,
+                 gamma,
+                 lambda_,
+                 k_max: int = 1,
+                 beta: Optional[float] = None,
+                 decompmethod=None):
+        assert k_max >= 0
 
-        if beta is None:
-            s = [0.0] * k_max
+        if k_max == 0:
+            c, g = [], [], []
+        elif beta is None:
+            c = [-1.0j * gamma * lambda_] + [0.0] * (k_max - 1)
+            g = [-gamma] + [0.0] * (k_max - 1)
         else:
-            # Naive high temperature
-            s = [gamma * lambda_ / np.tan(beta * gamma / 2)]
-            a = [-gamma * lambda_]
-            g = [-gamma]
-            if k_max > 1:
-                s += [
-                    -8.0 * np.pi * k * gamma * lambda_ / ((beta * gamma)**2 -
-                                                          (2.0 * np.pi * k)**2)
-                    for k in range(1, k_max)
-                ]
-                a += [0.0] * (k_max - 1)
-                g += [-2 * np.pi * k / beta for k in range(1, k_max)]
+            if decompmethod is None:
+                decompmethod = self.matsubara
+            poles, residues = decompmethod(k_max - 1)
 
-        s = np.array(s, dtype=DTYPE)
-        a = np.array(a, dtype=DTYPE)
+            def f_bose(x, poles, residues):
+                return 1 / x + 0.5 + np.sum(2.0 * residues * x /
+                                            (x**2 + poles**2))
+
+            c = [
+                -2.0j * lambda_ * gamma *
+                f_bose(-1.0j * gamma * beta, poles, residues)
+            ]
+            g = [-gamma]
+
+            for pole, res in zip(poles, residues):
+                c.append(-4.0 * (pole / beta) * res * gamma * lambda_ /
+                         (gamma**2 - (pole / beta)**2))
+                g.append(-pole / beta)
+
+        c = np.array(c, dtype=DTYPE)
         g = np.array(g, dtype=DTYPE)
 
         super().__init__(
             k_max=k_max,
             beta=beta,
-            coeff=(s + 1.0j * a),
-            conj_coeff=(s - 1.0j * a),
+            coeff=c,
+            conj_coeff=np.conj(c),
             derivative=g,
         )
         self.gamma = gamma
         self.lambda_ = lambda_
         return
+
+    @staticmethod
+    def matsubara(n: int):
+        poles = [2 * (i + 1) * np.pi for i in range(n)]
+        residues = [1.0] * n
+        return poles, residues
+
+    @staticmethod
+    def pade(n, method=-1):
+        assert method in [-1]  # (N-1)/N method
+
+        def tridiag_eigsh(diag, subdiag):
+            mat = np.diag(subdiag, -1) + np.diag(diag) + np.diag(subdiag, 1)
+            return np.sort(np.linalg.eigvalsh(mat))[::-1]
+
+        if n > 0:
+            diag_q = np.zeros(2 * n, dtype=float)
+            subdiag_q = np.array([
+                1.0 / np.sqrt((3 + 2 * i) * (5 + 2 * i))
+                for i in range(2 * n - 1)
+            ])
+            poles = 2.0 / tridiag_eigsh(diag_q, subdiag_q)[:n]
+            roots_q = np.power(poles, 2)
+
+            diag_p = np.zeros(2 * n - 1, dtype=float)
+            subdiag_p = np.array([
+                1.0 / np.sqrt((5 + 2 * i) * (7 + 2 * i + 1))
+                for i in range(2 * n - 2)
+            ])
+            roots_p = np.power(2.0 / tridiag_eigsh(diag_p, subdiag_p)[:n - 1],
+                               2)
+
+            residues = np.zeros(n, dtype=float)
+            for i in range(n):
+                res_i = 0.5 * n * (2 * n + 3) * (roots_p[i] - roots_q[i])
+                for j in range(n):
+                    if j != i:
+                        res_i *= ((roots_p[j] - roots_q[i]) /
+                                  (roots_q[j] - roots_q[i]))
+                residues[i] = res_i
+
+        return poles, residues
 
     @property
     def spectral_density(self):
