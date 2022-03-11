@@ -62,7 +62,7 @@ class SpinBoson(object):
             h_list.append([(ph_index, -1.0j * ph.hamiltonian)])
             # e-ph part
             op = ph.annihilation_operator + ph.creation_operator
-            h_list.append([(ph_index, g * op), (sys_indebnv x, -1.0j * self.op)])
+            h_list.append([(ph_index, g * op), (sys_index, -1.0j * self.op)])
 
         return h_list
 

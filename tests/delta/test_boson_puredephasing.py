@@ -3,13 +3,16 @@
 from __future__ import absolute_import, division, print_function
 
 from builtins import filter, map, range, zip
+from time import time
+
+from sympy import false
 from minitn.heom.corr import Drude
 
 from minitn.heom.network import simple_heom, tensor_train_template
 from minitn.heom.propagate import MultiLayer
 from minitn.lib.backend import DTYPE, np
 from minitn.lib.logging import Logger
-from minitn.lib.tools import huffman_tree
+from minitn.lib.tools import huffman_tree, time_this
 from minitn.lib.units import Quantity
 from minitn.models.sbm import SpinBoson
 from minitn.tensor import Leaf, Tensor
@@ -19,28 +22,35 @@ import sys
 
 # System:
 e = Quantity(5000, 'cm-1').value_in_au
-v = 0.0
-max_tier = 10
+relaxed = False
+v = Quantity(500, 'cm-1').value_in_au if relaxed else 0.0
+max_tier = 20
 rank_heom = max_tier
 wfn_rank = max_tier
 ps_method = 'split'
+
 decomp_method = None
+#decomp_method = 'TT'
+
 temperature = 300
 beta = Quantity(1 / temperature, 'K-1').value_in_au if temperature else None
 # beta = None: ZT
+print(f'beta:{beta}')
 
 ph_parameters = [
     #(Quantity(1600, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
 ]
 dof = len(ph_parameters)
+#sd_method = Drude.matsubara
+sd_method = Drude.pade
+sd_method_string = 'matsubara' if sd_method is Drude.matsubara else 'pade'
 
-k_max = int(sys.argv[1])
-drude = Drude(
-    gamma=Quantity(20, 'cm-1').value_in_au,
-    lambda_=Quantity(500, 'cm-1').value_in_au,
-    beta=beta,
-    k_max=k_max,
-)
+k_max = 6
+drude = Drude(gamma=Quantity(20, 'cm-1').value_in_au,
+              lambda_=Quantity(500, 'cm-1').value_in_au,
+              beta=beta,
+              k_max=k_max,
+              decompmethod=sd_method)
 
 model = SpinBoson(
     sys_ham=np.array([[0.0, v], [v, e]], dtype=DTYPE),
@@ -58,11 +68,11 @@ rho_0 = np.tensordot(wfn_0, wfn_0, axes=0)
 
 # Propagation
 dt_unit = Quantity(0.01, 'fs').value_in_au
-callback_interval = 10
-count = 1000_00
+callback_interval = 1
+count = 10
 
-prefix = f'bosondrude_{decomp_method}_dof{dof}_bcf{k_max}_{temperature}K_t{max_tier}_{ps_method}_'
-
+prefix = f'bosondrude_dryrun_{"relaxed" if relaxed else "pure"}_{decomp_method}_dof{dof}_bcf{k_max}_{sd_method_string}_{temperature}K_t{max_tier}_{ps_method}_'
+print(prefix)
 #prefix = f'boson_{decomp_method}_dof{dof}_bcf{k_max}_{temperature}K_t{max_tier}_{ps_method}_'
 
 #prefix = f'drude_{decomp_method}_dof{dof}_bcf{k_max}_{temperature}K_t{max_tier}_{ps_method}_'
@@ -89,6 +99,7 @@ def test_diag(fname=None, f_type=0):
     return
 
 
+@time_this
 def test_heom(fname=None, f_type=0):
     fname = prefix + 'f{}_'.format(f_type) + fname
     ph_dims = list(np.repeat(model.ph_dims, 2))
