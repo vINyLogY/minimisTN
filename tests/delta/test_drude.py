@@ -11,7 +11,7 @@ from minitn.lib.backend import DTYPE, np
 from minitn.lib.logging import Logger
 from minitn.lib.tools import huffman_tree
 from minitn.lib.units import Quantity
-from minitn.models.sbm import SBM
+from minitn.models.sbm import SpinBoson
 from minitn.tensor import Leaf, Tensor
 
 # System: pure dephasing
@@ -21,6 +21,7 @@ max_tier = 40
 rank_heom = max_tier
 rank_wfn = max_tier
 beta = Quantity(1 / 300, 'K-1').value_in_au
+
 prefix = 'drude_100_300K_t{}_'.format(max_tier)
 
 
@@ -38,7 +39,7 @@ drude = Drude(
     beta=beta,
 )
 
-model = SBM(
+model = SpinBoson(
     sys_ham=np.array([[-0.5 * e, v], [v, 0.5 * e]], dtype=DTYPE),
     sys_op=np.array([[-0.5, 0.0], [0.0, 0.5]], dtype=DTYPE),
     ph_parameters=ph_parameters,
@@ -77,18 +78,20 @@ def test_heom(fname=None):
     # Define the obersevable of interest
     logger = Logger(filename=prefix + fname, level='info').logger
     logger2 = Logger(filename=prefix + "en_" + fname, level='info').logger
-    for n, (time, r) in enumerate(solver.propagator(
-            steps=count,
-            ode_inter=dt_unit,
-            split=False,
-    )):
+    for n, (time, r) in enumerate(
+            solver.propagator(
+                steps=count,
+                ode_inter=dt_unit,
+                split=split,
+            )):
         # renormalized by the trace of rho
         norm = np.trace(np.reshape(np.reshape(r.array, (4, -1))[:, 0], (2, 2)))
         r.set_array(r.array / norm)
         if n % callback_interval == 0:
             t = Quantity(time).convert_to(unit='fs').value
             rho = np.reshape(r.array, (4, -1))[:, 0]
-            logger.info("{}    {} {} {} {}".format(t, rho[0], rho[1], rho[2], rho[3]))
+            logger.info("{}    {} {} {} {}".format(t, rho[0], rho[1], rho[2],
+                                                   rho[3]))
             en = np.trace(np.reshape(rho, (2, 2)) @ model.h)
             logger2.info('{}    {}'.format(t, en))
     return
@@ -154,15 +157,17 @@ def test_mctdh(fname=None):
     # Define the obersevable of interest
     logger = Logger(filename=prefix + fname, level='info').logger
     logger2 = Logger(filename=prefix + 'en_' + fname, level='info').logger
-    for n, (time, r) in enumerate(solver.propagator(
-            steps=count,
-            ode_inter=dt_unit,
-            split=True,
-    )):
+    for n, (time, r) in enumerate(
+            solver.propagator(
+                steps=count,
+                ode_inter=dt_unit,
+                split=True,
+            )):
         if n % callback_interval == 0:
             t = Quantity(time).convert_to(unit='fs').value
             rho = r.partial_env(0, proper=False)
-            logger.info("{}    {} {} {} {}".format(t, rho[0, 0], rho[0, 1], rho[1, 0], rho[1, 1]))
+            logger.info("{}    {} {} {} {}".format(t, rho[0, 0], rho[0, 1],
+                                                   rho[1, 0], rho[1, 1]))
             en = np.trace(rho @ model.h)
             logger2.info('{}    {}'.format(t, en))
 

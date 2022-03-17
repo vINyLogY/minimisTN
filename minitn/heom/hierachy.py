@@ -24,6 +24,7 @@ DTYPE = np.complex128
 
 class Hierachy(object):
     hbar = 1.0
+    f_type = None
 
     def __init__(self, n_dims, sys_hamiltonian, sys_op, corr):
         """
@@ -109,10 +110,18 @@ class Hierachy(object):
             ck = complex(self.corr.coeff[k])
             cck = complex(self.corr.conj_coeff[k])
 
-            #fk = np.sqrt(ck) + np.sqrt(cck)  # Type-2 Coefficient
-            #fk = np.sqrt(ck + cck)  # Type-1 Coefficient
-            #fk = 1.0  # Type-0 Coefficient
-            fk = 0.01  # ???
+
+            f_type = self.f_type
+            if f_type == 1:
+                fk = np.sqrt(ck + cck)
+            elif f_type == 2:
+                fk = np.sqrt(ck) + np.sqrt(cck)
+            elif f_type == 3:
+                fk = 0.5
+            elif isinstance(f_type, float):
+                fk = f_type
+            else:
+                fk = 1.0
 
             dk = [
                 [(k, self.corr.derivative[k] * self._numberer(k))],

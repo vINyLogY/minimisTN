@@ -3,74 +3,119 @@
 from __future__ import absolute_import, division, print_function
 
 from builtins import filter, map, range, zip
+from time import time
+
+from sympy import false
 from minitn.heom.corr import Drude
 
-from minitn.heom.network import tensor_train_template
+from minitn.heom.network import simple_heom, tensor_train_template
 from minitn.heom.propagate import MultiLayer
 from minitn.lib.backend import DTYPE, np
 from minitn.lib.logging import Logger
-from minitn.lib.tools import huffman_tree
+from minitn.lib.tools import huffman_tree, time_this
 from minitn.lib.units import Quantity
 from minitn.models.sbm import SpinBoson
 from minitn.tensor import Leaf, Tensor
 
+from scipy import linalg
+import sys
 
 # System:
-e = 0.0
-v = 1.0
+e = Quantity(5000, 'cm-1').value_in_au
+relaxed = False
+v = Quantity(500, 'cm-1').value_in_au if relaxed else 0.0
 max_tier = 20
-
 rank_heom = max_tier
 wfn_rank = max_tier
 ps_method = 'split'
-temperature = 'FT'
-beta = 1.0 if temperature == 'FT' else None
-# beta = None: ZT
 
+decomp_method = None
+#decomp_method = 'TT'
+
+temperature = 300
+beta = Quantity(1 / temperature, 'K-1').value_in_au if temperature else None
+# beta = None: ZT
+print(f'beta:{beta}')
 
 ph_parameters = [
-    #(Quantity(400, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
-    #(Quantity(800, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
-    #(Quantity(1200, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
-    (1.0, 0.5),
+    #(Quantity(1600, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
 ]
 dof = len(ph_parameters)
+#sd_method = Drude.matsubara
+sd_method = Drude.pade
+sd_method_string = 'matsubara' if sd_method is Drude.matsubara else 'pade'
 
-prefix = 'boson_tucker_dof{}_{}K_t{}_{}_'.format(dof, temperature, max_tier,
-                                                 ps_method)
-
+k_max = 6
+drude = Drude(gamma=Quantity(20, 'cm-1').value_in_au,
+              lambda_=Quantity(500, 'cm-1').value_in_au,
+              beta=beta,
+              k_max=k_max,
+              decompmethod=sd_method)
 
 model = SpinBoson(
-    sys_ham=np.array([[-0.5 * e, v], [v, 0.5 * e]], dtype=DTYPE),
-    sys_op=np.array([[-0.5, 0.0], [0.0, 0.5]], dtype=DTYPE),
+    sys_ham=np.array([[0.0, v], [v, e]], dtype=DTYPE),
+    sys_op=np.array([[0.0, 0.0], [0.0, 1.0]], dtype=DTYPE),
     ph_parameters=ph_parameters,
     ph_dims=(dof * [max_tier]),
-    #bath_corr=drude,
-    #bath_dims=[max_tier],
+    bath_corr=drude,
+    bath_dims=[max_tier] * k_max,
 )
 
 # init state
-A, B = 1.0, 0.0
+A, B = 1.0, 1.0
 wfn_0 = np.array([A, B]) / np.sqrt(A**2 + B**2)
 rho_0 = np.tensordot(wfn_0, wfn_0, axes=0)
 
 # Propagation
 dt_unit = Quantity(0.01, 'fs').value_in_au
-callback_interval = 10
-count = 50_00
+callback_interval = 1
+count = 10
+
+prefix = f'bosondrude_dryrun_{"relaxed" if relaxed else "pure"}_{decomp_method}_dof{dof}_bcf{k_max}_{sd_method_string}_{temperature}K_t{max_tier}_{ps_method}_'
+print(prefix)
+#prefix = f'boson_{decomp_method}_dof{dof}_bcf{k_max}_{temperature}K_t{max_tier}_{ps_method}_'
+
+#prefix = f'drude_{decomp_method}_dof{dof}_bcf{k_max}_{temperature}K_t{max_tier}_{ps_method}_'
 
 
-def test_heom(fname=None, f_type=0):
+def test_diag(fname=None, f_type=0):
     fname = 'type{}'.format(f_type) + fname
     ph_dims = list(np.repeat(model.ph_dims, 2))
     n_dims = ph_dims if model.bath_dims is None else ph_dims + model.bath_dims
     print(n_dims)
 
-    root = tensor_train_template(rho_0, n_dims, rank=rank_heom)
+    root = simple_heom(rho_0, n_dims)
+    #root = tensor_train_template(rho_0, n_dims, rank=max_tier)
+    leaves = root.leaves()
+    ham = model.dense_h(leaves[0],
+                        leaves[1],
+                        leaves[2:],
+                        beta=beta,
+                        f_type=f_type)
+
+    w = linalg.eigvals(ham)
+    np.savetxt(f"{fname}-spec.txt", w)
+
+    return
+
+
+@time_this
+def test_heom(fname=None, f_type=0):
+    fname = prefix + 'f{}_'.format(f_type) + fname
+    ph_dims = list(np.repeat(model.ph_dims, 2))
+    n_dims = ph_dims if model.bath_dims is None else ph_dims + model.bath_dims
+    print(n_dims)
+
+    if decomp_method is None:
+        root = simple_heom(rho_0, n_dims)
+    elif decomp_method == 'TT':
+        root = tensor_train_template(rho_0, n_dims, rank=max_tier)
+    else:
+        raise NotImplementedError
     leaves = root.leaves()
     h_list = model.heom_h_list(leaves[0],
-                               leaves[1],
-                               leaves[2:],
+                               leaves[1], [],
+                               bath_indices=leaves[2:],
                                beta=beta,
                                f_type=f_type)
 
@@ -78,10 +123,10 @@ def test_heom(fname=None, f_type=0):
     solver.ode_method = 'RK45'
     solver.cmf_steps = solver.max_ode_steps  # use constant mean-field
     solver.ps_method = ps_method
-    #solver.svd_err = 1.0e-14
+    #solver.svd_err = 1.0e-14  #only for unite propagation
 
     # Define the obersevable of interest
-    logger = Logger(filename=prefix + fname, level='info').logger
+    logger = Logger(filename=fname, level='info').logger
     for n, (time, r) in enumerate(
             solver.propagator(
                 steps=count,
@@ -92,10 +137,9 @@ def test_heom(fname=None, f_type=0):
         norm = np.trace(np.reshape(np.reshape(r.array, (4, -1))[:, 0], (2, 2)))
         r.set_array(r.array / norm)
         if n % callback_interval == 0:
-            t = Quantity(time).convert_to(unit='fs').value
             rho = np.reshape(r.array, (4, -1))[:, 0]
-            logger.info("{}    {} {} {} {}".format(t, rho[0], rho[1], rho[2],
-                                                   rho[3]))
+            logger.info("{}    {} {} {} {}".format(time, rho[0], rho[1],
+                                                   rho[2], rho[3]))
 
     return
 
@@ -178,13 +222,14 @@ def test_mctdh(fname=None):
 
 if __name__ == '__main__':
     import os
-    import sys
 
     from matplotlib import pyplot as plt
 
     f_dir = os.path.abspath(os.path.dirname(__file__))
-    os.chdir(os.path.join(f_dir, '2022data', 'diff_fk'))
+    os.chdir(os.path.join(f_dir, '2022data', 'puredephasing'))
 
-    for f_type in [0.1, 0.01, 0.001, 0.0001]:
+    for f_type in [
+            0,
+    ]:
+        #test_diag(fname='heom.dat', f_type=f_type)
         test_heom(fname='heom.dat', f_type=f_type)
-    #test_mctdh(fname='wfn.dat')

@@ -14,74 +14,68 @@ from minitn.lib.units import Quantity
 from minitn.models.sbm import SpinBoson
 from minitn.tensor import Leaf, Tensor
 
-
-# System:
-e = 0.0
-v = 1.0
-max_tier = 20
-
+# System: pure dephasing
+e = Quantity(5000, 'cm-1').value_in_au
+v = Quantity(500, 'cm-1').value_in_au
+max_tier = 10
 rank_heom = max_tier
-wfn_rank = max_tier
-ps_method = 'split'
-temperature = 'FT'
-beta = 1.0 if temperature == 'FT' else None
-# beta = None: ZT
-
+rank_wfn = 5
+beta = Quantity(1 / 300, 'K-1').value_in_au
 
 ph_parameters = [
-    #(Quantity(400, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
-    #(Quantity(800, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
-    #(Quantity(1200, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
-    (1.0, 0.5),
+    (Quantity(400, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
+    (Quantity(800, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
+    (Quantity(1200, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
+    (Quantity(1600, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
 ]
 dof = len(ph_parameters)
+prefix = 'drude_boson_dof{}_scaled_300K_t{}_'.format(dof, max_tier)
 
-prefix = 'boson_tucker_dof{}_{}K_t{}_{}_'.format(dof, temperature, max_tier,
-                                                 ps_method)
-
+drude = Drude(
+    gamma=Quantity(20, 'cm-1').value_in_au,
+    lambda_=Quantity(400, 'cm-1').value_in_au,
+    beta=beta,
+)
 
 model = SpinBoson(
     sys_ham=np.array([[-0.5 * e, v], [v, 0.5 * e]], dtype=DTYPE),
     sys_op=np.array([[-0.5, 0.0], [0.0, 0.5]], dtype=DTYPE),
     ph_parameters=ph_parameters,
     ph_dims=(dof * [max_tier]),
-    #bath_corr=drude,
-    #bath_dims=[max_tier],
+    bath_corr=drude,
+    bath_dims=[max_tier],
 )
 
 # init state
-A, B = 1.0, 0.0
+A, B = 1.0, 1.0
 wfn_0 = np.array([A, B]) / np.sqrt(A**2 + B**2)
 rho_0 = np.tensordot(wfn_0, wfn_0, axes=0)
 
 # Propagation
 dt_unit = Quantity(0.01, 'fs').value_in_au
 callback_interval = 10
-count = 50_00
+count = 100_000
 
 
-def test_heom(fname=None, f_type=0):
-    fname = 'type{}'.format(f_type) + fname
+def test_heom(fname=None):
     ph_dims = list(np.repeat(model.ph_dims, 2))
     n_dims = ph_dims if model.bath_dims is None else ph_dims + model.bath_dims
     print(n_dims)
 
     root = tensor_train_template(rho_0, n_dims, rank=rank_heom)
+
     leaves = root.leaves()
-    h_list = model.heom_h_list(leaves[0],
-                               leaves[1],
-                               leaves[2:],
-                               beta=beta,
-                               f_type=f_type)
+    h_list = model.heom_h_list(leaves[0], leaves[1], leaves[2:], beta=beta)
 
     solver = MultiLayer(root, h_list)
     solver.ode_method = 'RK45'
     solver.cmf_steps = solver.max_ode_steps  # use constant mean-field
-    solver.ps_method = ps_method
-    #solver.svd_err = 1.0e-14
+    solver.ps_method = 'split'
+    solver.svd_err = 1.0e-12
 
     # Define the obersevable of interest
     logger = Logger(filename=prefix + fname, level='info').logger
+    logger2 = Logger(filename=prefix + "en_" + fname, level='info').logger
     for n, (time, r) in enumerate(
             solver.propagator(
                 steps=count,
@@ -96,12 +90,12 @@ def test_heom(fname=None, f_type=0):
             rho = np.reshape(r.array, (4, -1))[:, 0]
             logger.info("{}    {} {} {} {}".format(t, rho[0], rho[1], rho[2],
                                                    rho[3]))
-
+            en = np.trace(np.reshape(rho, (2, 2)) @ model.h)
+            logger2.info('{}    {}'.format(t, en))
     return
 
 
 def test_mctdh(fname=None):
-    assert beta is None
     sys_leaf = Leaf(name='sys0')
 
     ph_leaves = []
@@ -145,7 +139,7 @@ def test_mctdh(fname=None):
             if isinstance(t, Leaf):
                 bond_dict[(s, i, t, j)] = max_tier
             else:
-                bond_dict[(s, i, t, j)] = wfn_rank
+                bond_dict[(s, i, t, j)] = rank_wfn
     solver.autocomplete(bond_dict)
     # set initial root array
     init_proj = np.array([[A, 0.0], [B, 0.0]]) / np.sqrt(A**2 + B**2)
@@ -155,7 +149,7 @@ def test_mctdh(fname=None):
     solver = MultiLayer(root, h_list)
     solver.ode_method = 'RK45'
     solver.cmf_steps = solver.max_ode_steps  # constant mean-field
-    solver.ps_method = ps_method
+    solver.ps_method = 'split'
     solver.svd_err = 1.0e-14
 
     # Define the obersevable of interest
@@ -183,8 +177,7 @@ if __name__ == '__main__':
     from matplotlib import pyplot as plt
 
     f_dir = os.path.abspath(os.path.dirname(__file__))
-    os.chdir(os.path.join(f_dir, '2022data', 'diff_fk'))
+    os.chdir(os.path.join(f_dir, 'data'))
 
-    for f_type in [0.1, 0.01, 0.001, 0.0001]:
-        test_heom(fname='heom.dat', f_type=f_type)
+    test_heom(fname='heom.dat')
     #test_mctdh(fname='wfn.dat')
