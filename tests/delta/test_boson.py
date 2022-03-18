@@ -14,16 +14,19 @@ from minitn.lib.units import Quantity
 from minitn.models.sbm import SpinBoson
 from minitn.tensor import Leaf, Tensor
 
+
 # System:
 e = 0.0
 v = 1.0
 max_tier = 20
+
 rank_heom = max_tier
 wfn_rank = max_tier
 ps_method = 'split'
 temperature = 'FT'
 beta = 1.0 if temperature == 'FT' else None
 # beta = None: ZT
+
 
 ph_parameters = [
     #(Quantity(400, 'cm-1').value_in_au, Quantity(500, 'cm-1').value_in_au),
@@ -32,8 +35,10 @@ ph_parameters = [
     (1.0, 0.5),
 ]
 dof = len(ph_parameters)
+
 prefix = 'boson_tucker_dof{}_{}K_t{}_{}_'.format(dof, temperature, max_tier,
                                                  ps_method)
+
 
 model = SpinBoson(
     sys_ham=np.array([[-0.5 * e, v], [v, 0.5 * e]], dtype=DTYPE),
