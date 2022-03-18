@@ -17,6 +17,7 @@ from minitn.models.sbm import SpinBoson
 
 def test_heom(
     fname=None,
+    dof=3,
     max_tier=10,
     k_max=6,
     decomp_method=None,
@@ -27,7 +28,7 @@ def test_heom(
     relaxed = False
     v = Quantity(500, 'cm-1').value_in_au if relaxed else 0.0
 
-    rank_heom = 40
+    rank_heom = max_tier**2 // 2 if decomp_method is not None else None
     ps_method = 'split'
 
     temperature = 300
@@ -35,18 +36,17 @@ def test_heom(
                     temperature, 'K-1').value_in_au if temperature else None
 
     ph_parameters = [
-        (Quantity(2000, 'cm-1').value_in_au, Quantity(500,
+        (Quantity(1600, 'cm-1').value_in_au, Quantity(500,
                                                       'cm-1').value_in_au),
         (Quantity(1800, 'cm-1').value_in_au, Quantity(500,
                                                       'cm-1').value_in_au),
-        (Quantity(1600, 'cm-1').value_in_au, Quantity(500,
-                                                      'cm-1').value_in_au),
         (Quantity(1400, 'cm-1').value_in_au, Quantity(500,
                                                       'cm-1').value_in_au),
-    ]
-    dof = len(ph_parameters)
-    sd_method = Drude.pade
+        (Quantity(2000, 'cm-1').value_in_au, Quantity(500,
+                                                      'cm-1').value_in_au),
+    ][:dof]
 
+    sd_method = Drude.pade
     drude = Drude(gamma=Quantity(20, 'cm-1').value_in_au,
                   lambda_=Quantity(500, 'cm-1').value_in_au,
                   beta=beta,
@@ -68,7 +68,7 @@ def test_heom(
     rho_0 = np.tensordot(wfn_0, wfn_0, axes=0)
 
     # Propagation
-    dt_unit = Quantity(0.01, 'fs').value_in_au
+    dt_unit = Quantity(1., 'fs').value_in_au
     callback_interval = 1
     count = 10
 
@@ -92,7 +92,7 @@ def test_heom(
 
     leaves = root.leaves()
     h_list = model.heom_h_list(leaves[0],
-                               leaves[1], [],
+                               leaves[1],
                                bath_indices=leaves[2:],
                                beta=beta,
                                f_type=f_type)
@@ -105,7 +105,7 @@ def test_heom(
 
     # Define the obersevable of interest
     cpu_t0 = cpu_time()
-    logger = Logger(filename=fname, level='warning').logger
+    logger = Logger(filename=fname, level='info').logger
     for n, (time, r) in enumerate(
             solver.propagator(
                 steps=count,
@@ -133,9 +133,29 @@ if __name__ == '__main__':
     import os
 
     f_dir = os.path.abspath(os.path.dirname(__file__))
-    os.chdir(os.path.join(f_dir, 'perf'))
+    os.chdir(f_dir)
 
-    for bcf_term in [2, 4, 6, 8]:
-        for depth in [6, 9, 12, 15, 18]:
-            for method in [None, 'TT']:
-                test_heom(fname='heom.dat', k_max=bcf_term, max_tier=depth)
+    # for dof in [1, 2, 3]:
+    #     for bcf_term in [2, 5, 8]:
+    #         for depth in [6, 9, 12, 15]:
+    #             test_heom(
+    #                 fname='heom.dat',
+    #                 dof=dof,
+    #                 decomp_method='TT',
+    #                 k_max=bcf_term,
+    #                 max_tier=depth,
+    #             )
+
+    for dof in [1]:
+        for bcf_term in [5]:
+            for depth in [12]:
+                try:
+                    test_heom(
+                        fname='heom.dat',
+                        dof=dof,
+                        decomp_method=None,
+                        k_max=bcf_term,
+                        max_tier=depth,
+                    )
+                except:
+                    continue

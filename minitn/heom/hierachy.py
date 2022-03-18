@@ -12,8 +12,6 @@ import logging
 from builtins import filter, map, range, zip
 from itertools import product
 
-from numpy import sqrt
-
 from minitn.lib.backend import np
 
 from minitn.lib.tools import __
@@ -24,7 +22,8 @@ DTYPE = np.complex128
 
 class Hierachy(object):
     hbar = 1.0
-    f_type = None
+    diff_type = 1
+    scale = 1.0
 
     def __init__(self, n_dims, sys_hamiltonian, sys_op, corr):
         """
@@ -73,9 +72,10 @@ class Hierachy(object):
         shape = list(rho.shape)
         assert len(shape) == 2 and shape[0] == shape[1]
         # Let: rho_n[0, i, j] = rho and rho_n[n, i, j] = 0
-        ext = np.zeros((np.prod(self.n_dims),))
+        ext = np.zeros((np.prod(self.n_dims), ))
         ext[0] = 1
-        rho_n = np.reshape(np.tensordot(ext, rho, axes=0), list(self.n_dims) + shape)
+        rho_n = np.reshape(np.tensordot(ext, rho, axes=0),
+                           list(self.n_dims) + shape)
         return np.array(rho_n, dtype=DTYPE)
 
     def _raiser(self, k):
@@ -94,6 +94,16 @@ class Hierachy(object):
         return np.diag(np.arange(self.n_dims[k], dtype=DTYPE))
 
     def diff(self):
+        if self.diff_type == 1:
+            return self._diff1()
+
+        elif self.diff_type == 2:
+            return self._diff2()
+
+        else:
+            raise NotImplementedError
+
+    def _diff1(self):
         """Get the derivative of rho_n at time t.
         
         Acting on 0-th index.
@@ -110,23 +120,49 @@ class Hierachy(object):
             ck = complex(self.corr.coeff[k])
             cck = complex(self.corr.conj_coeff[k])
 
-            f_type = self.f_type
-            if f_type == 1:
-                fk = np.sqrt(ck + cck)
-            elif f_type == 2:
-                fk = np.sqrt(ck) + np.sqrt(cck)
-            elif f_type == 3:
-                fk = 0.5
-            elif isinstance(f_type, float):
-                fk = f_type
-            else:
-                fk = 1.0
+            fk = self.scale
 
-            print(f"f_k (Type-{f_type}) = {fk}")
+            print(f"f_k = {fk}")
             dk = [
                 [(k, self.corr.derivative[k] * self._numberer(k))],
-                [(i, -1.0j * self.op), (k, ck / fk * self._raiser(k) + fk * self._lower(k))],
-                [(j, 1.0j * self.op), (k, cck / fk * self._raiser(k) + fk * self._lower(k))],
+                [(i, -1.0j * self.op),
+                 (k, ck / fk * self._raiser(k) + fk * self._lower(k))],
+                [(j, 1.0j * self.op),
+                 (k, cck / fk * self._raiser(k) + fk * self._lower(k))],
+            ]
+            derivative.extend(dk)
+
+        return derivative
+
+    def _diff2(self):
+        """Get the derivative of rho_n at time t.
+
+        Analog to WFN dynamics of the total model
+        
+        Acting on 0-th index.
+        """
+        self.corr.print()
+        i = self._i
+        j = self._j
+        derivative = [
+            [(i, -1.0j * self.h)],
+            [(j, 1.0j * self.h)],
+        ]
+
+        for k in range(self.k_max):
+            ck = complex(self.corr.coeff[k])
+            cck = complex(self.corr.conj_coeff[k])
+
+            fk = np.sqrt(ck)
+            cfk = np.sqrt(cck)
+            print(f"f_k = {fk}, cf_k = {cfk}")
+
+            dk = [
+                [(k, self.corr.derivative[k] * self._numberer(k))],
+                [(i, -1.0j * self.op),
+                 (k, fk * (self._raiser(k) * self._lower(k)))],
+                [(j, 1.0j * self.op),
+                 (k, cfk * (self._raiser(k) + self._lower(k)))],
             ]
             derivative.extend(dk)
 

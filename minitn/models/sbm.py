@@ -97,10 +97,9 @@ class SpinBoson(object):
     def heom_h_list(self,
                     sys_i,
                     sys_j,
-                    ph_indices: list,
                     bath_indices: list = None,
                     beta=None,
-                    f_type=None):
+                    scale=1.0):
         if bath_indices is None:
             bath_indices = []
         corr = generate_BCF(self.ph_parameters,
@@ -109,8 +108,21 @@ class SpinBoson(object):
         n_tiers = list(np.repeat(self.ph_dims, 2))
         n_tiers += self.bath_dims
         heom = Hierachy(n_tiers, self.h, self.op, corr)
-        heom.f_type = f_type
-        diff = heom.h_list(sys_i, sys_j, ph_indices + bath_indices)
+        heom.scale = scale
+        diff = heom.h_list(sys_i, sys_j, bath_indices)
+        return diff
+
+    def heom_h_list2(self, sys_i, sys_j, bath_indices: list = None, beta=None):
+        if bath_indices is None:
+            bath_indices = []
+        corr = generate_BCF(self.ph_parameters,
+                            bath_corr=self.bath_corr,
+                            beta=beta)
+        n_tiers = list(np.repeat(self.ph_dims, 2))
+        n_tiers += self.bath_dims
+        heom = Hierachy(n_tiers, self.h, self.op, corr)
+        heom.diff_type = 2
+        diff = heom.h_list(sys_i, sys_j, bath_indices)
         return diff
 
     def dense_h(self,

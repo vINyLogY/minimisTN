@@ -129,7 +129,7 @@ class Drude(Correlation):
 
             diag_p = np.zeros((2 * n - 1, ))
             subdiag_p = np.array([
-                1.0 / np.sqrt((5 + 2 * i) * (7 + 2 * i + 1))
+                1.0 / np.sqrt((5 + 2 * i) * (7 + 2 * i))
                 for i in range(2 * n - 2)
             ])
             roots_p = np.power(2.0 / tridiag_eigsh(diag_p, subdiag_p)[:n - 1],

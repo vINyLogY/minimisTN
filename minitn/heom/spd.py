@@ -10,11 +10,16 @@ from math import gamma
 from typing import Literal, Optional, Tuple
 
 from numpy.typing import ArrayLike
-from sympy import residue
+from sympy import residue, zeta
 
 from minitn.lib.backend import np, DTYPE
 
 PI = np.pi
+
+
+def _eigvalsh(subdiag):
+    mat = np.diag(subdiag, -1) + np.diag(subdiag, 1)
+    return sorted(np.linalg.eigvalsh(mat), reverse=True)
 
 
 class BoseEinstein(object):
@@ -36,19 +41,21 @@ class BoseEinstein(object):
 
     def residues(self, n: int, decomp_method='pade'):
         if decomp_method.lower() == 'pade':
-            method = self.pade
+            method = self.pade1
         elif decomp_method.lower() == 'matsubara':
             method = self.matsubara
         else:
             raise NotImplementedError
 
+        assert n >= 0
+
         b = self.beta
-        if b is None:
+        if b is None or n == 0:
             return []
         else:
-            residues = method(n)
-            _u = [(r / b, -1.0j * z / b) for r, z in residues]
-            _n = [(r / b, 1.0j * z / b) for r, z in residues]
+            residues, zetas = method(n)
+            _u = [(r / b, -1.0j * z / b) for r, z in zip(residues, zetas)]
+            _n = [(r / b, 1.0j * z / b) for r, z in zip(residues, zetas)]
             return (_u + _n)
 
     @staticmethod
@@ -56,43 +63,57 @@ class BoseEinstein(object):
         return [(1.0, 2.0 * PI * (i + 1)) for i in range(n)]
 
     @staticmethod
-    def pade(n: int, _type: Literal[-1, 0, 1] = -1):
-        assert _type in [-1]  # (N-1)/N method
-        assert n >= 0
+    def pade1(n: int):
+        # (N-1)/N method
+        assert n > 0
 
-        def eigvalsh(subdiag):
-            mat = np.diag(subdiag, -1) + np.diag(subdiag, 1)
-            return sorted(np.linalg.eigvalsh(mat), reverse=True)
+        subdiag_q = np.array([
+            1.0 / np.sqrt((2 * i + 3) * (2 * i + 5)) for i in range(2 * n - 1)
+        ])
+        zetas = 2.0 / _eigvalsh(subdiag_q)[:n]
+        roots_q = np.power(zetas, 2)
 
-        if n == 0:
-            residues = []
-        else:
-            subdiag_q = np.array([
-                1.0 / np.sqrt((3 + 2 * i) * (5 + 2 * i))
-                for i in range(2 * n - 1)
-            ])
-            zetas = 2.0 / eigvalsh(subdiag_q)[:n]
-            roots_q = np.power(zetas, 2)
+        subdiag_p = np.array([
+            1.0 / np.sqrt((2 * i + 5) * (2 * i + 7)) for i in range(2 * n - 2)
+        ])
+        roots_p = np.power(2.0 / _eigvalsh(subdiag_p)[:n - 1], 2)
 
-            subdiag_p = np.array([
-                1.0 / np.sqrt((5 + 2 * i) * (7 + 2 * i + 1))
-                for i in range(2 * n - 2)
-            ])
-            roots_p = np.power(2.0 / eigvalsh(subdiag_p)[:n - 1], 2)
+        residues = []
+        for i in range(n):
+            res_i = 0.5 * n * (2 * n + 3)
+            for j in range(n - 1):
+                res_i *= roots_p[j] - roots_q[i]
+            for j in range(n):
+                if j != i:
+                    res_i /= roots_q[j] - roots_q[i]
+            residues.append(res_i)
 
-            residues = []
-            for i in range(n):
-                res_i = 0.5 * n * (2 * n + 3)
-                if i < n - 1:
-                    res_i *= (roots_p[i] - roots_q[i]) / (roots_q[n - 1] -
-                                                          roots_q[i])
-                for j in range(n - 1):
-                    if j != i:
-                        res_i *= ((roots_p[j] - roots_q[i]) /
-                                  (roots_q[j] - roots_q[i]))
-                residues.append(res_i)
+        return residues, zetas
 
-        return [(r, z) for r, z in zip(residues, zetas)]
+    @staticmethod
+    def pade2(n: int):
+        # N/N method
+        assert n > 0
+
+        subdiag_q = np.array(
+            [1.0 / np.sqrt((2 * i + 3) * (2 * i + 5)) for i in range(2 * n)])
+        zetas = 2.0 / _eigvalsh(subdiag_q)[:n]
+        roots_q = np.power(zetas, 2)
+
+        subdiag_p = np.array(
+            [1.0 / np.sqrt((2 * i + 5) * (2 * i + 7)) for i in range(2 * n)])
+        roots_p = np.power(2.0 / _eigvalsh(subdiag_p)[:n], 2)
+
+        residues = []
+        for i in range(n):
+            res_i = 0.5 / (4.0 * (n + 1) * (2 * n + 3))
+            for j in range(n):
+                res_i *= roots_p[j] - roots_q[i]
+                if j != i:
+                    res_i /= roots_q[j] - roots_q[i]
+            residues.append(res_i)
+
+        return residues, zetas
 
 
 class Bath(object):
