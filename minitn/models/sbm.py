@@ -99,6 +99,7 @@ class SpinBoson(object):
                     sys_j,
                     bath_indices: list = None,
                     beta=None,
+                    basis='energy',
                     scale=1.0):
         if bath_indices is None:
             bath_indices = []
@@ -109,7 +110,7 @@ class SpinBoson(object):
         n_tiers += self.bath_dims
         heom = Hierachy(n_tiers, self.h, self.op, corr)
         heom.scale = scale
-        diff = heom.h_list(sys_i, sys_j, bath_indices)
+        diff = heom.h_list(sys_i, sys_j, bath_indices, basis=basis)
         return diff
 
     def heom_h_list2(self, sys_i, sys_j, bath_indices: list = None, beta=None):

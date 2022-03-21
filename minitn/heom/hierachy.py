@@ -16,6 +16,7 @@ from minitn.lib.backend import np
 
 from minitn.lib.tools import __
 from minitn.heom.corr import Correlation
+from minitn.bases.dvr import SineDVR
 
 DTYPE = np.complex128
 
@@ -53,13 +54,58 @@ class Hierachy(object):
         self.h = np.array(sys_hamiltonian, dtype=DTYPE)
 
     def h_list(self, sys_i, sys_j, ph_indices):
-        diff = self.diff()
+
+        if self.diff_type == 1:
+            diff = self._diff1()
+        elif self.diff_type == 2:
+            diff = self._diff2()
+        else:
+            raise NotImplementedError
         index_convension = list(ph_indices) + [sys_i, sys_j]
         h_list = []
         for term in diff:
             h_list.append([(index_convension[fst], snd) for fst, snd in term])
 
         return h_list
+
+    def h_list_dvr(self, sys_i, sys_j, ph_indices, basis):
+        assert isinstance(basis, SineDVR)
+
+        diff = self._diff_basis(basis)
+        index_convension = list(ph_indices) + [sys_i, sys_j]
+        h_list = []
+        for term in diff:
+            h_list.append([(index_convension[fst], snd) for fst, snd in term])
+        return
+
+    def _diff_basis(self, basis):
+        pm_ham = basis.h_mat()
+        _, enb2dvr = np.linalg.eigh(pm_ham)
+
+        def sim(mat):
+            return enb2dvr.T @ mat @ enb2dvr
+
+        i = self._i
+        j = self._j
+        derivative = [
+            [(i, -1.0j * self.h)],
+            [(j, 1.0j * self.h)],
+        ]
+
+        for k in range(self.k_max):
+            ck = complex(self.corr.coeff[k])
+            cck = complex(self.corr.conj_coeff[k])
+
+            dk = [
+                [(k, self.corr.derivative[k] * sim(self._numberer(k)))],
+                [(i, -1.0j * self.op),
+                 (k, ck * sim(self._raiser(k)) + sim(self._lower(k)))],
+                [(j, 1.0j * self.op),
+                 (k, cck * sim(self._raiser(k)) + sim(self._lower(k)))],
+            ]
+            derivative.extend(dk)
+
+        return derivative
 
     def gen_extended_rho(self, rho):
         """Get rho_n from rho with the conversion:
@@ -93,22 +139,12 @@ class Hierachy(object):
     def _numberer(self, k):
         return np.diag(np.arange(self.n_dims[k], dtype=DTYPE))
 
-    def diff(self):
-        if self.diff_type == 1:
-            return self._diff1()
-
-        elif self.diff_type == 2:
-            return self._diff2()
-
-        else:
-            raise NotImplementedError
-
     def _diff1(self):
         """Get the derivative of rho_n at time t.
         
         Acting on 0-th index.
         """
-        self.corr.print()
+        #self.corr.print()
         i = self._i
         j = self._j
         derivative = [
@@ -134,14 +170,14 @@ class Hierachy(object):
 
         return derivative
 
-    def _diff2(self):
+    def _diff2(self):  # FIXME
         """Get the derivative of rho_n at time t.
 
         Analog to WFN dynamics of the total model
         
         Acting on 0-th index.
         """
-        self.corr.print()
+        #self.corr.print()
         i = self._i
         j = self._j
         derivative = [
