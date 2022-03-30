@@ -39,7 +39,7 @@ def simple_heom(init_rho, n_indices):
     """
     n_state = get_n_state(init_rho)
     # Let: rho_n[0, :, :] = rho and rho_n[n, :, :] = 0
-    ext = np.zeros((np.prod(n_indices),))
+    ext = np.zeros((np.prod(n_indices), ))
     ext[0] = 1.0
     new_shape = [n_state, n_state] + list(n_indices)
     rho_n = np.reshape(np.tensordot(init_rho, ext, axes=0), new_shape)
@@ -80,7 +80,8 @@ def tensor_train_template(init_rho, pb_index, rank=1):
     ----------
     rho : np.ndarray
     """
-    n_vec = np.zeros((rank,), dtype=DTYPE)
+    n_state = get_n_state(init_rho)
+    n_vec = np.zeros((n_state**2, ), dtype=DTYPE)
     n_vec[0] = 1.0
     root_array = np.tensordot(init_rho, n_vec, axes=0)
 
@@ -91,12 +92,15 @@ def tensor_train_template(init_rho, pb_index, rank=1):
     root[0] = (Leaf(name=max_terms), 0)
     root[1] = (Leaf(name=max_terms + 1), 0)
 
-    for i in pb_index:
-        assert rank <= i
+    #for i in pb_index:
+    #    assert rank <= i
 
     train = [root]
     for k in range(max_terms):
-        if k < max_terms - 1:
+        if k == 0:
+            array = np.eye(n_state**2, pb_index[k] * rank)
+            array = np.reshape(array, (4, -1, rank))
+        elif k < max_terms - 1:
             array = np.eye(rank, pb_index[k] * rank)
             array = np.reshape(array, (rank, -1, rank))
         else:
@@ -118,7 +122,7 @@ def tensor_tree_template(init_rho, pb_index, rank=1, nbranch=2):
     rho : np.ndarray
     """
     n_state = get_n_state(init_rho)
-    n_vec = np.zeros((rank,), dtype=DTYPE)
+    n_vec = np.zeros((rank, ), dtype=DTYPE)
     n_vec[0] = 1.0
     root_array = np.tensordot(init_rho, n_vec, axes=0)
     max_terms = len(pb_index)

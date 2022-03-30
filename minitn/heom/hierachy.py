@@ -12,21 +12,20 @@ import logging
 from builtins import filter, map, range, zip
 from itertools import product
 
-from numpy import sqrt
-
 from minitn.lib.backend import np
 
 from minitn.lib.tools import __
 from minitn.heom.corr import Correlation
+from minitn.bases.dvr import SineDVR
 
 DTYPE = np.complex128
 
 
 class Hierachy(object):
     hbar = 1.0
-    f_type = None
+    scale = 1.0
 
-    def __init__(self, n_dims, sys_hamiltonian, sys_op, corr):
+    def __init__(self, n_dims, sys_hamiltonian, sys_op, corr, basis=None):
         """
         Parameters
         ----------
@@ -47,6 +46,9 @@ class Hierachy(object):
         self._j = len(n_dims) + 1
 
         self.corr = corr
+        if basis is None:
+            basis = [None] * self.k_max
+        self.basis = basis
         assert sys_op.ndim == 2
         assert sys_op.shape == sys_hamiltonian.shape
         self.n_states = sys_op.shape[0]
@@ -54,10 +56,9 @@ class Hierachy(object):
         self.h = np.array(sys_hamiltonian, dtype=DTYPE)
 
     def h_list(self, sys_i, sys_j, ph_indices):
-        diff = self.diff()
         index_convension = list(ph_indices) + [sys_i, sys_j]
         h_list = []
-        for term in diff:
+        for term in self._diff():
             h_list.append([(index_convension[fst], snd) for fst, snd in term])
 
         return h_list
@@ -73,32 +74,53 @@ class Hierachy(object):
         shape = list(rho.shape)
         assert len(shape) == 2 and shape[0] == shape[1]
         # Let: rho_n[0, i, j] = rho and rho_n[n, i, j] = 0
-        ext = np.zeros((np.prod(self.n_dims),))
+        ext = np.zeros((np.prod(self.n_dims), ))
         ext[0] = 1
-        rho_n = np.reshape(np.tensordot(ext, rho, axes=0), list(self.n_dims) + shape)
+        rho_n = np.reshape(np.tensordot(ext, rho, axes=0),
+                           list(self.n_dims) + shape)
         return np.array(rho_n, dtype=DTYPE)
 
     def _raiser(self, k):
         """Acting on 0-th index"""
-        dim = self.n_dims[k]
-        sqrt_n = np.diag(np.sqrt(np.arange(dim, dtype=DTYPE)))
-        return np.eye(dim, k=1, dtype=DTYPE) @ sqrt_n
+        if self.basis[k] is None:
+            dim = self.n_dims[k]
+            sqrt_n = np.diag(np.sqrt(np.arange(dim, dtype=DTYPE)))
+            ans = np.eye(dim, k=1, dtype=DTYPE) @ sqrt_n
+        else:
+            q = self.basis[k].q_mat()
+            dq = self.basis[k].dq_mat()
+            ans = np.transpose(np.array((q - dq) / np.sqrt(2), dtype=DTYPE))
+        return ans
 
     def _lower(self, k):
         """Acting on 0-th index"""
-        dim = self.n_dims[k]
-        sqrt_n = np.diag(np.sqrt(np.arange(dim, dtype=DTYPE)))
-        return sqrt_n @ np.eye(dim, k=-1, dtype=DTYPE)
+        if self.basis[k] is None:
+            dim = self.n_dims[k]
+            sqrt_n = np.diag(np.sqrt(np.arange(dim, dtype=DTYPE)))
+            ans = sqrt_n @ np.eye(dim, k=-1, dtype=DTYPE)
+        else:
+            q = self.basis[k].q_mat()
+            dq = self.basis[k].dq_mat()
+            ans = np.transpose(np.array((q + dq) / np.sqrt(2), dtype=DTYPE))
+        return ans
 
     def _numberer(self, k):
-        return np.diag(np.arange(self.n_dims[k], dtype=DTYPE))
+        """Acting on 0-th index"""
+        if self.basis[k] is None:
+            ans = np.diag(np.arange(self.n_dims[k], dtype=DTYPE))
+        else:
+            q = self.basis[k].q_mat()
+            dq = self.basis[k].dq_mat()
+            ans = np.transpose(
+                np.array(0.5 * (q**2 - dq**2) - 0.5, dtype=DTYPE))
+        return ans
 
-    def diff(self):
+    def _diff(self):
         """Get the derivative of rho_n at time t.
         
         Acting on 0-th index.
         """
-        self.corr.print()
+        #self.corr.print()
         i = self._i
         j = self._j
         derivative = [
@@ -109,24 +131,14 @@ class Hierachy(object):
         for k in range(self.k_max):
             ck = complex(self.corr.coeff[k])
             cck = complex(self.corr.conj_coeff[k])
-
-
-            f_type = self.f_type
-            if f_type == 1:
-                fk = np.sqrt(ck + cck)
-            elif f_type == 2:
-                fk = np.sqrt(ck) + np.sqrt(cck)
-            elif f_type == 3:
-                fk = 0.5
-            elif isinstance(f_type, float):
-                fk = f_type
-            else:
-                fk = 1.0
+            fk = self.scale
 
             dk = [
                 [(k, self.corr.derivative[k] * self._numberer(k))],
-                [(i, -1.0j * self.op), (k, ck / fk * self._raiser(k) + fk * self._lower(k))],
-                [(j, 1.0j * self.op), (k, cck / fk * self._raiser(k) + fk * self._lower(k))],
+                [(i, -1.0j * self.op),
+                 (k, ck / fk * self._raiser(k) + fk * self._lower(k))],
+                [(j, 1.0j * self.op),
+                 (k, cck / fk * self._raiser(k) + fk * self._lower(k))],
             ]
             derivative.extend(dk)
 
