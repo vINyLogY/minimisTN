@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 # coding: utf-8
 from __future__ import absolute_import, division, print_function
+from asyncio.log import logger
 
 from builtins import filter, map, range, zip
 from time import time as cpu_time
+
+from matplotlib import pyplot as plt
 
 from minitn.heom.corr import Drude
 
@@ -12,6 +15,8 @@ from minitn.heom.propagate import MultiLayer
 from minitn.lib.backend import DTYPE, np
 from minitn.lib.logging import Logger
 from minitn.lib.units import Quantity
+from minitn.tensor import Tensor
+from minitn.bases.dvr import SineDVR
 from minitn.models.sbm import SpinBoson
 
 
@@ -22,6 +27,7 @@ def test_heom(fname=None,
               k_max=6,
               decomp_method=None,
               scale=1.0,
+              coupling=2500,
               ps_method='split',
               ode_method='RK45'):
     # System:
@@ -30,23 +36,13 @@ def test_heom(fname=None,
     v = Quantity(500, 'cm-1').value_in_au if relaxed else 0.0
 
     rank_heom = rank_heom if decomp_method is not None else None
-    temperature = 0
+    temperature = 300
     beta = Quantity(1 /
                     temperature, 'K-1').value_in_au if temperature else None
 
-    ph_parameters = [
-        (Quantity(1600, 'cm-1').value_in_au, Quantity(500,
-                                                      'cm-1').value_in_au),
-        (Quantity(1800, 'cm-1').value_in_au, Quantity(500,
-                                                      'cm-1').value_in_au),
-        (Quantity(1400, 'cm-1').value_in_au, Quantity(500,
-                                                      'cm-1').value_in_au),
-        (Quantity(2000, 'cm-1').value_in_au, Quantity(500,
-                                                      'cm-1').value_in_au),
-    ][:dof]
-
     sd_method = Drude.pade
-    drude = Drude(gamma=Quantity(20, 'cm-1').value_in_au,
+    w = Quantity(50, 'cm-1').value_in_au
+    drude = Drude(gamma=w,
                   lambda_=Quantity(500, 'cm-1').value_in_au,
                   beta=beta,
                   k_max=k_max,
@@ -55,8 +51,8 @@ def test_heom(fname=None,
     model = SpinBoson(
         sys_ham=np.array([[0.0, v], [v, e]], dtype=DTYPE),
         sys_op=np.array([[0.0, 0.0], [0.0, 1.0]], dtype=DTYPE),
-        ph_parameters=ph_parameters,
-        ph_dims=([max_tier] * dof),
+        ph_parameters=[],
+        ph_dims=[],
         bath_corr=drude,
         bath_dims=[max_tier] * k_max,
     )
@@ -68,13 +64,13 @@ def test_heom(fname=None,
 
     # Propagation
     dt_unit = Quantity(.01, 'fs').value_in_au
-    callback_interval = 10
-    count = 100000
+    callback_interval = 100
+    count = 10000
 
     prefix = (
-        f'boson-drude_{ode_method}_{"relaxed" if relaxed else "pure"}_'
-        f'{decomp_method}_dof{dof}_bcf{k_max}_t{max_tier}_r{rank_heom}_{temperature}K_{ps_method}'
-    )
+        f'boson-drude_{"relaxed" if relaxed else "pure"}_'
+        f'{decomp_method}_{temperature}K_dof{dof}_bcf{k_max}_cp{coupling}_'
+        f't{max_tier}_r{rank_heom}_{ps_method}_{ode_method}')
     print(prefix)
 
     fname = prefix + '_' + fname
@@ -103,30 +99,43 @@ def test_heom(fname=None,
         solver.ps_method = ps_method
     solver.svd_err = 1.0e-10  #only for unite propagation
 
+    # DVR
+
+    length = 1.0 / w
+    plot_len = 0.2 * length
+    bath_basis = SineDVR(-length, length, 1000)
+    bath_basis.set_v_func(lambda x: 0.5 * (w * x)**2)
+    eig_v, u_mat = np.linalg.eigh(bath_basis.h_mat())
+    eig_v, u_mat = eig_v[:max_tier], np.transpose(u_mat[:, :max_tier])
+    grids = bath_basis.grid_points
+
     # Define the obersevable of interest
+
     cpu_t0 = cpu_time()
     logger1 = Logger(filename=fname, level='info').logger
-    logger1.info("# time    rho00 rho10 rho10 rho11")
     logger2 = Logger(filename='DEBUG_' + fname, level='info').logger
-    logger1.info("# time    CPU_time")
+    logger2.info("# time    CPU_time")
     for n, (time, r) in enumerate(
-            solver.propagator(
-                steps=count,
-                ode_inter=dt_unit,
-                split=True if ps_method is not None else False,
-            )):
-        # renormalized by the trace of rho
-        norm = np.trace(np.reshape(np.reshape(r.array, (4, -1))[:, 0], (2, 2)))
-        for _node in r.visitor(leaf=False):
-            _node.set_array(_node.array / norm)
+            solver.propagator(steps=count,
+                              ode_inter=dt_unit,
+                              split=True if ps_method is not None else False)):
         if n % callback_interval == 0:
-            rho = np.reshape(r.array, (4, -1))[:, 0]
+            rho = np.reshape(r.array, (2, 2, max_tier, -1))
+            rho = Tensor.partial_product(rho, 2, u_mat)
+
+            plt.plot(grids, np.abs(np.real(rho[0, 0, :, 0])), label='Pop.')
+            plt.plot(grids, np.abs(rho[0, 1, :, 0]), label='Coh.')
+            plt.xlim(-plot_len, plot_len)
+            plt.savefig(f'drude_{n}_{prefix}.png')
+            plt.close()
+
+            rv = np.reshape(r.array, (4, -1))[:, 0]
             logger1.info("{}    {} {} {} {}".format(
                 time,
-                rho[0],
-                rho[1],
-                rho[2],
-                rho[3],
+                rv[0],
+                rv[1],
+                rv[2],
+                rv[3],
             ))
             logger2.info("{} {}".format(
                 time,
@@ -142,29 +151,16 @@ if __name__ == '__main__':
     f_dir = os.path.abspath(os.path.dirname(__file__))
     os.chdir(f_dir)
 
-    for depth in [10, 15, 20]:
+    for coupling in [1750]:
         test_heom(
             fname=f'heom.dat',
-            dof=1,
-            max_tier=depth,
+            dof=0,
+            max_tier=10,
             rank_heom=4,
             decomp_method=None,
-            k_max=0,
+            k_max=4,
+            coupling=coupling,
             ode_method='RK45',
             ps_method=None,
             scale=1.0,
         )
-
-    # for dof in [0]:
-    #     for bcf_term in [5]:
-    #         for depth in [6, 9, 12]:
-    #             try:
-    #                 test_heom(
-    #                     fname='heom.dat',
-    #                     dof=dof,
-    #                     decomp_method=None,
-    #                     k_max=bcf_term,
-    #                     max_tier=depth,
-    #                 )
-    #             except:
-    #                 continue

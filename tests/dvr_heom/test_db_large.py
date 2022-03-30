@@ -22,6 +22,7 @@ def test_heom(fname=None,
               k_max=6,
               decomp_method=None,
               scale=1.0,
+              coupling=2500,
               ps_method='split',
               ode_method='RK45'):
     # System:
@@ -35,13 +36,13 @@ def test_heom(fname=None,
                     temperature, 'K-1').value_in_au if temperature else None
 
     ph_parameters = [
-        (Quantity(1600, 'cm-1').value_in_au, Quantity(500,
+        (Quantity(2500, 'cm-1').value_in_au, Quantity(coupling,
                                                       'cm-1').value_in_au),
-        (Quantity(1800, 'cm-1').value_in_au, Quantity(500,
+        (Quantity(1800, 'cm-1').value_in_au, Quantity(coupling,
                                                       'cm-1').value_in_au),
-        (Quantity(1400, 'cm-1').value_in_au, Quantity(500,
+        (Quantity(1400, 'cm-1').value_in_au, Quantity(coupling,
                                                       'cm-1').value_in_au),
-        (Quantity(2000, 'cm-1').value_in_au, Quantity(500,
+        (Quantity(2000, 'cm-1').value_in_au, Quantity(coupling,
                                                       'cm-1').value_in_au),
     ][:dof]
 
@@ -72,9 +73,9 @@ def test_heom(fname=None,
     count = 100000
 
     prefix = (
-        f'boson-drude_{ode_method}_{"relaxed" if relaxed else "pure"}_'
-        f'{decomp_method}_dof{dof}_bcf{k_max}_t{max_tier}_r{rank_heom}_{temperature}K_{ps_method}'
-    )
+        f'boson-drude_{"relaxed" if relaxed else "pure"}_'
+        f'{decomp_method}_{temperature}K_dof{dof}_bcf{k_max}_cp{coupling}_'
+        f't{max_tier}_r{rank_heom}_{ps_method}_{ode_method}')
     print(prefix)
 
     fname = prefix + '_' + fname
@@ -142,29 +143,30 @@ if __name__ == '__main__':
     f_dir = os.path.abspath(os.path.dirname(__file__))
     os.chdir(f_dir)
 
-    for depth in [10, 15, 20]:
+    for coupling in [1600, 1700, 1800, 1900]:
         test_heom(
             fname=f'heom.dat',
             dof=1,
-            max_tier=depth,
+            max_tier=10,
             rank_heom=4,
             decomp_method=None,
             k_max=0,
+            coupling=coupling,
             ode_method='RK45',
             ps_method=None,
             scale=1.0,
         )
 
-    # for dof in [0]:
-    #     for bcf_term in [5]:
-    #         for depth in [6, 9, 12]:
-    #             try:
-    #                 test_heom(
-    #                     fname='heom.dat',
-    #                     dof=dof,
-    #                     decomp_method=None,
-    #                     k_max=bcf_term,
-    #                     max_tier=depth,
-    #                 )
-    #             except:
-    #                 continue
+    for tier in [10, 15, 20]:
+        test_heom(
+            fname=f'heom.dat',
+            dof=1,
+            max_tier=tier,
+            rank_heom=4,
+            decomp_method=None,
+            k_max=0,
+            coupling=2000,
+            ode_method='RK45',
+            ps_method=None,
+            scale=1.0,
+        )

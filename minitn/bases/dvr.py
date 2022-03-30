@@ -117,7 +117,7 @@ class DVR(object):
     def q_mat(self):
         return np.diag(self.grid_points)
 
-    def p_mat(self):
+    def dq_mat(self):
         return NotImplemented
 
     def v_mat(self):
@@ -625,12 +625,11 @@ class SineDVR(DVR):
                                                           (self.n + 1)))
         return self.grid_points, self._u_mat
 
-    def p_mat(self):
-        factor = -1.0j * self.hbar
+    def dq_mat(self):
         j = np.arange(1, self.n + 1)
-        t_matrix = np.diag(j * np.pi / self.length)
-        t_matrix = factor * self.fbr2dvr_mat(t_matrix)
-        return t_matrix
+        mat = np.diag(j * np.pi / self.length)
+        mat = self.fbr2dvr_mat(mat)
+        return 1.0j * mat
 
     def t_mat(self):
         """Return the kinetic energy matrix in DVR.

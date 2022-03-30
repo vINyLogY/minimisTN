@@ -23,10 +23,9 @@ DTYPE = np.complex128
 
 class Hierachy(object):
     hbar = 1.0
-    diff_type = 1
     scale = 1.0
 
-    def __init__(self, n_dims, sys_hamiltonian, sys_op, corr):
+    def __init__(self, n_dims, sys_hamiltonian, sys_op, corr, basis=None):
         """
         Parameters
         ----------
@@ -47,6 +46,9 @@ class Hierachy(object):
         self._j = len(n_dims) + 1
 
         self.corr = corr
+        if basis is None:
+            basis = [None] * self.k_max
+        self.basis = basis
         assert sys_op.ndim == 2
         assert sys_op.shape == sys_hamiltonian.shape
         self.n_states = sys_op.shape[0]
@@ -54,58 +56,12 @@ class Hierachy(object):
         self.h = np.array(sys_hamiltonian, dtype=DTYPE)
 
     def h_list(self, sys_i, sys_j, ph_indices):
-
-        if self.diff_type == 1:
-            diff = self._diff1()
-        elif self.diff_type == 2:
-            diff = self._diff2()
-        else:
-            raise NotImplementedError
         index_convension = list(ph_indices) + [sys_i, sys_j]
         h_list = []
-        for term in diff:
+        for term in self._diff():
             h_list.append([(index_convension[fst], snd) for fst, snd in term])
 
         return h_list
-
-    def h_list_dvr(self, sys_i, sys_j, ph_indices, basis):
-        assert isinstance(basis, SineDVR)
-
-        diff = self._diff_basis(basis)
-        index_convension = list(ph_indices) + [sys_i, sys_j]
-        h_list = []
-        for term in diff:
-            h_list.append([(index_convension[fst], snd) for fst, snd in term])
-        return
-
-    def _diff_basis(self, basis):
-        pm_ham = basis.h_mat()
-        _, enb2dvr = np.linalg.eigh(pm_ham)
-
-        def sim(mat):
-            return enb2dvr.T @ mat @ enb2dvr
-
-        i = self._i
-        j = self._j
-        derivative = [
-            [(i, -1.0j * self.h)],
-            [(j, 1.0j * self.h)],
-        ]
-
-        for k in range(self.k_max):
-            ck = complex(self.corr.coeff[k])
-            cck = complex(self.corr.conj_coeff[k])
-
-            dk = [
-                [(k, self.corr.derivative[k] * sim(self._numberer(k)))],
-                [(i, -1.0j * self.op),
-                 (k, ck * sim(self._raiser(k)) + sim(self._lower(k)))],
-                [(j, 1.0j * self.op),
-                 (k, cck * sim(self._raiser(k)) + sim(self._lower(k)))],
-            ]
-            derivative.extend(dk)
-
-        return derivative
 
     def gen_extended_rho(self, rho):
         """Get rho_n from rho with the conversion:
@@ -126,20 +82,40 @@ class Hierachy(object):
 
     def _raiser(self, k):
         """Acting on 0-th index"""
-        dim = self.n_dims[k]
-        sqrt_n = np.diag(np.sqrt(np.arange(dim, dtype=DTYPE)))
-        return np.eye(dim, k=1, dtype=DTYPE) @ sqrt_n
+        if self.basis[k] is None:
+            dim = self.n_dims[k]
+            sqrt_n = np.diag(np.sqrt(np.arange(dim, dtype=DTYPE)))
+            ans = np.eye(dim, k=1, dtype=DTYPE) @ sqrt_n
+        else:
+            q = self.basis[k].q_mat()
+            dq = self.basis[k].dq_mat()
+            ans = np.transpose(np.array((q - dq) / np.sqrt(2), dtype=DTYPE))
+        return ans
 
     def _lower(self, k):
         """Acting on 0-th index"""
-        dim = self.n_dims[k]
-        sqrt_n = np.diag(np.sqrt(np.arange(dim, dtype=DTYPE)))
-        return sqrt_n @ np.eye(dim, k=-1, dtype=DTYPE)
+        if self.basis[k] is None:
+            dim = self.n_dims[k]
+            sqrt_n = np.diag(np.sqrt(np.arange(dim, dtype=DTYPE)))
+            ans = sqrt_n @ np.eye(dim, k=-1, dtype=DTYPE)
+        else:
+            q = self.basis[k].q_mat()
+            dq = self.basis[k].dq_mat()
+            ans = np.transpose(np.array((q + dq) / np.sqrt(2), dtype=DTYPE))
+        return ans
 
     def _numberer(self, k):
-        return np.diag(np.arange(self.n_dims[k], dtype=DTYPE))
+        """Acting on 0-th index"""
+        if self.basis[k] is None:
+            ans = np.diag(np.arange(self.n_dims[k], dtype=DTYPE))
+        else:
+            q = self.basis[k].q_mat()
+            dq = self.basis[k].dq_mat()
+            ans = np.transpose(
+                np.array(0.5 * (q**2 - dq**2) - 0.5, dtype=DTYPE))
+        return ans
 
-    def _diff1(self):
+    def _diff(self):
         """Get the derivative of rho_n at time t.
         
         Acting on 0-th index.
@@ -155,50 +131,14 @@ class Hierachy(object):
         for k in range(self.k_max):
             ck = complex(self.corr.coeff[k])
             cck = complex(self.corr.conj_coeff[k])
-
             fk = self.scale
 
-            print(f"f_k = {fk}")
             dk = [
                 [(k, self.corr.derivative[k] * self._numberer(k))],
                 [(i, -1.0j * self.op),
                  (k, ck / fk * self._raiser(k) + fk * self._lower(k))],
                 [(j, 1.0j * self.op),
                  (k, cck / fk * self._raiser(k) + fk * self._lower(k))],
-            ]
-            derivative.extend(dk)
-
-        return derivative
-
-    def _diff2(self):  # FIXME
-        """Get the derivative of rho_n at time t.
-
-        Analog to WFN dynamics of the total model
-        
-        Acting on 0-th index.
-        """
-        #self.corr.print()
-        i = self._i
-        j = self._j
-        derivative = [
-            [(i, -1.0j * self.h)],
-            [(j, 1.0j * self.h)],
-        ]
-
-        for k in range(self.k_max):
-            ck = complex(self.corr.coeff[k])
-            cck = complex(self.corr.conj_coeff[k])
-
-            fk = np.sqrt(ck)
-            cfk = np.sqrt(cck)
-            print(f"f_k = {fk}, cf_k = {cfk}")
-
-            dk = [
-                [(k, self.corr.derivative[k] * self._numberer(k))],
-                [(i, -1.0j * self.op),
-                 (k, fk * (self._raiser(k) * self._lower(k)))],
-                [(j, 1.0j * self.op),
-                 (k, cfk * (self._raiser(k) + self._lower(k)))],
             ]
             derivative.extend(dk)
 
