@@ -1,6 +1,8 @@
 # A Simple Tensor Network Program
 
-For my thesis.
+Use ffmpeg to make movie:
+
+    ffmpeg -framerate 50 -pattern_type glob -i '*.png' -c:v libx264 -pix_fmt yuv420p out.mp4
 
 ## TODO
 [v] Generate a MultiLayer type of `h_list` from a string graph and a `h_list` as in `SpinBosonModel`. 
