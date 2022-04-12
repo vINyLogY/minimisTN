@@ -152,7 +152,7 @@ class Hierachy(object):
             if self.basis[k] is None:
                 fk = self.scale
             else:
-                fk = np.abs(self.corr.derivative[k])
+                fk = np.sqrt(np.real((ck + cck) / 2.0))
             print(f"f_{k}: {fk}")
 
             dk = [

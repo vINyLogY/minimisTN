@@ -28,6 +28,7 @@ def test_heom(fname=None,
               decomp_method=None,
               scale=1.0,
               coupling=2500,
+              temperature=100_000,
               ps_method='split',
               ode_method='RK45'):
     # System:
@@ -36,10 +37,9 @@ def test_heom(fname=None,
     v = Quantity(500, 'cm-1').value_in_au if relaxed else 0.0
 
     rank_heom = rank_heom if decomp_method is not None else None
-    temperature = 300
+
     beta = Quantity(1 /
                     temperature, 'K-1').value_in_au if temperature else None
-
     sd_method = Drude.pade
     w = Quantity(50, 'cm-1').value_in_au
     drude = Drude(gamma=w,
@@ -63,9 +63,8 @@ def test_heom(fname=None,
     rho_0 = np.tensordot(wfn_0, wfn_0, axes=0)
 
     # Propagation
-    dt_unit = Quantity(.01, 'fs').value_in_au
-    callback_interval = 100
-    count = 10000
+    dt_unit = Quantity(.1, 'fs').value_in_au
+    count = 1000
 
     prefix = (
         f'boson-drude_{"relaxed" if relaxed else "pure"}_'
@@ -101,10 +100,9 @@ def test_heom(fname=None,
 
     # DVR
 
-    length = 1.0 / w
-    plot_len = 0.2 * length
+    length = 100
     bath_basis = SineDVR(-length, length, 1000)
-    bath_basis.set_v_func(lambda x: 0.5 * (w * x)**2)
+    bath_basis.set_v_func(lambda x: 0.5 * x**2)
     eig_v, u_mat = np.linalg.eigh(bath_basis.h_mat())
     eig_v, u_mat = eig_v[:max_tier], np.transpose(u_mat[:, :max_tier])
     grids = bath_basis.grid_points
@@ -119,29 +117,25 @@ def test_heom(fname=None,
             solver.propagator(steps=count,
                               ode_inter=dt_unit,
                               split=True if ps_method is not None else False)):
-        if n % callback_interval == 0:
-            rho = np.reshape(r.array, (2, 2, max_tier, -1))
-            rho = Tensor.partial_product(rho, 2, u_mat)
+        rho = np.reshape(r.array, (2, 2, max_tier, -1))
+        rho = Tensor.partial_product(rho, 2, u_mat)
 
-            plt.plot(grids, np.abs(np.real(rho[0, 0, :, 0])), label='Pop.')
-            plt.plot(grids, np.abs(rho[0, 1, :, 0]), label='Coh.')
-            plt.xlim(-plot_len, plot_len)
-            plt.savefig(f'drude_{n}_{prefix}.png')
-            plt.close()
+        plt.plot(grids, np.abs(np.real(rho[0, 0, :, 0])), 'k.', label='Pop.')
+        plt.plot(grids, np.abs(rho[0, 1, :, 0]), 'rx', label='Coh.')
+        plt.xlim(-10, 10)
+        plt.ylim(-0.5, 0.5)
+        plt.savefig(f'{n:08d}.png')
+        plt.close()
 
-            rv = np.reshape(r.array, (4, -1))[:, 0]
-            logger1.info("{}    {} {} {} {}".format(
-                time,
-                rv[0],
-                rv[1],
-                rv[2],
-                rv[3],
-            ))
-            logger2.info("{} {}".format(
-                time,
-                cpu_time() - cpu_t0,
-            ))
-
+        rv = np.reshape(r.array, (4, -1))[:, 0]
+        logger1.info("{}    {} {} {} {}".format(
+            time,
+            rv[0],
+            rv[1],
+            rv[2],
+            rv[3],
+        ))
+        print(f'Coh: {np.abs(rv[1])}')
     return
 
 
@@ -151,14 +145,14 @@ if __name__ == '__main__':
     f_dir = os.path.abspath(os.path.dirname(__file__))
     os.chdir(os.path.join(f_dir, 'drude_std'))
 
-    for coupling in [1750]:
+    for coupling in [1000]:
         test_heom(
             fname=f'heom.dat',
             dof=0,
-            max_tier=10,
-            rank_heom=4,
+            max_tier=50,
             decomp_method=None,
-            k_max=4,
+            temperature=300,
+            k_max=1,
             coupling=coupling,
             ode_method='RK45',
             ps_method=None,

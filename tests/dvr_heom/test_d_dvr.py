@@ -1,16 +1,13 @@
 #!/usr/bin/env python3
 # coding: utf-8
 from __future__ import absolute_import, division, print_function
-from asyncio.log import logger
 
 from builtins import filter, map, range, zip
-from email.policy import strict
 from time import time as cpu_time
 
 from matplotlib import pyplot as plt
 
 from minitn.heom.corr import Drude
-
 from minitn.heom.network import simple_heom, tensor_train_template
 from minitn.heom.propagate import MultiLayer
 from minitn.lib.backend import DTYPE, np
@@ -31,7 +28,7 @@ def test_heom(
     scale=1.0,
     coupling=1500,
     length=50,
-    temperature=300,
+    temperature=100_000,
     ps_method='split',
     ode_method='RK45',
 ):
@@ -46,10 +43,10 @@ def test_heom(
                     temperature, 'K-1').value_in_au if temperature else None
     w = Quantity(2500, 'cm-1').value_in_au
     g = Quantity(coupling, 'cm-1').value_in_au
-    ph_parameters = [(w, g)]
+    ph_parameters = [(w, g)][:dof]
 
     sd_method = Drude.pade
-    drude = Drude(gamma=Quantity(20, 'cm-1').value_in_au,
+    drude = Drude(gamma=Quantity(50, 'cm-1').value_in_au,
                   lambda_=Quantity(500, 'cm-1').value_in_au,
                   beta=beta,
                   k_max=k_max,
@@ -70,12 +67,11 @@ def test_heom(
     rho_0 = np.tensordot(wfn_0, wfn_0, axes=0)
 
     # Propagation
-    dt_unit = Quantity(.001, 'fs').value_in_au
-    callback_interval = 1
+    dt_unit = Quantity(.1, 'fs').value_in_au
     count = 1000
 
     prefix = (
-        f'boson_DVR_{"relaxed" if relaxed else "pure"}_'
+        f'drude_DVR_{"relaxed" if relaxed else "pure"}_'
         f'{decomp_method}_{temperature}K_dof{dof}_bcf{k_max}_cp{coupling}_'
         f't{max_tier}_r{rank_heom}_{ps_method}_{ode_method}_f{scale}')
     print(prefix)
@@ -93,28 +89,27 @@ def test_heom(
         raise NotImplementedError
 
     # DVR
-    class Grids:
-
-        def __init__(self, xmin, xmax, num) -> None:
-            self.grid_points = np.linspace(xmin, xmax, num, endpoint=True)
-            self.length = xmax - xmin
-            self.num = num
-
-        def q_mat(self):
-            return np.diag(self.grid_points)
-
-        def dq_mat(self):
-            return (np.eye(self.num, k=1) - np.eye(self.num, k=-1)) / (
-                self.grid_points[2] - self.grid_points[0])
-
-    plot_len = 15
-    #bath_basis = Grids(-length, length, max_tier)
     bath_basis = SineDVR(-length, length, max_tier)
+    bath_basis.set_v_func(lambda x: 0.5 * x**2)
 
+    def _eig_mat():
+        w, u = np.linalg.eigh(bath_basis.h_mat())
+        # correct the direction according to a+ and a-
+        a = np.transpose(
+            (bath_basis.q_mat() - bath_basis.dq_mat()) / np.sqrt(2.0))
+        diag = np.diagonal(u.T @ a @ u, offset=1)
+        counter = 0
+        for _n, _d in enumerate(diag):
+            _n_ = _n + 1
+            if _d < 0.0:
+                counter += 1
+            u[:, _n_] = (-1)**counter * u[:, _n_]
+
+        # print(f"Eigen values: {w[:10]}")
+        return u
+
+    bath_basis.eig_mat = _eig_mat
     grids = bath_basis.grid_points
-    gaussian = lambda x: np.exp(-0.5 * x**2)
-    u_vec = gaussian(grids)
-    u_vec /= np.linalg.norm(u_vec)
 
     # Prepare EOM
     leaves = root.leaves()
@@ -126,14 +121,10 @@ def test_heom(
                                scale=scale)
 
     # Prepare initial state
-    tfmat = np.zeros((max_tier, max_tier))
-    tfmat[0] = u_vec
+    tfmat = np.transpose(bath_basis.eig_mat())
     array = root.array
-    for _i in [2, 3]:
+    for _i in [2]:
         array = Tensor.partial_product(array, _i, tfmat)
-
-    #for _i in [2, 3]:
-    #    array = Tensor.partial_product(array, _i, np.transpose([u_vec]))
 
     # Prepare HEOM solver
     root.set_array(array)
@@ -144,40 +135,28 @@ def test_heom(
         solver.ps_method = ps_method
     solver.svd_err = 1.0e-10  #only for unite propagation
 
-    # Define the obersevable of interest
-    levels = np.linspace(-0.035, 0.035, 350)
-    cmap = "seismic"
-
-    cpu_t0 = cpu_time()
     logger1 = Logger(filename=fname, level='info').logger
-    logger2 = Logger(filename='DEBUG_' + fname, level='info').logger
-    logger2.info("# time    CPU_time")
+    #logger2.info("# time    CPU_time")
     for n, (time, r) in enumerate(
-            solver.propagator(steps=count,
-                              ode_inter=dt_unit,
-                              split=True if ps_method is not None else False)):
-        if n % callback_interval == 0:
-            rho = Tensor.partial_product(r.array, 3, np.transpose([u_vec]))
-            plt.plot(grids, np.real(rho[0, 0, :, 0]), '.', label='Pop.')
-            plt.plot(grids, np.real(rho[0, 1, :, 0]), 'o', label='Coh. (Re)')
-            plt.plot(grids, np.imag(rho[0, 1, :, 0]), 'x', label='Coh. (Im)')
-            plt.legend()
-            plt.ylim(-.5, .5)
-            plt.savefig(f'{n//callback_interval:08d}.png')
-            plt.close()
-            rho = Tensor.partial_product(rho, 2, np.transpose([u_vec]))
-            rv = np.reshape(rho, (4, ))
-            logger1.info("{}    {} {} {} {}".format(
-                time,
-                rv[0],
-                rv[1],
-                rv[2],
-                rv[3],
-            ))
-            logger2.info("{} {}".format(
-                time,
-                cpu_time() - cpu_t0,
-            ))
+            solver.propagator(steps=count, ode_inter=dt_unit, split=False)):
+
+        rho0 = np.reshape(r.array, (2, 2, max_tier, -1))[:, :, :, 0]
+        plt.plot(grids, np.real(rho0[0, 0, :]), 'k.', label='Pop.')
+        plt.plot(grids, np.abs(rho0[0, 1, :]), 'rx', label='Coh.')
+        plt.legend()
+        plt.xlim(-10, 10)
+        plt.ylim(-.5, .5)
+        plt.savefig(f'{n:08d}.png')
+        plt.close()
+
+        rho0 = Tensor.partial_product(rho0, 2, np.transpose(tfmat))
+        rv = np.reshape(rho0, (4, -1))
+        logger1.info(f"{time}    {rv[0, 0]} {rv[1, 0]} {rv[2, 0]} {rv[3, 0]}")
+        print(f'Coh: {np.abs(rv[1, 0])}')
+        # logger2.info("{} {}".format(
+        #     time,
+        #     cpu_time() - cpu_t0,
+        # ))
 
     return
 
@@ -188,18 +167,21 @@ if __name__ == '__main__':
     f_dir = os.path.abspath(os.path.dirname(__file__))
     os.chdir(os.path.join(f_dir, 'drude_dvr'))
 
-    for t in [0]:
-        test_heom(
-            fname=f'heom.dat',
-            dof=1,
-            max_tier=51,
-            length=10,
-            rank_heom=4,
-            coupling=1000,
-            decomp_method=None,
-            k_max=0,
-            temperature=t,
-            ode_method='RK45',
-            ps_method=None,
-            scale=1,
-        )
+    L = 100
+    DL = 0.1
+    N = int(L / DL)
+    print(f"Max tier: {N}")
+
+    test_heom(
+        fname=f'heom.dat',
+        dof=0,
+        length=L,
+        max_tier=N,
+        coupling=1000,
+        decomp_method=None,
+        k_max=1,
+        temperature=0,
+        ode_method='RK45',
+        ps_method=None,
+        scale=1.0,
+    )
