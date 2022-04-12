@@ -87,9 +87,15 @@ class Hierachy(object):
             sqrt_n = np.diag(np.sqrt(np.arange(dim, dtype=DTYPE)))
             ans = np.eye(dim, k=1, dtype=DTYPE) @ sqrt_n
         else:
-            q = self.basis[k].q_mat()
-            dq = self.basis[k].dq_mat()
-            ans = np.transpose(np.array((q - dq) / np.sqrt(2), dtype=DTYPE))
+            q = self.basis[k].q_mat() / np.sqrt(2)
+            dq = self.basis[k].dq_mat() / np.sqrt(2)
+            ans = np.transpose(np.array(q - dq, dtype=DTYPE))
+            print(
+                f'raiser-{k}:',
+                np.diagonal(
+                    self.basis[k].eig_mat().T @ ans @ self.basis[k].eig_mat(),
+                    offset=1,
+                )[:10])
         return ans
 
     def _lower(self, k):
@@ -99,9 +105,15 @@ class Hierachy(object):
             sqrt_n = np.diag(np.sqrt(np.arange(dim, dtype=DTYPE)))
             ans = sqrt_n @ np.eye(dim, k=-1, dtype=DTYPE)
         else:
-            q = self.basis[k].q_mat()
-            dq = self.basis[k].dq_mat()
-            ans = np.transpose(np.array((q + dq) / np.sqrt(2), dtype=DTYPE))
+            q = self.basis[k].q_mat() / np.sqrt(2)
+            dq = self.basis[k].dq_mat() / np.sqrt(2)
+            ans = np.transpose(np.array(q + dq, dtype=DTYPE))
+            print(
+                f'lower-{k}:',
+                np.diagonal(
+                    self.basis[k].eig_mat().T @ ans @ self.basis[k].eig_mat(),
+                    offset=-1,
+                )[:10])
         return ans
 
     def _numberer(self, k):
@@ -109,10 +121,16 @@ class Hierachy(object):
         if self.basis[k] is None:
             ans = np.diag(np.arange(self.n_dims[k], dtype=DTYPE))
         else:
-            q = self.basis[k].q_mat()
-            dq = self.basis[k].dq_mat()
-            ans = np.transpose(
-                np.array(0.5 * (q**2 - dq**2) - 0.5, dtype=DTYPE))
+            n = len(self.basis[k].grid_points)
+            q2 = self.basis[k].q_mat()**2
+            dq2 = self.basis[k].dq2_mat()
+            ans = np.transpose(0.5 * (q2 - dq2 - np.identity(n)))
+            print(
+                f'numberer-{k}:',
+                np.diagonal(
+                    self.basis[k].eig_mat().T @ ans @ self.basis[k].eig_mat(),
+                    offset=0,
+                )[:10])
         return ans
 
     def _diff(self):
@@ -131,7 +149,11 @@ class Hierachy(object):
         for k in range(self.k_max):
             ck = complex(self.corr.coeff[k])
             cck = complex(self.corr.conj_coeff[k])
-            fk = self.scale
+            if self.basis[k] is None:
+                fk = self.scale
+            else:
+                fk = np.sqrt(np.real((ck + cck) / 2.0))
+            print(f"f_{k}: {fk}")
 
             dk = [
                 [(k, self.corr.derivative[k] * self._numberer(k))],

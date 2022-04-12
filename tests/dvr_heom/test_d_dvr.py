@@ -28,7 +28,7 @@ def test_heom(
     scale=1.0,
     coupling=1500,
     length=50,
-    temperature=300,
+    temperature=100_000,
     ps_method='split',
     ode_method='RK45',
 ):
@@ -43,10 +43,10 @@ def test_heom(
                     temperature, 'K-1').value_in_au if temperature else None
     w = Quantity(2500, 'cm-1').value_in_au
     g = Quantity(coupling, 'cm-1').value_in_au
-    ph_parameters = [(w, g)]
+    ph_parameters = [(w, g)][:dof]
 
     sd_method = Drude.pade
-    drude = Drude(gamma=Quantity(20, 'cm-1').value_in_au,
+    drude = Drude(gamma=Quantity(50, 'cm-1').value_in_au,
                   lambda_=Quantity(500, 'cm-1').value_in_au,
                   beta=beta,
                   k_max=k_max,
@@ -71,7 +71,7 @@ def test_heom(
     count = 1000
 
     prefix = (
-        f'boson_DVR_{"relaxed" if relaxed else "pure"}_'
+        f'drude_DVR_{"relaxed" if relaxed else "pure"}_'
         f'{decomp_method}_{temperature}K_dof{dof}_bcf{k_max}_cp{coupling}_'
         f't{max_tier}_r{rank_heom}_{ps_method}_{ode_method}_f{scale}')
     print(prefix)
@@ -123,11 +123,8 @@ def test_heom(
     # Prepare initial state
     tfmat = np.transpose(bath_basis.eig_mat())
     array = root.array
-    for _i in [3, 2]:
+    for _i in [2]:
         array = Tensor.partial_product(array, _i, tfmat)
-
-    #for _i in [2, 3]:
-    #    array = Tensor.partial_product(array, _i, np.transpose([u_vec]))
 
     # Prepare HEOM solver
     root.set_array(array)
@@ -138,54 +135,24 @@ def test_heom(
         solver.ps_method = ps_method
     solver.svd_err = 1.0e-10  #only for unite propagation
 
-    # Define the obersevable of interest
-    levels = np.linspace(-0.035, 0.035, 350)
-    cmap = "seismic"
-
-    # Filter to remove numerical instability
-    window = max_tier // 10
-    filter_ = np.zeros((max_tier, ), dtype=DTYPE)
-    filter_[max_tier // 4:-max_tier // 4] = 1.0
-    filter_ = np.diag(filter_)
-
-    cpu_t0 = cpu_time()
     logger1 = Logger(filename=fname, level='info').logger
-    logger2 = Logger(filename='DEBUG_' + fname, level='info').logger
     #logger2.info("# time    CPU_time")
     for n, (time, r) in enumerate(
             solver.propagator(steps=count, ode_inter=dt_unit, split=False)):
 
-        array = r.array
-        for _i in [2, 3]:
-            array = Tensor.partial_product(array, _i, filter_)
-
-        rho1 = Tensor.partial_product(r.array, 2, np.transpose(tfmat))
-        plt.plot(grids, np.real(rho1[0, 0, 0, :]), 'k.', label='Pop.')
-        plt.plot(grids, np.abs(rho1[0, 1, 0, :]), 'rx', label='Coh.')
+        rho0 = np.reshape(r.array, (2, 2, max_tier, -1))[:, :, :, 0]
+        plt.plot(grids, np.real(rho0[0, 0, :]), 'k.', label='Pop.')
+        plt.plot(grids, np.abs(rho0[0, 1, :]), 'rx', label='Coh.')
         plt.legend()
         plt.xlim(-10, 10)
         plt.ylim(-.5, .5)
         plt.savefig(f'{n:08d}.png')
         plt.close()
 
-        # rho2 = Tensor.partial_product(r.array, 3, np.transpose(tfmat))
-        # plt.plot(grids, np.real(rho2[0, 0, :, 0]), 'k.', label='Pop.')
-        # plt.plot(grids, np.abs(rho2[0, 1, :, 0]), 'rx', label='Coh.')
-        # plt.legend()
-        # plt.xlim(-10, 10)
-        # plt.ylim(-.5, .5)
-        # plt.savefig(f'b{n:08d}.png')
-        # plt.close()
-
-        _a = r.array
-        for _i in [3, 2]:
-            _a = Tensor.partial_product(_a, _i, np.transpose(tfmat))
-        rv = np.reshape(_a, (4, -1))
-
-        tr = rv[0, 0] + rv[-1, 0]
-        rv = rv / tr
+        rho0 = Tensor.partial_product(rho0, 2, np.transpose(tfmat))
+        rv = np.reshape(rho0, (4, -1))
         logger1.info(f"{time}    {rv[0, 0]} {rv[1, 0]} {rv[2, 0]} {rv[3, 0]}")
-        r.set_array(array / tr)
+        print(f'Coh: {np.abs(rv[1, 0])}')
         # logger2.info("{} {}".format(
         #     time,
         #     cpu_time() - cpu_t0,
@@ -198,24 +165,23 @@ if __name__ == '__main__':
     import os
 
     f_dir = os.path.abspath(os.path.dirname(__file__))
-    os.chdir(os.path.join(f_dir, 'dvr'))
+    os.chdir(os.path.join(f_dir, 'drude_dvr'))
 
     L = 100
     DL = 0.1
     N = int(L / DL)
     print(f"Max tier: {N}")
 
-    for t in [0]:
-        test_heom(
-            fname=f'heom.dat',
-            dof=1,
-            length=L,
-            max_tier=N,
-            coupling=1000,
-            decomp_method=None,
-            k_max=0,
-            temperature=t,
-            ode_method='RK45',
-            ps_method=None,
-            scale=1.0,
-        )
+    test_heom(
+        fname=f'heom.dat',
+        dof=0,
+        length=L,
+        max_tier=N,
+        coupling=1000,
+        decomp_method=None,
+        k_max=1,
+        temperature=0,
+        ode_method='RK45',
+        ps_method=None,
+        scale=1.0,
+    )

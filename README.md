@@ -1,5 +1,10 @@
 # A Simple Tensor Network Program
 
+
+Use ffmpeg to make movie:
+
+    ffmpeg -framerate 50 -pattern_type glob -i '*.png' -c:v libx264 -pix_fmt yuv420p out.mp4
+
 A comprehensive python package for quantum dynamics, including: 
   - Davidson diagonalization `minitn.lib.numerical.DavidsonAlgorithm`,
   - Discrete variable representation basis `minitn.bases.dvr`, 

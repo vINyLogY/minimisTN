@@ -91,7 +91,8 @@ class MultiLayer(object):
         """
         for name, value in kwargs.items():
             if not hasattr(cls, name):
-                raise AttributeError('{} has no attr \'{}\'!'.format(cls, name))
+                raise AttributeError('{} has no attr \'{}\'!'.format(
+                    cls, name))
             setattr(cls, name, value)
         return
 
@@ -129,7 +130,8 @@ class MultiLayer(object):
             for term in f_list:
                 for pair in term:
                     if not isinstance(pair[0], Leaf) and not use_str_name:
-                        raise TypeError('0-th ary in tuple must be of type ' 'Leaf!')
+                        raise TypeError('0-th ary in tuple must be of type '
+                                        'Leaf!')
                     if not callable(pair[1]):
                         raise TypeError('1-th ary in tuple must be callable!')
         if use_str_name:
@@ -179,8 +181,7 @@ class MultiLayer(object):
             if m not in combinations:
                 permutation = [
                     case[:j] + [case[j] + 1] + case[j + 1:]
-                    for case in combinations[m - 1]
-                    for j in range(length)
+                    for case in combinations[m - 1] for j in range(length)
                     if case[j] + 1 < n_list[j]
                 ]
                 combinations[m] = []
@@ -203,7 +204,8 @@ class MultiLayer(object):
                     h = h(0.0)
                     break
         if h is None:
-            raise RuntimeError('Cannot found a local hamiltonian for {}'.format(leaf))
+            raise RuntimeError(
+                'Cannot found a local hamiltonian for {}'.format(leaf))
 
         def matvec(vec, mat=h):
             vec = np.reshape(vec, h.shape)
@@ -236,17 +238,20 @@ class MultiLayer(object):
                             break
                     p, p_i = t[axis]
                     n_parent = n_bond_dict[(p, p_i, t, axis)]
-                    vec_i = np.diag(np.ones((n_leaf,)) / np.sqrt(n_leaf))
+                    vec_i = np.diag(np.ones((n_leaf, )) / np.sqrt(n_leaf))
                     vec_i = np.reshape(vec_i, -1)
                     init_vecs = [vec_i]
-                    print(np.shape(init_vecs), np.shape(self._local_matvec(leaf)))
-                    da = DavidsonAlgorithm(self._local_matvec(leaf), init_vecs=init_vecs, n_vals=n_parent)
+                    print(np.shape(init_vecs),
+                          np.shape(self._local_matvec(leaf)))
+                    da = DavidsonAlgorithm(self._local_matvec(leaf),
+                                           init_vecs=init_vecs,
+                                           n_vals=n_parent)
                     array = da.kernel(search_mode=True)
                     if len(array) >= n_parent:
                         array = array[:n_parent]
                     else:
                         for j in range(n_parent - len(array)):
-                            v = np.zeros((n_leaf**2,))
+                            v = np.zeros((n_leaf**2, ))
                             v[j] = 1.0
                             array.append(v)
                     assert len(array) == n_parent
@@ -271,7 +276,8 @@ class MultiLayer(object):
                         array = np.moveaxis(array, 0, axis)
                 t.set_array(array)
                 t.normalize(forced=True)
-                assert (t.axis is None or np.linalg.matrix_rank(t.local_norm()) == t.shape[t.axis])
+                assert (t.axis is None or np.linalg.matrix_rank(t.local_norm())
+                        == t.shape[t.axis])
         if __debug__:
             for t in self.root.visitor():
                 t.check_completness(strict=True)
@@ -317,7 +323,8 @@ class MultiLayer(object):
                 if isinstance(leaf, Leaf):
                     leaf.set_array(array)
                 else:
-                    raise RuntimeError('{} is not leaf in term {}'.format(leaf, term))
+                    raise RuntimeError('{} is not leaf in term {}'.format(
+                        leaf, term))
             yield n
             for leaf, _ in term:
                 leaf.reset()
@@ -399,7 +406,8 @@ class MultiLayer(object):
                 if self.pinv:
                     inv = linalg.pinv2(density)
                 else:
-                    inv = linalg.inv(density + self.regular_err * np.identity(tensor.shape[axis]))
+                    inv = linalg.inv(density + self.regular_err *
+                                     np.identity(tensor.shape[axis]))
                 self.inv_density[tensor] = inv
         return self.inv_density
 
@@ -507,7 +515,8 @@ class MultiLayer(object):
             for t in visitor(leaf=False):
                 y0 = k[0][t]
                 k4 = ode_inter * t.aux
-                t.set_array(k[0][t] + (k[1][t] + 2. * k[2][t] + 2. * k[3][t] + k4) / 6.)
+                t.set_array(k[0][t] +
+                            (k[1][t] + 2. * k[2][t] + 2. * k[3][t] + k4) / 6.)
                 t.aux = None
         else:
             root = self.root
@@ -549,7 +558,9 @@ class MultiLayer(object):
             pass
         else:
             if logging.root.isEnabledFor(level):
-                root.tensorize(np.conj(init), use_aux=True, shape_dict=shape_dict)
+                root.tensorize(np.conj(init),
+                               use_aux=True,
+                               shape_dict=shape_dict)
                 ip = root.global_inner_product()
                 logging.log(level, __("<|>:{}", ip))
 
@@ -574,7 +585,9 @@ class MultiLayer(object):
         cmf_steps = self.cmf_steps
         for n in count(1):
             if ode_solver.status != 'running':
-                logging.debug(__('* Propagation done.  Average CMF steps: {}', n // cmf_steps))
+                logging.debug(
+                    __('* Propagation done.  Average CMF steps: {}',
+                       n // cmf_steps))
                 break
             if n % cmf_steps == 0:
                 if n >= self.max_ode_steps:
@@ -615,8 +628,10 @@ class MultiLayer(object):
         if tensor.axis is None:
             self.root = tensor
         else:
-            raise RuntimeError("Cannot propagate on Tensor {}" "which is not a root node!".format(tensor))
-        logging.debug(__("* Propagating at {} ({}) for {}", tensor, tensor.shape, tau))
+            raise RuntimeError("Cannot propagate on Tensor {}"
+                               "which is not a root node!".format(tensor))
+        logging.debug(
+            __("* Propagating at {} ({}) for {}", tensor, tensor.shape, tau))
         y0 = np.reshape(tensor.array, -1)
         _re = None if self.f_list is None else reformer
         with self.log_inner_product(level=logging.DEBUG):
@@ -635,7 +650,10 @@ class MultiLayer(object):
         end, _ = t[i]
         self.remove_env(t, end)
         if unite_first:
-            path = t.unite_split(i, operator=op, rank=self.svd_rank, err=self.svd_err)
+            path = t.unite_split(i,
+                                 operator=op,
+                                 rank=self.svd_rank,
+                                 err=self.svd_err)
         else:
             path = t.split_unite(i, operator=op)
         self.root = end
@@ -651,8 +669,14 @@ class MultiLayer(object):
 
     def split_step(self, ode_inter=0.01, imaginary=False, backward=False):
         self._form_env()
-        prop = partial(self._split_prop, tau=ode_inter, imaginary=imaginary, cache=True)
-        inv_prop = partial(self._split_prop, tau=(-ode_inter), imaginary=imaginary, cache=True)
+        prop = partial(self._split_prop,
+                       tau=ode_inter,
+                       imaginary=imaginary,
+                       cache=True)
+        inv_prop = partial(self._split_prop,
+                           tau=(-ode_inter),
+                           imaginary=imaginary,
+                           cache=True)
         linkages = list(self.root.decorated_linkage_visitor(leaf=False))
         move = self.move
         if backward:
@@ -675,8 +699,14 @@ class MultiLayer(object):
 
     def unite_step(self, ode_inter=0.01, imaginary=False, backward=False):
         self._form_env()
-        prop = partial(self._split_prop, tau=ode_inter, imaginary=imaginary, cache=True)
-        inv_prop = partial(self._split_prop, tau=(-ode_inter), imaginary=imaginary, cache=True)
+        prop = partial(self._split_prop,
+                       tau=ode_inter,
+                       imaginary=imaginary,
+                       cache=True)
+        inv_prop = partial(self._split_prop,
+                           tau=(-ode_inter),
+                           imaginary=imaginary,
+                           cache=True)
         linkages = list(self.root.decorated_linkage_visitor(leaf=False))
         move = self.move
         origin = self.root
@@ -707,7 +737,11 @@ class MultiLayer(object):
         assert not any(counter.values())
         return
 
-    def r_split_step(self, ode_inter=0.01, imaginary=False, _root=None, _axis=None):
+    def r_split_step(self,
+                     ode_inter=0.01,
+                     imaginary=False,
+                     _root=None,
+                     _axis=None):
         """Recursive projector-splitting method.  The time of the
         coefficient of a wfn matters most.
         """
@@ -724,7 +758,10 @@ class MultiLayer(object):
                 op1, op2, = op2, op1
             for i, t, j in linkages:
                 move(r, i, op1)
-                self.r_split_step(ode_inter=tau, imaginary=imaginary, _root=t, _axis=j)
+                self.r_split_step(ode_inter=tau,
+                                  imaginary=imaginary,
+                                  _root=t,
+                                  _axis=j)
                 move(t, j, op2)
             return
 
@@ -737,7 +774,13 @@ class MultiLayer(object):
             propagate(_root, tau=ode_inter, cache=True)
         return
 
-    def propagator(self, steps=None, ode_inter=0.01, split=False, imaginary=False, start=0, move_energy=False):
+    def propagator(self,
+                   steps=None,
+                   ode_inter=0.01,
+                   split=False,
+                   imaginary=False,
+                   start=0,
+                   move_energy=False):
         """Propagator generator
 
         Parameters
