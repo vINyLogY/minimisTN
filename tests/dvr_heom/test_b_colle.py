@@ -185,14 +185,20 @@ def test_heom(
 if __name__ == '__main__':
     import os
 
+    coupling = 1000
+
     f_dir = os.path.abspath(os.path.dirname(__file__))
-    os.chdir(os.path.join(f_dir, 'std'))
+    new_folder = f'std_{coupling}'
+    path = os.path.join(f_dir, new_folder)
+    if not os.path.exists(path):
+        os.mkdir(path)
+    os.chdir(path)
 
     test_heom(
         fname=f'heom.dat',
         dof=1,
         max_tier=10,
-        coupling=1000,
+        coupling=coupling,
         decomp_method=None,
         k_max=0,
         temperature=0,

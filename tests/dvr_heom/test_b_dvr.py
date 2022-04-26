@@ -68,7 +68,7 @@ def test_heom(
 
     # Propagation
     dt_unit = Quantity(.1, 'fs').value_in_au
-    count = 1000
+    count = 100
 
     prefix = (
         f'boson_DVR_{"relaxed" if relaxed else "pure"}_'
@@ -142,29 +142,18 @@ def test_heom(
     levels = np.linspace(-0.035, 0.035, 350)
     cmap = "seismic"
 
-    # Filter to remove numerical instability
-    window = max_tier // 10
-    filter_ = np.zeros((max_tier, ), dtype=DTYPE)
-    filter_[max_tier // 4:-max_tier // 4] = 1.0
-    filter_ = np.diag(filter_)
-
-    cpu_t0 = cpu_time()
     logger1 = Logger(filename=fname, level='info').logger
-    logger2 = Logger(filename='DEBUG_' + fname, level='info').logger
-    #logger2.info("# time    CPU_time")
     for n, (time, r) in enumerate(
             solver.propagator(steps=count, ode_inter=dt_unit, split=False)):
 
         array = r.array
-        for _i in [2, 3]:
-            array = Tensor.partial_product(array, _i, filter_)
 
         rho1 = Tensor.partial_product(r.array, 2, np.transpose(tfmat))
-        plt.plot(grids, np.real(rho1[0, 0, 0, :]), 'k.', label='Pop.')
+        plt.plot(grids, np.abs(rho1[0, 0, 0, :]), 'k.', label='Pop.')
         plt.plot(grids, np.abs(rho1[0, 1, 0, :]), 'rx', label='Coh.')
         plt.legend()
-        plt.xlim(-10, 10)
-        plt.ylim(-.5, .5)
+        plt.xlim(-length / 2, length / 2)
+        plt.ylim(0.0, 1.0)
         plt.savefig(f'{n:08d}.png')
         plt.close()
 
@@ -197,24 +186,32 @@ def test_heom(
 if __name__ == '__main__':
     import os
 
-    f_dir = os.path.abspath(os.path.dirname(__file__))
-    os.chdir(os.path.join(f_dir, 'dvr'))
-
-    L = 100
+    L = 50
     DL = 0.1
-    N = int(L / DL)
+    N = int(2 * L / DL)
     print(f"Max tier: {N}")
 
-    for t in [0]:
+    for coupling in [2500, 2000, 1500, 1000]:
+
+        f_dir = os.path.abspath(os.path.dirname(__file__))
+        new_folder = f'dvr_{coupling}(L{L}-N{N})'
+        path = os.path.join(f_dir, new_folder)
+        if not os.path.exists(path):
+            os.mkdir(path)
+        os.chdir(path)
+
+        for f in os.scandir(path):
+            os.remove(f.path)
+
         test_heom(
             fname=f'heom.dat',
             dof=1,
             length=L,
             max_tier=N,
-            coupling=1000,
+            coupling=coupling,
             decomp_method=None,
             k_max=0,
-            temperature=t,
+            temperature=0,
             ode_method='RK45',
             ps_method=None,
             scale=1.0,

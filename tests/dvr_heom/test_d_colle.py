@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
 # coding: utf-8
-from __future__ import absolute_import, division, print_function
-from asyncio.log import logger
-
-from builtins import filter, map, range, zip
+import logging
 from time import time as cpu_time
 
 from matplotlib import pyplot as plt
+from tqdm import tqdm
 
 from minitn.heom.corr import Drude
 
@@ -27,26 +25,21 @@ def test_heom(fname=None,
               k_max=6,
               decomp_method=None,
               scale=1.0,
-              coupling=2500,
               temperature=100_000,
               ps_method='split',
               ode_method='RK45'):
     # System:
     e = Quantity(5000, 'cm-1').value_in_au
-    relaxed = True
+    relaxed = False
     v = Quantity(500, 'cm-1').value_in_au if relaxed else 0.0
 
     rank_heom = rank_heom if decomp_method is not None else None
 
-    beta = Quantity(1 /
-                    temperature, 'K-1').value_in_au if temperature else None
+    beta = Quantity(1 / temperature, 'K-1').value_in_au if temperature else None
     sd_method = Drude.pade
     w = Quantity(50, 'cm-1').value_in_au
-    drude = Drude(gamma=w,
-                  lambda_=Quantity(500, 'cm-1').value_in_au,
-                  beta=beta,
-                  k_max=k_max,
-                  decompmethod=sd_method)
+    drude = Drude(gamma=w, lambda_=Quantity(200, 'cm-1').value_in_au, beta=beta, k_max=k_max, decompmethod=sd_method)
+    drude.print()
 
     model = SpinBoson(
         sys_ham=np.array([[0.0, v], [v, e]], dtype=DTYPE),
@@ -66,16 +59,13 @@ def test_heom(fname=None,
     dt_unit = Quantity(.1, 'fs').value_in_au
     count = 1000
 
-    prefix = (
-        f'boson-drude_{"relaxed" if relaxed else "pure"}_'
-        f'{decomp_method}_{temperature}K_dof{dof}_bcf{k_max}_cp{coupling}_'
-        f't{max_tier}_r{rank_heom}_{ps_method}_{ode_method}')
-    print(prefix)
+    prefix = (f'boson-drude_{"relaxed" if relaxed else "pure"}_'
+              f'{decomp_method}_{temperature}K_dof{dof}_bcf{k_max}_'
+              f't{max_tier}_r{rank_heom}_{ps_method}_{ode_method}')
 
     fname = prefix + '_' + fname
     ph_dims = list(np.repeat(model.ph_dims, 2))
     n_dims = ph_dims if model.bath_dims is None else ph_dims + model.bath_dims
-    print(n_dims)
 
     if decomp_method is None:
         root = simple_heom(rho_0, n_dims)
@@ -85,11 +75,7 @@ def test_heom(fname=None,
         raise NotImplementedError
 
     leaves = root.leaves()
-    h_list = model.heom_h_list(leaves[0],
-                               leaves[1],
-                               bath_indices=leaves[2:],
-                               beta=beta,
-                               scale=scale)
+    h_list = model.heom_h_list(leaves[0], leaves[1], bath_indices=leaves[2:], beta=beta, scale=scale)
 
     solver = MultiLayer(root, h_list)
     solver.ode_method = ode_method
@@ -108,34 +94,29 @@ def test_heom(fname=None,
     grids = bath_basis.grid_points
 
     # Define the obersevable of interest
+    solver.eom()
+    diff = root.vectorize(use_aux=True)
+    print(np.linalg.norm(diff))
 
     cpu_t0 = cpu_time()
     logger1 = Logger(filename=fname, level='info').logger
-    logger2 = Logger(filename='DEBUG_' + fname, level='info').logger
-    logger2.info("# time    CPU_time")
-    for n, (time, r) in enumerate(
-            solver.propagator(steps=count,
-                              ode_inter=dt_unit,
-                              split=True if ps_method is not None else False)):
-        rho = np.reshape(r.array, (2, 2, max_tier, -1))
-        rho = Tensor.partial_product(rho, 2, u_mat)
+    with tqdm(total=count) as pbar:
+        for n, (time, r) in enumerate(
+                solver.propagator(steps=count, ode_inter=dt_unit, split=True if ps_method is not None else False)):
+            rho = np.reshape(r.array, (2, 2, max_tier, -1))
+            rho = Tensor.partial_product(rho, 2, u_mat)
 
-        plt.plot(grids, np.abs(np.real(rho[0, 0, :, 0])), 'k.', label='Pop.')
-        plt.plot(grids, np.abs(rho[0, 1, :, 0]), 'rx', label='Coh.')
-        plt.xlim(-10, 10)
-        plt.ylim(-0.5, 0.5)
-        plt.savefig(f'{n:08d}.png')
-        plt.close()
+            plt.plot(grids, np.abs(np.real(rho[0, 0, :, 0])), 'k.', label='Pop.')
+            plt.plot(grids, np.abs(rho[0, 1, :, 0]), 'rx', label='Coh.')
+            plt.xlim(-10, 10)
+            plt.ylim(-0.5, 0.5)
+            plt.savefig(f'{n:08d}.png')
+            plt.close()
 
-        rv = np.reshape(r.array, (4, -1))[:, 0]
-        logger1.info("{}    {} {} {} {}".format(
-            time,
-            rv[0],
-            rv[1],
-            rv[2],
-            rv[3],
-        ))
-        print(f'Coh: {np.abs(rv[1])}')
+            rv = np.reshape(r.array, (4, -1))[:, 0]
+            logger1.info(f"{time} {rv[0]} {rv[1]} {rv[2]} {rv[3]}")
+            pbar.set_description(f'Coh: {np.abs(rv[1]):.8f}')
+            pbar.update()
     return
 
 
@@ -143,18 +124,20 @@ if __name__ == '__main__':
     import os
 
     f_dir = os.path.abspath(os.path.dirname(__file__))
-    os.chdir(os.path.join(f_dir, 'drude_std'))
+    new_folder = f'[DEBUG]drude_std'
+    path = os.path.join(f_dir, new_folder)
+    if not os.path.exists(path):
+        os.mkdir(path)
+    os.chdir(path)
 
-    for coupling in [1000]:
-        test_heom(
-            fname=f'heom.dat',
-            dof=0,
-            max_tier=50,
-            decomp_method=None,
-            temperature=300,
-            k_max=1,
-            coupling=coupling,
-            ode_method='RK45',
-            ps_method=None,
-            scale=1.0,
-        )
+    test_heom(
+        fname=f'heom.dat',
+        dof=0,
+        max_tier=20,
+        decomp_method=None,
+        temperature=100_000,
+        k_max=1,
+        ode_method='RK45',
+        ps_method=None,
+        scale=1.0,
+    )
